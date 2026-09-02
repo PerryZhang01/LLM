@@ -1,0 +1,411 @@
+<title>LLM 模型结构手册</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
+
+<style>
+:root{
+  --bg:#E8EBEA; --surface:#F6F8F7; --surface-2:#DDE3E2; --sunk:#D3DAD9;
+  --ink:#141A1C; --ink-2:#4B5A5C; --ink-3:#75858880;
+  --line:#C3CDCC; --line-soft:#D4DCDB;
+  --amber:#8A5D0C; --amber-mark:#C79433; --amber-bg:#EFE2C2;
+  --petrol:#1D5A74; --petrol-mark:#3D87A6; --petrol-bg:#D3E3EA;
+  --brick:#8E3629; --brick-bg:#F0DAD5;
+  --moss:#3F6034; --moss-mark:#6E9A5C; --moss-bg:#DDE8D6;
+  --mute-mark:#9FADAF;
+  --shadow:0 1px 2px rgba(20,26,28,.06), 0 8px 24px -14px rgba(20,26,28,.24);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0D1315; --surface:#141C1E; --surface-2:#1C2629; --sunk:#101819;
+    --ink:#E3EAE9; --ink-2:#94A4A6; --ink-3:#6E7E8080;
+    --line:#283437; --line-soft:#1F2B2E;
+    --amber:#E0AB53; --amber-mark:#D69B36; --amber-bg:#3B2E13;
+    --petrol:#6FB6D5; --petrol-mark:#4C93B4; --petrol-bg:#12303D;
+    --brick:#E58472; --brick-bg:#3A1D18;
+    --moss:#A8CE96; --moss-mark:#7FAE6B; --moss-bg:#22301B;
+    --mute-mark:#3C4A4D;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 30px -18px rgba(0,0,0,.8);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0D1315; --surface:#141C1E; --surface-2:#1C2629; --sunk:#101819;
+  --ink:#E3EAE9; --ink-2:#94A4A6; --ink-3:#6E7E8080;
+  --line:#283437; --line-soft:#1F2B2E;
+  --amber:#E0AB53; --amber-mark:#D69B36; --amber-bg:#3B2E13;
+  --petrol:#6FB6D5; --petrol-mark:#4C93B4; --petrol-bg:#12303D;
+  --brick:#E58472; --brick-bg:#3A1D18;
+  --moss:#A8CE96; --moss-mark:#7FAE6B; --moss-bg:#22301B;
+  --mute-mark:#3C4A4D;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 30px -18px rgba(0,0,0,.8);
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:"Source Serif 4", "Songti SC", "Noto Serif CJK SC", "Source Han Serif SC", Georgia, serif;
+  font-size:16.5px; line-height:1.72;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1140px; margin:0 auto; padding:0 28px 96px}
+
+/* ---------- type ---------- */
+h1,h2,h3,.eyebrow,.stat-n,.lgd,.tag,th{
+  font-family:Archivo, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+}
+h1{font-size:clamp(2.4rem,5.6vw,3.9rem); line-height:1.02; letter-spacing:-.028em; font-weight:700; margin:0; text-wrap:balance}
+h2{font-size:clamp(1.35rem,2.6vw,1.72rem); line-height:1.2; letter-spacing:-.014em; font-weight:600; margin:0 0 .2em; text-wrap:balance}
+h3{font-size:1.0rem; letter-spacing:.005em; font-weight:600; margin:0 0 .35em}
+p{margin:0 0 1em; max-width:70ch}
+a{color:var(--petrol)}
+code,.mono{font-family:"IBM Plex Mono", ui-monospace, monospace; font-size:.855em; font-variant-ligatures:none}
+:not(pre) > code{background:var(--surface-2); padding:.1em .38em; border-radius:3px; color:var(--ink)}
+.eyebrow{
+  font-size:.66rem; font-weight:600; letter-spacing:.16em; text-transform:uppercase;
+  color:var(--ink-2); margin:0 0 .55em;
+}
+.lede{font-size:1.12rem; color:var(--ink-2); max-width:64ch}
+.note{font-size:.9rem; color:var(--ink-2)}
+
+/* ---------- masthead ---------- */
+header.mast{border-bottom:1px solid var(--line); margin-bottom:52px; padding:72px 0 34px}
+.mast-id{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:22px}
+.tag{
+  font-size:.68rem; font-weight:600; letter-spacing:.09em; text-transform:uppercase;
+  padding:.32em .7em; border:1px solid var(--line); border-radius:2px; color:var(--ink-2);
+  background:var(--surface);
+}
+.tag.hot{border-color:var(--amber); color:var(--amber); background:var(--amber-bg)}
+.mast p.lede{margin-top:18px}
+
+.stats{
+  display:grid; grid-template-columns:repeat(auto-fit,minmax(128px,1fr));
+  gap:1px; background:var(--line-soft); border:1px solid var(--line-soft); margin-top:34px;
+}
+.stat{background:var(--surface); padding:14px 16px 16px}
+.stat-n{display:block; font-size:1.5rem; font-weight:700; letter-spacing:-.02em;
+  font-variant-numeric:tabular-nums; line-height:1.15}
+.stat-l{display:block; font-size:.74rem; color:var(--ink-2); letter-spacing:.02em; margin-top:3px;
+  font-family:"IBM Plex Mono", monospace}
+
+/* ---------- sections ---------- */
+section{margin:0 0 68px; scroll-margin-top:20px}
+.rule{border:0; border-top:1px solid var(--line); margin:0 0 34px}
+
+/* ---------- ribbon ---------- */
+.ribbon-frame{background:var(--surface); border:1px solid var(--line); box-shadow:var(--shadow);
+  padding:22px 24px 18px; margin-top:26px}
+.ribbon-scroll{overflow-x:auto; padding-bottom:6px}
+.ribbon{min-width:760px}
+.rrow{display:flex; align-items:stretch; gap:0; margin-bottom:3px}
+.rlab{flex:0 0 104px; font-family:"IBM Plex Mono",monospace; font-size:.7rem;
+  color:var(--ink-2); display:flex; align-items:center; letter-spacing:.02em}
+.rcells{display:flex; gap:1.5px; flex:1}
+.cell{flex:1 1 0; height:26px; background:var(--mute-mark); border-radius:1px;
+  position:relative; transition:transform .08s ease}
+.cell:hover{transform:scaleY(1.14); z-index:2}
+.cell.dsa{background:var(--amber-mark)}
+.cell.kda{background:var(--petrol-mark)}
+.cell.sparse{background:var(--moss-mark)}
+.cell.dense{background:var(--brick)}
+.cell.mtp{background:transparent; border:1.5px dashed var(--amber-mark)}
+.gapcell{flex:0 0 16px}
+.raxis{display:flex; gap:1.5px; margin-top:5px; padding-left:104px}
+.tick{flex:1 1 0; font-family:"IBM Plex Mono",monospace; font-size:.62rem; color:var(--ink-2);
+  text-align:center; font-variant-numeric:tabular-nums}
+.legend{display:flex; flex-wrap:wrap; gap:8px 20px; margin-top:18px; padding-top:14px; border-top:1px solid var(--line-soft)}
+.lgd{display:flex; align-items:center; gap:7px; font-size:.76rem; color:var(--ink-2); font-weight:500}
+.sw{width:13px; height:13px; border-radius:1px; flex:none}
+.sw.dsa{background:var(--amber-mark)} .sw.kda{background:var(--petrol-mark)}
+.sw.sparse{background:var(--moss-mark)} .sw.dense{background:var(--brick)}
+.sw.mtp{border:1.5px dashed var(--amber-mark)}
+
+/* ---------- figure ---------- */
+figure{margin:26px 0 0; background:var(--surface); border:1px solid var(--line);
+  padding:24px 22px 16px; box-shadow:var(--shadow); overflow-x:auto}
+figure svg{max-width:100%; height:auto; display:block; margin:0 auto; color:var(--ink-2);
+  font-family:"IBM Plex Mono", ui-monospace, monospace; font-size:10.5px}
+figure svg text{fill:var(--ink)}
+figure.wide{padding:26px 18px 16px}
+figure .fignum{font-family:Archivo,sans-serif; font-size:.66rem; font-weight:600; letter-spacing:.16em;
+  text-transform:uppercase; color:var(--ink-2); margin:0 0 14px}
+figcaption strong{color:var(--ink)}
+figcaption{font-size:.86rem; color:var(--ink-2); margin-top:16px; padding-top:12px;
+  border-top:1px solid var(--line-soft); max-width:78ch}
+
+/* ---------- tables ---------- */
+.tscroll{overflow-x:auto; margin-top:22px; border:1px solid var(--line); background:var(--surface); box-shadow:var(--shadow)}
+table{border-collapse:collapse; width:100%; min-width:620px; font-size:.9rem}
+th{text-align:left; font-size:.68rem; letter-spacing:.11em; text-transform:uppercase;
+  font-weight:600; color:var(--ink-2); padding:11px 16px; background:var(--surface-2);
+  border-bottom:1px solid var(--line); white-space:nowrap}
+td{padding:10px 16px; border-bottom:1px solid var(--line-soft); vertical-align:top; line-height:1.55}
+tbody tr:last-child td{border-bottom:0}
+td.num{font-family:"IBM Plex Mono",monospace; font-variant-numeric:tabular-nums; white-space:nowrap}
+td.k{font-family:"IBM Plex Mono",monospace; font-size:.82rem; white-space:nowrap}
+.hl{color:var(--amber); font-weight:600}
+.dim{color:var(--ink-2)}
+
+/* ---------- cards ---------- */
+.grid2{display:grid; grid-template-columns:repeat(auto-fit,minmax(310px,1fr)); gap:18px; margin-top:24px}
+.card{background:var(--surface); border:1px solid var(--line); padding:18px 20px 16px; box-shadow:var(--shadow)}
+.card h3{color:var(--ink)}
+.card p:last-child{margin-bottom:0}
+.card.warn{border-left:3px solid var(--brick)}
+.card.good{border-left:3px solid var(--petrol)}
+.card.key{border-left:3px solid var(--amber-mark)}
+.card .eyebrow{margin-bottom:.4em}
+
+ul.tight{margin:0; padding-left:1.15em}
+ul.tight li{margin-bottom:.42em}
+ul.tight li:last-child{margin-bottom:0}
+
+/* ---------- bar chart ---------- */
+.bars{display:flex; flex-direction:column; gap:9px; margin-top:22px;
+  background:var(--surface); border:1px solid var(--line); box-shadow:var(--shadow); padding:20px 22px 18px}
+.brow{display:grid; grid-template-columns:minmax(150px,244px) 1fr minmax(112px,132px); gap:14px; align-items:center}
+.blab{font-family:"IBM Plex Mono",monospace; font-size:.78rem; color:var(--ink); line-height:1.35}
+.blab i{display:block; font-style:normal; font-size:.7rem; color:var(--ink-2)}
+.btrack{height:17px; background:var(--sunk); border-radius:1px; overflow:hidden}
+.bfill{height:100%; background:var(--petrol-mark); border-radius:1px}
+.bfill.a{background:var(--amber-mark)}
+.bfill.m{background:var(--moss-mark)}
+.bfill.d{background:var(--mute-mark)}
+.bval{font-family:"IBM Plex Mono",monospace; font-size:.78rem; text-align:right;
+  font-variant-numeric:tabular-nums; color:var(--ink)}
+.bval em{font-style:normal; color:var(--ink-2); font-size:.72rem; display:block}
+.bfoot{display:flex; justify-content:space-between; gap:16px; flex-wrap:wrap;
+  margin-top:16px; padding-top:13px; border-top:1px solid var(--line-soft);
+  font-size:.78rem; color:var(--ink-2); font-family:"IBM Plex Mono",monospace}
+@media (max-width:620px){ .brow{grid-template-columns:1fr; gap:4px} .bval{text-align:left} }
+
+.pathline{font-family:"IBM Plex Mono",monospace; font-size:.76rem; color:var(--ink-2);
+  background:var(--sunk); padding:5px 9px; display:inline-block; margin-top:10px;
+  border-radius:2px; word-break:break-all}
+
+.callout{background:var(--amber-bg); border:1px solid var(--amber-mark); padding:16px 20px; margin-top:24px}
+.callout .eyebrow{color:var(--amber)}
+.callout p:last-child{margin-bottom:0}
+
+pre.code{background:var(--sunk); border:1px solid var(--line-soft); padding:14px 16px;
+  overflow-x:auto; font-family:"IBM Plex Mono",monospace; font-size:.78rem; line-height:1.6;
+  margin:20px 0 0; color:var(--ink)}
+
+footer{border-top:1px solid var(--line); padding-top:22px; color:var(--ink-2); font-size:.85rem}
+
+@media (max-width:640px){
+  .wrap{padding:0 18px 64px}
+  header.mast{padding-top:44px}
+  .rlab{flex-basis:70px; font-size:.62rem}
+  .raxis{padding-left:70px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+:focus-visible{outline:2px solid var(--petrol); outline-offset:2px}
+
+/* ---------- 模型卡片 ---------- */
+.mgrid{display:grid; grid-template-columns:repeat(auto-fit,minmax(330px,1fr)); gap:20px; margin-top:28px}
+a.mcard{
+  display:block; text-decoration:none; color:inherit; background:var(--surface);
+  border:1px solid var(--line); box-shadow:var(--shadow); padding:0;
+  transition:transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+  position:relative; overflow:hidden;
+}
+a.mcard:hover{transform:translateY(-2px); border-color:var(--amber-mark);
+  box-shadow:0 2px 4px rgba(20,26,28,.08), 0 16px 36px -18px rgba(20,26,28,.4)}
+a.mcard .strip{height:4px; background:var(--mute-mark)}
+a.mcard.f-a .strip{background:linear-gradient(90deg,var(--amber-mark),var(--brick))}
+a.mcard.f-p .strip{background:linear-gradient(90deg,var(--petrol-mark),var(--moss-mark))}
+a.mcard .body{padding:20px 22px 18px}
+a.mcard h3{font-size:1.24rem; letter-spacing:-.015em; margin:0 0 3px}
+a.mcard .arch{font-family:"IBM Plex Mono",monospace; font-size:.74rem; color:var(--ink-2);
+  word-break:break-all; margin-bottom:14px; display:block}
+a.mcard p.blurb{font-size:.9rem; color:var(--ink-2); margin:0 0 16px; max-width:none}
+.mspecs{display:grid; grid-template-columns:repeat(2,1fr); gap:1px; background:var(--line-soft);
+  border:1px solid var(--line-soft); margin-bottom:15px}
+.mspecs div{background:var(--surface-2); padding:8px 11px}
+.mspecs b{display:block; font-family:"IBM Plex Mono",monospace; font-size:.92rem;
+  font-variant-numeric:tabular-nums; color:var(--ink); font-weight:600}
+.mspecs span{display:block; font-size:.68rem; color:var(--ink-2); margin-top:1px;
+  font-family:"IBM Plex Mono",monospace}
+.mfoot{display:flex; align-items:center; justify-content:space-between; gap:12px;
+  padding-top:13px; border-top:1px solid var(--line-soft); font-size:.78rem; color:var(--ink-2);
+  font-family:"IBM Plex Mono",monospace}
+.mfoot .go{color:var(--amber); font-weight:600; white-space:nowrap}
+a.mcard:hover .go{text-decoration:underline}
+.mcard.soon{opacity:.62; pointer-events:none}
+.mcard.soon .go{color:var(--ink-2)}
+</style>
+
+<div class="wrap">
+
+<header class="mast">
+  <div class="mast-id">
+    <span class="tag">模型结构解剖</span>
+    <span class="tag">后端 · ATOM</span>
+    <span class="tag hot">3 个模型</span>
+  </div>
+  <h1>LLM 模型结构手册</h1>
+  <p class="lede">
+    每个模型一份解剖文档：完整结构图、逐个模块的张量形状、
+    从 checkpoint 分片头部实读的参数账、以及它在 ATOM 里究竟落在哪几个文件上。
+    面向的是<strong>要动这段代码的人</strong>——不是模型卡，也不是论文摘要。
+  </p>
+  <div class="stats">
+    <div class="stat"><span class="stat-n">3</span><span class="stat-l">已收录模型</span></div>
+    <div class="stat"><span class="stat-n">1</span><span class="stat-l">模型家族</span></div>
+    <div class="stat"><span class="stat-n">11</span><span class="stat-l">结构图</span></div>
+    <div class="stat"><span class="stat-n">ATOM</span><span class="stat-l">推理后端</span></div>
+  </div>
+</header>
+
+<section>
+  <p class="eyebrow">GLM 家族</p>
+  <h2>点开任意一张卡片进入该模型的解剖页</h2>
+  <p>
+    三者中<strong>只有两种结构</strong>：GLM-5.2 与旗舰 GLM-5.3 的 config 逐字段相同，
+    共用 <code>deepseek_v2.py</code>；GLM-5.3-Flash 是另一套完全不同的东西。
+  </p>
+
+  <div class="mgrid">
+
+    <a class="mcard f-a" href="models/GLM/glm53_flash_anatomy.html">
+      <div class="strip"></div>
+      <div class="body">
+        <h3>GLM-5.3-Flash</h3>
+        <span class="arch">Glm5NextForConditionalGeneration · glm5_next</span>
+        <p class="blurb">
+          45 层混合注意力：34 层 KDA 线性注意力 + 11 层稀疏 MLA。
+          残差是 4 路宽的（mHC），全模型无位置编码，稀疏索引按 4 个 token 一池打分。
+          ATOM 里唯一为 GLM 写的独立模型文件。
+        </p>
+        <div class="mspecs">
+          <div><b>320.8 B</b><span>总参数</span></div>
+          <div><b>17.38 B</b><span>单 token 激活</span></div>
+          <div><b>34 + 11</b><span>KDA / MLA 层</span></div>
+          <div><b>4096</b><span>hidden_size</span></div>
+        </div>
+        <div class="mfoot"><span>atom/models/glm5_next.py</span><span class="go">6 张图 →</span></div>
+      </div>
+    </a>
+
+    <a class="mcard f-p" href="models/GLM/glm53_anatomy.html">
+      <div class="strip"></div>
+      <div class="body">
+        <h3>GLM-5.3</h3>
+        <span class="arch">GlmMoeDsaForCausalLM · glm_moe_dsa</span>
+        <p class="blurb">
+          78 层 MLA + DSA 稀疏注意力，256 专家。结构与 GLM-5.2 逐字段相同，
+          唯一新增的 config 字段 <code>moe_router_dtype</code> 指向一个 4 个数量级的路由精度问题。
+          在 ATOM 里没有自己的模型文件。
+        </p>
+        <div class="mspecs">
+          <div><b>753.3 B</b><span>总参数</span></div>
+          <div><b>41.25 B</b><span>单 token 激活</span></div>
+          <div><b>21 / 78</b><span>带 indexer 的层</span></div>
+          <div><b>6144</b><span>hidden_size</span></div>
+        </div>
+        <div class="mfoot"><span>atom/models/deepseek_v2.py</span><span class="go">4 张图 →</span></div>
+      </div>
+    </a>
+
+    <a class="mcard f-p" href="models/glm52_anatomy.html">
+      <div class="strip"></div>
+      <div class="body">
+        <h3>GLM-5.2</h3>
+        <span class="arch">GlmMoeDsaForCausalLM · glm_moe_dsa</span>
+        <p class="blurb">
+          引入 IndexShare 的那一代：78 层里只有 21 层真的算 top-k，
+          其余 57 层在磁盘上就没有 indexer 权重。旗舰 GLM-5.3 原样继承了这套调度。
+        </p>
+        <div class="mspecs">
+          <div><b>753.3 B</b><span>总参数</span></div>
+          <div><b>41.25 B</b><span>单 token 激活</span></div>
+          <div><b>21 / 78</b><span>带 indexer 的层</span></div>
+          <div><b>6144</b><span>hidden_size</span></div>
+        </div>
+        <div class="mfoot"><span>另有 Markdown 版 · models/GLM/model.md</span><span class="go">进入 →</span></div>
+      </div>
+    </a>
+
+  </div>
+</section>
+
+<section>
+  <hr class="rule">
+  <p class="eyebrow">横向对照</p>
+  <h2>三个模型的骨架放在一起看</h2>
+  <div class="tscroll">
+  <table>
+    <thead><tr><th></th><th>GLM-5.2</th><th>GLM-5.3</th><th>GLM-5.3-Flash</th></tr></thead>
+    <tbody>
+      <tr><td>architectures</td><td class="k">GlmMoeDsa<wbr>ForCausalLM</td><td class="k">GlmMoeDsa<wbr>ForCausalLM</td><td class="k">Glm5Next<wbr>ForConditionalGeneration</td></tr>
+      <tr><td>model_type</td><td class="k">glm_moe_dsa</td><td class="k">glm_moe_dsa</td><td class="k">glm5_next</td></tr>
+      <tr><td>总参数</td><td class="num">753.3 B</td><td class="num">753.3 B</td><td class="num">321.3 B</td></tr>
+      <tr><td>单 token 激活</td><td class="num">41.25 B</td><td class="num">41.25 B</td><td class="num">17.38 B</td></tr>
+      <tr><td>层数</td><td class="num">78 + 1 MTP</td><td class="num">78 + 1 MTP</td><td class="num">45 + 1 MTP</td></tr>
+      <tr><td>hidden_size</td><td class="num">6144</td><td class="num">6144</td><td class="num">4096</td></tr>
+      <tr><td>注意力</td><td>MLA + DSA</td><td>MLA + DSA</td><td class="hl">34 KDA + 11 MLA</td></tr>
+      <tr><td>位置编码</td><td>RoPE θ=8e6</td><td>RoPE θ=8e6</td><td class="hl">NoPE（无）</td></tr>
+      <tr><td>残差</td><td>单路</td><td>单路</td><td class="hl">mHC 四路</td></tr>
+      <tr><td>专家</td><td class="num">256 top-8 + 1</td><td class="num">256 top-8 + 1</td><td class="num">288 top-8 + 1</td></tr>
+      <tr><td>稀疏索引</td><td>IndexShare 21/78</td><td>IndexShare 21/78</td><td class="hl">k-pool 4 token/行</td></tr>
+      <tr><td>KV cache</td><td class="num">87.8 KiB/token</td><td class="num">87.8 KiB/token</td><td class="num">12.4 KiB/token</td></tr>
+      <tr><td>ATOM 实现</td><td class="k">deepseek_v2.py</td><td class="k">deepseek_v2.py</td><td class="k">glm5_next.py</td></tr>
+      <tr><td>多模态</td><td>—</td><td>—</td><td>原生（ATOM 只 serve 文本）</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="note" style="margin-top:14px">
+    KV cache 一列按 BF16 计：GLM-5.2/5.3 是 78 层 × 576；
+    GLM-5.3-Flash 只有 11 个 MLA 层承担，代价是 34 个 KDA 层各持一份每请求的递推状态。
+  </p>
+</section>
+
+<section>
+  <hr class="rule">
+  <p class="eyebrow">这些文档怎么来的</p>
+  <h2>每一份都由 skills/models.md 驱动生成</h2>
+  <div class="grid2">
+    <div class="card key">
+      <p class="eyebrow">新增一个模型</p>
+      <p>在 <code>skills/models.md</code> 里写明模型、后端与输出路径，然后交给 Claude Code 执行：</p>
+      <pre class="code"># 模型
+-glm5.3
+
+# 框架后端
+-atom
+
+# 输出路径
+-LLM/models/GLM</pre>
+      <p style="margin-top:14px">
+        产物是一份自包含的 HTML（无外部依赖，深浅色自适应）。
+        生成后把它加进本页的卡片网格即可。
+      </p>
+    </div>
+    <div class="card">
+      <p class="eyebrow">每份文档一定包含</p>
+      <ul class="tight">
+        <li>完整模型栈图 + 单层展开图，<strong>每个模块标注张量形状</strong></li>
+        <li>从 safetensors 分片头部实读的权重形状与参数账</li>
+        <li>核心机制的专门图示（稀疏索引、残差结构、注意力变体）</li>
+        <li>KV cache 与状态缓存的显存账</li>
+        <li>该模型在 ATOM 里的落点，以及一条读码路线</li>
+      </ul>
+      <p class="note" style="margin-top:12px">
+        数字一律来自 checkpoint 与源码实读，不引用模型卡上的标称值。
+      </p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <p>
+    仓库 <a href="https://github.com/PerryZhang01/LLM">PerryZhang01/LLM</a> ·
+    文档面向 <a href="https://github.com/ROCm/ATOM">ATOM</a> 推理后端 ·
+    页面由 GitHub Pages 从 <code>main</code> 分支直接托管。
+  </p>
+</footer>
+
+</div>

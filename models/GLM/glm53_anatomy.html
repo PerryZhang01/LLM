@@ -1,0 +1,1193 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GLM-5.3 架构解剖</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
+
+<style>
+:root{
+  --bg:#E8EBEA; --surface:#F6F8F7; --surface-2:#DDE3E2; --sunk:#D3DAD9;
+  --ink:#141A1C; --ink-2:#4B5A5C; --ink-3:#75858880;
+  --line:#C3CDCC; --line-soft:#D4DCDB;
+  --amber:#8A5D0C; --amber-mark:#C79433; --amber-bg:#EFE2C2;
+  --petrol:#1D5A74; --petrol-mark:#3D87A6; --petrol-bg:#D3E3EA;
+  --brick:#8E3629; --brick-bg:#F0DAD5;
+  --moss:#3F6034; --moss-mark:#6E9A5C; --moss-bg:#DDE8D6;
+  --mute-mark:#9FADAF;
+  --shadow:0 1px 2px rgba(20,26,28,.06), 0 8px 24px -14px rgba(20,26,28,.24);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0D1315; --surface:#141C1E; --surface-2:#1C2629; --sunk:#101819;
+    --ink:#E3EAE9; --ink-2:#94A4A6; --ink-3:#6E7E8080;
+    --line:#283437; --line-soft:#1F2B2E;
+    --amber:#E0AB53; --amber-mark:#D69B36; --amber-bg:#3B2E13;
+    --petrol:#6FB6D5; --petrol-mark:#4C93B4; --petrol-bg:#12303D;
+    --brick:#E58472; --brick-bg:#3A1D18;
+    --moss:#A8CE96; --moss-mark:#7FAE6B; --moss-bg:#22301B;
+    --mute-mark:#3C4A4D;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 30px -18px rgba(0,0,0,.8);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0D1315; --surface:#141C1E; --surface-2:#1C2629; --sunk:#101819;
+  --ink:#E3EAE9; --ink-2:#94A4A6; --ink-3:#6E7E8080;
+  --line:#283437; --line-soft:#1F2B2E;
+  --amber:#E0AB53; --amber-mark:#D69B36; --amber-bg:#3B2E13;
+  --petrol:#6FB6D5; --petrol-mark:#4C93B4; --petrol-bg:#12303D;
+  --brick:#E58472; --brick-bg:#3A1D18;
+  --moss:#A8CE96; --moss-mark:#7FAE6B; --moss-bg:#22301B;
+  --mute-mark:#3C4A4D;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 30px -18px rgba(0,0,0,.8);
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:"Source Serif 4", "Songti SC", "Noto Serif CJK SC", "Source Han Serif SC", Georgia, serif;
+  font-size:16.5px; line-height:1.72;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1140px; margin:0 auto; padding:0 28px 96px}
+
+/* ---------- type ---------- */
+h1,h2,h3,.eyebrow,.stat-n,.lgd,.tag,th{
+  font-family:Archivo, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+}
+h1{font-size:clamp(2.4rem,5.6vw,3.9rem); line-height:1.02; letter-spacing:-.028em; font-weight:700; margin:0; text-wrap:balance}
+h2{font-size:clamp(1.35rem,2.6vw,1.72rem); line-height:1.2; letter-spacing:-.014em; font-weight:600; margin:0 0 .2em; text-wrap:balance}
+h3{font-size:1.0rem; letter-spacing:.005em; font-weight:600; margin:0 0 .35em}
+p{margin:0 0 1em; max-width:70ch}
+a{color:var(--petrol)}
+code,.mono{font-family:"IBM Plex Mono", ui-monospace, monospace; font-size:.855em; font-variant-ligatures:none}
+:not(pre) > code{background:var(--surface-2); padding:.1em .38em; border-radius:3px; color:var(--ink)}
+.eyebrow{
+  font-size:.66rem; font-weight:600; letter-spacing:.16em; text-transform:uppercase;
+  color:var(--ink-2); margin:0 0 .55em;
+}
+.lede{font-size:1.12rem; color:var(--ink-2); max-width:64ch}
+.note{font-size:.9rem; color:var(--ink-2)}
+
+/* ---------- masthead ---------- */
+header.mast{border-bottom:1px solid var(--line); margin-bottom:52px; padding:72px 0 34px}
+.mast-id{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:22px}
+.tag{
+  font-size:.68rem; font-weight:600; letter-spacing:.09em; text-transform:uppercase;
+  padding:.32em .7em; border:1px solid var(--line); border-radius:2px; color:var(--ink-2);
+  background:var(--surface);
+}
+.tag.hot{border-color:var(--amber); color:var(--amber); background:var(--amber-bg)}
+.mast p.lede{margin-top:18px}
+
+.stats{
+  display:grid; grid-template-columns:repeat(auto-fit,minmax(128px,1fr));
+  gap:1px; background:var(--line-soft); border:1px solid var(--line-soft); margin-top:34px;
+}
+.stat{background:var(--surface); padding:14px 16px 16px}
+.stat-n{display:block; font-size:1.5rem; font-weight:700; letter-spacing:-.02em;
+  font-variant-numeric:tabular-nums; line-height:1.15}
+.stat-l{display:block; font-size:.74rem; color:var(--ink-2); letter-spacing:.02em; margin-top:3px;
+  font-family:"IBM Plex Mono", monospace}
+
+/* ---------- sections ---------- */
+section{margin:0 0 68px; scroll-margin-top:20px}
+.rule{border:0; border-top:1px solid var(--line); margin:0 0 34px}
+
+/* ---------- ribbon ---------- */
+.ribbon-frame{background:var(--surface); border:1px solid var(--line); box-shadow:var(--shadow);
+  padding:22px 24px 18px; margin-top:26px}
+.ribbon-scroll{overflow-x:auto; padding-bottom:6px}
+.ribbon{min-width:760px}
+.rrow{display:flex; align-items:stretch; gap:0; margin-bottom:3px}
+.rlab{flex:0 0 104px; font-family:"IBM Plex Mono",monospace; font-size:.7rem;
+  color:var(--ink-2); display:flex; align-items:center; letter-spacing:.02em}
+.rcells{display:flex; gap:1.5px; flex:1}
+.cell{flex:1 1 0; height:26px; background:var(--mute-mark); border-radius:1px;
+  position:relative; transition:transform .08s ease}
+.cell:hover{transform:scaleY(1.14); z-index:2}
+.cell.dsa{background:var(--amber-mark)}
+.cell.kda{background:var(--petrol-mark)}
+.cell.sparse{background:var(--moss-mark)}
+.cell.dense{background:var(--brick)}
+.cell.mtp{background:transparent; border:1.5px dashed var(--amber-mark)}
+.gapcell{flex:0 0 16px}
+.raxis{display:flex; gap:1.5px; margin-top:5px; padding-left:104px}
+.tick{flex:1 1 0; font-family:"IBM Plex Mono",monospace; font-size:.62rem; color:var(--ink-2);
+  text-align:center; font-variant-numeric:tabular-nums}
+.legend{display:flex; flex-wrap:wrap; gap:8px 20px; margin-top:18px; padding-top:14px; border-top:1px solid var(--line-soft)}
+.lgd{display:flex; align-items:center; gap:7px; font-size:.76rem; color:var(--ink-2); font-weight:500}
+.sw{width:13px; height:13px; border-radius:1px; flex:none}
+.sw.dsa{background:var(--amber-mark)} .sw.kda{background:var(--petrol-mark)}
+.sw.sparse{background:var(--moss-mark)} .sw.dense{background:var(--brick)}
+.sw.mtp{border:1.5px dashed var(--amber-mark)}
+
+/* ---------- figure ---------- */
+figure{margin:26px 0 0; background:var(--surface); border:1px solid var(--line);
+  padding:24px 22px 16px; box-shadow:var(--shadow); overflow-x:auto}
+figure svg{max-width:100%; height:auto; display:block; margin:0 auto; color:var(--ink-2);
+  font-family:"IBM Plex Mono", ui-monospace, monospace; font-size:10.5px}
+figure svg text{fill:var(--ink)}
+figure.wide{padding:26px 18px 16px}
+figure .fignum{font-family:Archivo,sans-serif; font-size:.66rem; font-weight:600; letter-spacing:.16em;
+  text-transform:uppercase; color:var(--ink-2); margin:0 0 14px}
+figcaption strong{color:var(--ink)}
+figcaption{font-size:.86rem; color:var(--ink-2); margin-top:16px; padding-top:12px;
+  border-top:1px solid var(--line-soft); max-width:78ch}
+
+/* ---------- tables ---------- */
+.tscroll{overflow-x:auto; margin-top:22px; border:1px solid var(--line); background:var(--surface); box-shadow:var(--shadow)}
+table{border-collapse:collapse; width:100%; min-width:620px; font-size:.9rem}
+th{text-align:left; font-size:.68rem; letter-spacing:.11em; text-transform:uppercase;
+  font-weight:600; color:var(--ink-2); padding:11px 16px; background:var(--surface-2);
+  border-bottom:1px solid var(--line); white-space:nowrap}
+td{padding:10px 16px; border-bottom:1px solid var(--line-soft); vertical-align:top; line-height:1.55}
+tbody tr:last-child td{border-bottom:0}
+td.num{font-family:"IBM Plex Mono",monospace; font-variant-numeric:tabular-nums; white-space:nowrap}
+td.k{font-family:"IBM Plex Mono",monospace; font-size:.82rem; white-space:nowrap}
+.hl{color:var(--amber); font-weight:600}
+.dim{color:var(--ink-2)}
+
+/* ---------- cards ---------- */
+.grid2{display:grid; grid-template-columns:repeat(auto-fit,minmax(310px,1fr)); gap:18px; margin-top:24px}
+.card{background:var(--surface); border:1px solid var(--line); padding:18px 20px 16px; box-shadow:var(--shadow)}
+.card h3{color:var(--ink)}
+.card p:last-child{margin-bottom:0}
+.card.warn{border-left:3px solid var(--brick)}
+.card.good{border-left:3px solid var(--petrol)}
+.card.key{border-left:3px solid var(--amber-mark)}
+.card .eyebrow{margin-bottom:.4em}
+
+ul.tight{margin:0; padding-left:1.15em}
+ul.tight li{margin-bottom:.42em}
+ul.tight li:last-child{margin-bottom:0}
+
+/* ---------- bar chart ---------- */
+.bars{display:flex; flex-direction:column; gap:9px; margin-top:22px;
+  background:var(--surface); border:1px solid var(--line); box-shadow:var(--shadow); padding:20px 22px 18px}
+.brow{display:grid; grid-template-columns:minmax(150px,244px) 1fr minmax(112px,132px); gap:14px; align-items:center}
+.blab{font-family:"IBM Plex Mono",monospace; font-size:.78rem; color:var(--ink); line-height:1.35}
+.blab i{display:block; font-style:normal; font-size:.7rem; color:var(--ink-2)}
+.btrack{height:17px; background:var(--sunk); border-radius:1px; overflow:hidden}
+.bfill{height:100%; background:var(--petrol-mark); border-radius:1px}
+.bfill.a{background:var(--amber-mark)}
+.bfill.m{background:var(--moss-mark)}
+.bfill.d{background:var(--mute-mark)}
+.bval{font-family:"IBM Plex Mono",monospace; font-size:.78rem; text-align:right;
+  font-variant-numeric:tabular-nums; color:var(--ink)}
+.bval em{font-style:normal; color:var(--ink-2); font-size:.72rem; display:block}
+.bfoot{display:flex; justify-content:space-between; gap:16px; flex-wrap:wrap;
+  margin-top:16px; padding-top:13px; border-top:1px solid var(--line-soft);
+  font-size:.78rem; color:var(--ink-2); font-family:"IBM Plex Mono",monospace}
+@media (max-width:620px){ .brow{grid-template-columns:1fr; gap:4px} .bval{text-align:left} }
+
+.pathline{font-family:"IBM Plex Mono",monospace; font-size:.76rem; color:var(--ink-2);
+  background:var(--sunk); padding:5px 9px; display:inline-block; margin-top:10px;
+  border-radius:2px; word-break:break-all}
+
+.callout{background:var(--amber-bg); border:1px solid var(--amber-mark); padding:16px 20px; margin-top:24px}
+.callout .eyebrow{color:var(--amber)}
+.callout p:last-child{margin-bottom:0}
+
+pre.code{background:var(--sunk); border:1px solid var(--line-soft); padding:14px 16px;
+  overflow-x:auto; font-family:"IBM Plex Mono",monospace; font-size:.78rem; line-height:1.6;
+  margin:20px 0 0; color:var(--ink)}
+
+footer{border-top:1px solid var(--line); padding-top:22px; color:var(--ink-2); font-size:.85rem}
+
+@media (max-width:640px){
+  .wrap{padding:0 18px 64px}
+  header.mast{padding-top:44px}
+  .rlab{flex-basis:70px; font-size:.62rem}
+  .raxis{padding-left:70px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+:focus-visible{outline:2px solid var(--petrol); outline-offset:2px}
+
+.backnav{padding:22px 0 0; font-family:Archivo,"PingFang SC",system-ui,sans-serif; font-size:.8rem}
+.backnav a{color:var(--ink-2); text-decoration:none; letter-spacing:.02em}
+.backnav a:hover{color:var(--amber)}
+</style>
+
+<div class="wrap">
+
+<nav class="backnav"><a href="../../index.html">← LLM 模型结构手册</a></nav>
+
+<header class="mast">
+  <div class="mast-id">
+    <span class="tag">GlmMoeDsaForCausalLM</span>
+    <span class="tag">model_type · glm_moe_dsa</span>
+    <span class="tag hot">IndexShare</span>
+    <span class="tag">MLA + DSA</span>
+    <span class="tag">MTP × 1</span>
+  </div>
+  <h1>GLM-5.3 架构解剖</h1>
+  <p class="lede">
+    GLM-5.3 在 ATOM 里<strong>没有自己的模型文件</strong>——它挂在
+    <code>atom/models/deepseek_v2.py</code> 上，子类 <code>GlmMoeDsaForCausalLM</code>
+    只覆盖了一张量化排除名映射。把它的 config 与 GLM-5.2 逐字段比对，
+    <strong>只多出一个 <code>moe_router_dtype</code></strong>：78 层、6144、64 头、256 专家、
+    连 <code>indexer_types</code> 那 21 个 <code>full</code> 的落点都逐项相等。
+    所以真正要读懂的不是模型定义，而是那 78 项 <code>indexer_types</code>
+    如何一路改写构造期的模块树、运行期的 buffer 绑定与 MTP 的草稿循环。
+  </p>
+  <div class="stats">
+    <div class="stat"><span class="stat-n">753.3 B</span><span class="stat-l">总参数（含 MTP）</span></div>
+    <div class="stat"><span class="stat-n">41.25 B</span><span class="stat-l">单 token 激活</span></div>
+    <div class="stat"><span class="stat-n">78 + 1</span><span class="stat-l">主干层 + MTP 层</span></div>
+    <div class="stat"><span class="stat-n">21 / 78</span><span class="stat-l">拥有 indexer 的层</span></div>
+    <div class="stat"><span class="stat-n">6144</span><span class="stat-l">hidden_size</span></div>
+    <div class="stat"><span class="stat-n">256 / 8</span><span class="stat-l">专家数 / 每 token</span></div>
+    <div class="stat"><span class="stat-n">2048</span><span class="stat-l">index_topk</span></div>
+    <div class="stat"><span class="stat-n">1 M</span><span class="stat-l">max_position</span></div>
+  </div>
+</header>
+
+<section>
+  <p class="eyebrow">定位</p>
+  <h2>它是 DeepSeek-V3.2 的骨架，配 GLM 自己的尺寸</h2>
+  <p>
+    ATOM 里没有 <code>glm5_3.py</code>。<code>_CONFIG_REGISTRY</code> 把
+    <code>glm_moe_dsa</code> 映射到 <code>deepseek_v3</code> 的 config schema，
+    模型类直接继承 <code>DeepseekV2ForCausalLM</code>，整个子类只有一个类变量。
+  </p>
+  <div class="grid2">
+    <div class="card key">
+      <p class="eyebrow">唯一的子类覆盖</p>
+      <pre class="code">class GlmMoeDsaForCausalLM(DeepseekV2ForCausalLM):
+    quant_exclude_name_mapping = {
+        "indexers_proj": "indexer.weights_proj",
+    }</pre>
+      <p style="margin-top:14px">
+        GLM 的 HF 量化配置用 <code>indexers_proj</code> 这个名字排除索引投影，
+        而 ATOM 的非融合模块路径叫 <code>indexer.weights_proj</code>。
+        这张表逐条做 <code>str.replace</code>，好让 FP4/MXFP4 的回退路径不去量化那个 BF16 投影。
+      </p>
+    </div>
+    <div class="card">
+      <p class="eyebrow">与 GLM-5.2 的全部差异</p>
+      <pre class="code">moe_router_dtype     : —      → "float32"
+transformers_version : 5.12.0 → 5.15.0</pre>
+      <p style="margin-top:14px">
+        去掉 <code>quantization_config</code> 后逐键比对的结果。结构完全相同，
+        差别只在权重本身与那一个 dtype 声明（见<a href="#router">图 4</a>）。
+        姊妹型号 <strong>GLM-5.3-Flash</strong> 则是另一套完全不同的结构——
+        45 层混合 KDA/MLA、4 路残差、全 NoPE——单独一份文档：
+        <a href="glm53_flash_anatomy.html">GLM-5.3-Flash 架构解剖</a>。
+      </p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <hr class="rule">
+  <p class="eyebrow">规模</p>
+  <h2>753.3 B 参数落盘，单 token 只碰 41.25 B</h2>
+  <p>
+    下面每个数字都来自 141 个 safetensors 分片的头部（读 shape 相加，
+    fp8 的 <code>weight_scale_inv</code> 单列，不计入参数量）。
+  </p>
+  <div class="bars">
+    <div class="brow"><div class="blab">MoE routed experts<i>256 专家 × 75 层 × 37.75 M</i></div>
+      <div class="btrack"><div class="bfill" style="width:100%"></div></div>
+      <div class="bval">724.78 B<em>96.2 %</em></div></div>
+    <div class="brow"><div class="blab">MLA 注意力<i>78 层 × 165.0 M</i></div>
+      <div class="btrack"><div class="bfill a" style="width:1.78%"></div></div>
+      <div class="bval">12.87 B<em>1.7 %</em></div></div>
+    <div class="brow"><div class="blab">MTP 层 78<i>完整 DSA + 完整 MoE</i></div>
+      <div class="btrack"><div class="bfill d" style="width:1.37%"></div></div>
+      <div class="bval">9.95 B<em>1.3 %</em></div></div>
+    <div class="brow"><div class="blab">MoE shared expert<i>1 个 × 75 层</i></div>
+      <div class="btrack"><div class="bfill m" style="width:0.39%"></div></div>
+      <div class="bval">2.83 B<em>0.4 %</em></div></div>
+    <div class="brow"><div class="blab">embed_tokens / lm_head<i>各 154880 × 6144 BF16</i></div>
+      <div class="btrack"><div class="bfill m" style="width:0.26%"></div></div>
+      <div class="bval">1.90 B<em>0.3 %</em></div></div>
+    <div class="brow"><div class="blab">dense MLP<i>层 0–2，d_ff 12288</i></div>
+      <div class="btrack"><div class="bfill d" style="width:0.09%"></div></div>
+      <div class="bval">0.68 B<em>0.1 %</em></div></div>
+    <div class="brow"><div class="blab">DSA indexer<i>21 个 full 层 × 9.37 M</i></div>
+      <div class="btrack"><div class="bfill a" style="width:0.03%"></div></div>
+      <div class="bval">0.197 B<em>0.03 %</em></div></div>
+    <div class="brow"><div class="blab">MoE router<i>gate [256, 6144] + bias</i></div>
+      <div class="btrack"><div class="bfill d" style="width:0.02%"></div></div>
+      <div class="bval">0.118 B<em>0.02 %</em></div></div>
+    <div class="bfoot">
+      <span>合计 753.33 B</span><span>单 token 激活 41.25 B</span>
+      <span>96.2 % 的参数在 MoE 专家里</span>
+    </div>
+  </div>
+  <div class="grid2">
+    <div class="card">
+      <p class="eyebrow">激活量是怎么凑出来的</p>
+      <ul class="tight">
+        <li>MoE 专家 <span class="hl">25.48 B</span> — 75 层 ×（8 routed + 1 shared）× 37.75 M</li>
+        <li>注意力 <span class="hl">12.87 B</span> — 78 层全激活</li>
+        <li>embed + lm_head <span class="hl">1.90 B</span></li>
+        <li>dense MLP <span class="hl">0.68 B</span> — 只有层 0–2</li>
+        <li>indexer <span class="hl">0.20 B</span> — 只有 21 个 full 层</li>
+      </ul>
+    </div>
+    <div class="card">
+      <p class="eyebrow">量化布局</p>
+      <ul class="tight">
+        <li><strong>FP8 e4m3 block 128×128</strong>：MoE 专家、dense MLP、
+            MLA 全部投影（含 <code>kv_b_proj</code>），以及 indexer 的
+            <code>wq_b</code> / <code>wk</code>。</li>
+        <li><strong>BF16 保留</strong>：<code>indexer.weights_proj</code>（就是那张排除名映射守住的）、
+            <code>k_norm</code>、全部 norm、<code>gate.weight</code>、embedding 与 <code>lm_head</code>。</li>
+        <li><code>e_score_correction_bias</code> 在 checkpoint 里是 <strong>F32</strong>——这不是巧合，见图 4。</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section>
+  <hr class="rule">
+  <p class="eyebrow">核心机制 · 层调度</p>
+  <h2>78 层里只有 21 层真的算 top-k</h2>
+  <p>
+    <code>indexer_types</code> 把每层标成两类：<strong><code>full</code></strong> 本层跑 indexer，
+    从全部 KV 里选出 2048 个下标写入共享 buffer；<strong><code>shared</code></strong>
+    磁盘上就没有 indexer 权重，直接复用上一个 full 层选出的下标。
+    节奏是前 3 层连续 full，之后每 4 层一个 full。
+  </p>
+  <p class="pathline">full 层落点：0, 1, 2, 6, 10, 14, 18, 22, 26, 30, 34, 38, 42, 46, 50, 54, 58, 62, 66, 70, 74</p>
+  <figure>
+    <p class="fignum">图 1 · IndexShare</p>
+    <svg viewBox="0 0 1060 348" role="img" aria-label="IndexShare 机制。层 6 是 full 层，拥有完整的 indexer 权重并计算 top-k，写入共享的 _sparse_kv_indices_gpu 缓冲区；层 7、8、9 是 shared 层，磁盘上没有 indexer 权重，构造期也不建立 indexer 模块，直接读取层 6 写下的同一份下标。78 层里 21 个 full、57 个 shared。">
+      <defs>
+      <marker id="f1ar" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z" fill="currentColor"/></marker>
+      <marker id="f1ara" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z" fill="var(--amber-mark)"/></marker>
+      <marker id="f1arp" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z" fill="var(--petrol-mark)"/></marker>
+      <marker id="f1arm" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z" fill="var(--moss-mark)"/></marker>
+      <marker id="f1arb" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z" fill="var(--brick)"/></marker>
+      <linearGradient id="f1gn" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--surface)"/><stop offset="100%" stop-color="var(--surface-2)"/></linearGradient>
+      <linearGradient id="f1gp" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--petrol-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+      <linearGradient id="f1ga" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--amber-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+      <linearGradient id="f1gm" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--moss-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+      <linearGradient id="f1gb" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--brick-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+      <linearGradient id="f1gg" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--sunk)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+      <linearGradient id="f1spine" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="var(--petrol-mark)" stop-opacity=".7"/><stop offset="48%" stop-color="var(--amber-mark)" stop-opacity=".55"/><stop offset="100%" stop-color="var(--petrol-mark)" stop-opacity=".7"/></linearGradient>
+      <pattern id="f1zero" width="8" height="8" patternTransform="rotate(45)" patternUnits="userSpaceOnUse"><rect width="8" height="8" fill="var(--surface)"/><line x1="0" y1="0" x2="0" y2="8" stroke="var(--amber-mark)" stroke-width="2.6" opacity=".55"/></pattern>
+      <filter id="f1sh" x="-12%" y="-24%" width="124%" height="150%"><feDropShadow dx="0" dy="1.6" stdDeviation="2.6" flood-opacity=".16"/></filter>
+      </defs>
+      <text x="24" y="26" font-family="Archivo, sans-serif" font-size="12.5" font-weight="600" fill="currentColor">一个 4 层周期：一次 top-k，四层共用</text>
+      <text x="24" y="41" font-size="9.5" fill="var(--ink-2)">indexer_types = [... full, shared, shared, shared, full ...]</text>
+      <rect x="40" y="60" width="220" height="132" rx="7" fill="url(#f1ga)" stroke="var(--amber-mark)" stroke-width="1.35" filter="url(#f1sh)"/>
+        <path d="M40,67 a7,7 0 0 1 7,-7 h2 v132 h-2 a7,7 0 0 1 -7,-7 z" fill="var(--amber-mark)" opacity=".85"/>
+        <text x="150.0" y="79" text-anchor="middle" font-family="Archivo, sans-serif" font-size="11.5" font-weight="600" fill="var(--amber)">layer 6 · full</text>
+        <text x="150.0" y="96.0" text-anchor="middle" fill="var(--ink-2)">自带完整 indexer 权重</text>
+        <text x="150.0" y="111.5" text-anchor="middle" fill="var(--ink)">wq_b [4096, 2048]</text>
+        <text x="150.0" y="127.0" text-anchor="middle" fill="var(--ink)">wk [128, 6144] · k_norm 128</text>
+        <text x="150.0" y="142.5" text-anchor="middle" fill="var(--ink)">weights_proj [32, 6144]</text>
+        <text x="150.0" y="158.0" text-anchor="middle" fill="var(--amber)">9.37 M</text>
+        <circle cx="55" cy="75" r="10.5" fill="var(--surface)" stroke="var(--amber-mark)" stroke-width="1.2"/>
+        <text x="55" y="78.8" text-anchor="middle" font-family="Archivo, sans-serif" font-size="10.5" font-weight="700" fill="var(--amber)">1</text>
+      <rect x="300" y="60" width="220" height="132" rx="7" fill="none" stroke="var(--line-soft)" stroke-width="1.35" stroke-dasharray="5 4"/>
+        <text x="410.0" y="79" text-anchor="middle" font-family="Archivo, sans-serif" font-size="11.5" font-weight="600" fill="var(--ink-2)">layer 7 · shared</text>
+        <text x="410.0" y="96.0" text-anchor="middle" fill="var(--brick)">磁盘上没有 indexer 权重</text>
+        <text x="410.0" y="111.5" text-anchor="middle" fill="var(--ink-2)">构造期不建 indexer 模块</text>
+        <text x="410.0" y="127.0" text-anchor="middle" fill="var(--ink-2)">直接读上一个 full 层的结果</text>
+        <text x="410.0" y="142.5" text-anchor="middle" fill="var(--ink-2)"></text>
+        <text x="410.0" y="158.0" text-anchor="middle" fill="var(--ink-2)">0 M</text>
+      <rect x="560" y="60" width="220" height="132" rx="7" fill="none" stroke="var(--line-soft)" stroke-width="1.35" stroke-dasharray="5 4"/>
+        <text x="670.0" y="79" text-anchor="middle" font-family="Archivo, sans-serif" font-size="11.5" font-weight="600" fill="var(--ink-2)">layer 8 · shared</text>
+        <text x="670.0" y="96.0" text-anchor="middle" fill="var(--brick)">磁盘上没有 indexer 权重</text>
+        <text x="670.0" y="111.5" text-anchor="middle" fill="var(--ink-2)">构造期不建 indexer 模块</text>
+        <text x="670.0" y="127.0" text-anchor="middle" fill="var(--ink-2)">直接读上一个 full 层的结果</text>
+        <text x="670.0" y="142.5" text-anchor="middle" fill="var(--ink-2)"></text>
+        <text x="670.0" y="158.0" text-anchor="middle" fill="var(--ink-2)">0 M</text>
+      <rect x="820" y="60" width="220" height="132" rx="7" fill="none" stroke="var(--line-soft)" stroke-width="1.35" stroke-dasharray="5 4"/>
+        <text x="930.0" y="79" text-anchor="middle" font-family="Archivo, sans-serif" font-size="11.5" font-weight="600" fill="var(--ink-2)">layer 9 · shared</text>
+        <text x="930.0" y="96.0" text-anchor="middle" fill="var(--brick)">磁盘上没有 indexer 权重</text>
+        <text x="930.0" y="111.5" text-anchor="middle" fill="var(--ink-2)">构造期不建 indexer 模块</text>
+        <text x="930.0" y="127.0" text-anchor="middle" fill="var(--ink-2)">直接读上一个 full 层的结果</text>
+        <text x="930.0" y="142.5" text-anchor="middle" fill="var(--ink-2)"></text>
+        <text x="930.0" y="158.0" text-anchor="middle" fill="var(--ink-2)">0 M</text>
+      <rect x="300" y="244" width="740" height="62" rx="7" fill="url(#f1gp)" stroke="var(--petrol-mark)" stroke-width="1.35" filter="url(#f1sh)"/>
+        <path d="M300,251 a7,7 0 0 1 7,-7 h2 v62 h-2 a7,7 0 0 1 -7,-7 z" fill="var(--petrol-mark)" opacity=".85"/>
+        <text x="670.0" y="263" text-anchor="middle" font-family="Archivo, sans-serif" font-size="11.5" font-weight="600" fill="var(--petrol)">_sparse_kv_indices_gpu · 每层复用同一块 buffer</text>
+        <text x="670.0" y="280.0" text-anchor="middle" fill="var(--ink)">[T, 2048] int32 —— 被选中的 KV 槽位下标，写一次读四次</text>
+      <path d="M150,192 L150,275 L296,275" fill="none" stroke="var(--amber-mark)" stroke-width="1.15" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#f1ara)"/>
+        <text x="182" y="213" text-anchor="middle" font-size="9.2" fill="var(--amber)">写一次</text>
+      <path d="M410,244 L410,197" fill="none" stroke="var(--petrol-mark)" stroke-width="1.15" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="5 4" marker-end="url(#f1arp)"/>
+      <path d="M670,244 L670,197" fill="none" stroke="var(--petrol-mark)" stroke-width="1.15" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="5 4" marker-end="url(#f1arp)"/>
+      <path d="M930,244 L930,197" fill="none" stroke="var(--petrol-mark)" stroke-width="1.15" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="5 4" marker-end="url(#f1arp)"/>
+      <text x="670" y="330" text-anchor="middle" font-size="9.5" fill="var(--petrol)">读三次</text>
+      <text x="1040" y="330" text-anchor="end" font-size="9.5" fill="var(--ink-2)">21 个 full · 57 个 shared —— 稀疏选择的算力只付 21/78</text>
+    </svg>
+    <figcaption>这是 GLM-5.2 起引入、5.3 原样继承的唯一结构性改动。<strong>shared 层不是“跳过计算”，而是磁盘上就没有那份权重</strong>：<code>_indexer_weights_shared</code> 让构造期不为它们建模块，<code>_should_skip_index_topk</code> 让运行期不为它们跑 top-k。<code>indexer_types</code> 存在时是唯一权威；缺失时才回退到 <code>index_topk_freq</code> / <code>index_skip_topk_offset</code> 的公式。</figcaption>
+  </figure>
+</section>
+
+<section>
+  <hr class="rule">
+  <p class="eyebrow">结构全图</p>
+  <h2>从 input_ids 到 logits，再放大其中一层</h2>
+  <figure class="wide">
+    <p class="fignum">图 2 · 结构全图</p>
+    <svg viewBox="0 0 1100 890" role="img" aria-label="GLM-5.3 完整结构图。左侧自上而下为 input_ids、embed_tokens 154880×6144、layers 0 到 2 的稠密层、layers 3 到 77 的 MoE 层、model.norm、lm_head、logits，另有虚线画出 MTP 层 78；左缘色带按层高比例标出 78 层中 21 个 full 索引层的落点。右侧展开一层 MoE 解码层：input_layernorm 之后是 fused_qkv_a_proj 的 [2624, 6144] 单次 GEMM，输出按列拆成 2048 的 q_c、512 的 kv_c 与 64 的 k_pe 三路，分别经 q_a_layernorm、kv_a_layernorm 与 RoPE，再到 q_b_proj、kv_b_proj，然后是 indexer、MLA、o_proj，最后是 256 专家的 MoE。">
+      <defs>
+      <marker id="f2ar" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z" fill="currentColor"/></marker>
+      <marker id="f2ara" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z" fill="var(--amber-mark)"/></marker>
+      <marker id="f2arp" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z" fill="var(--petrol-mark)"/></marker>
+      <marker id="f2arm" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z" fill="var(--moss-mark)"/></marker>
+      <marker id="f2arb" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z" fill="var(--brick)"/></marker>
+      <linearGradient id="f2gn" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--surface)"/><stop offset="100%" stop-color="var(--surface-2)"/></linearGradient>
+      <linearGradient id="f2gp" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--petrol-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+      <linearGradient id="f2ga" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--amber-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+      <linearGradient id="f2gm" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--moss-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+      <linearGradient id="f2gb" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--brick-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+      <linearGradient id="f2gg" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--sunk)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+      <linearGradient id="f2spine" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="var(--petrol-mark)" stop-opacity=".7"/><stop offset="48%" stop-color="var(--amber-mark)" stop-opacity=".55"/><stop offset="100%" stop-color="var(--petrol-mark)" stop-opacity=".7"/></linearGradient>
+      <pattern id="f2zero" width="8" height="8" patternTransform="rotate(45)" patternUnits="userSpaceOnUse"><rect width="8" height="8" fill="var(--surface)"/><line x1="0" y1="0" x2="0" y2="8" stroke="var(--amber-mark)" stroke-width="2.6" opacity=".55"/></pattern>
+      <filter id="f2sh" x="-12%" y="-24%" width="124%" height="150%"><feDropShadow dx="0" dy="1.6" stdDeviation="2.6" flood-opacity=".16"/></filter>
+      </defs>
+      <text x="24" y="26" font-family="Archivo, sans-serif" font-size="12.5" font-weight="600" fill="currentColor">完整模型栈</text>
+      <text x="24" y="41" font-size="9.5" fill="var(--ink-2)">GlmMoeDsaForCausalLM · 753.3 B · 78 + 1 层</text>
+      <rect x="56" y="52" width="216" height="30" rx="7" fill="url(#f2gn)" stroke="var(--line)" stroke-width="1" filter="url(#f2sh)"/>
+        <text x="164.0" y="71.5" text-anchor="middle" fill="var(--ink)">input_ids  [T]</text>
+      <rect x="56" y="98" width="216" height="54" rx="7" fill="url(#f2gn)" stroke="var(--line)" stroke-width="1" filter="url(#f2sh)"/>
+        <text x="164.0" y="117" text-anchor="middle" font-family="Archivo, sans-serif" font-size="11.5" font-weight="600" fill="var(--ink)">embed_tokens</text>
+        <text x="164.0" y="133.0" text-anchor="middle" fill="var(--ink-2)">[154880, 6144] BF16</text>
+        <text x="164.0" y="147.5" text-anchor="middle" fill="var(--petrol)">951.5 M · 每 rank 全表</text>
+      <rect x="56" y="170" width="216" height="58" rx="7" fill="url(#f2gb)" stroke="var(--brick)" stroke-width="1.35" filter="url(#f2sh)"/>
+        <path d="M56,177 a7,7 0 0 1 7,-7 h2 v58 h-2 a7,7 0 0 1 -7,-7 z" fill="var(--brick)" opacity=".85"/>
+        <text x="164.0" y="189" text-anchor="middle" font-family="Archivo, sans-serif" font-size="11.5" font-weight="600" fill="var(--brick)">layers 0 – 2 · dense</text>
+        <text x="164.0" y="205.0" text-anchor="middle" fill="var(--ink-2)">MLP 6144 ↔ 12288</text>
+        <text x="164.0" y="219.5" text-anchor="middle" fill="var(--brick)">679.5 M</text>
+      <rect x="56" y="246" width="216" height="306" rx="7" fill="url(#f2gp)" stroke="var(--petrol-mark)" stroke-width="1.35" filter="url(#f2sh)"/>
+        <path d="M56,253 a7,7 0 0 1 7,-7 h2 v306 h-2 a7,7 0 0 1 -7,-7 z" fill="var(--petrol-mark)" opacity=".85"/>
+        <text x="164.0" y="265" text-anchor="middle" font-family="Archivo, sans-serif" font-size="12" font-weight="600" fill="var(--petrol)">layers 3 – 77 · MoE</text>
+        <text x="164.0" y="281.3" text-anchor="middle" fill="var(--ink-2)">× 75 层</text>
+        <text x="164.0" y="296.1" text-anchor="middle" fill="var(--ink-2)"></text>
+        <text x="164.0" y="310.90000000000003" text-anchor="middle" fill="var(--ink)">256 routed (top-8) + 1 shared</text>
+        <text x="164.0" y="325.70000000000005" text-anchor="middle" fill="var(--ink-2)">moe_intermediate_size 2048</text>
+        <text x="164.0" y="340.50000000000006" text-anchor="middle" fill="var(--ink-2)"></text>
+        <text x="164.0" y="355.30000000000007" text-anchor="middle" fill="var(--ink-2)">每层 self_attn 165.0 M</text>
+        <text x="164.0" y="370.1000000000001" text-anchor="middle" fill="var(--ink-2)">每层 mlp 9.70 B</text>
+        <text x="164.0" y="384.9000000000001" text-anchor="middle" fill="var(--ink-2)"></text>
+        <text x="164.0" y="399.7000000000001" text-anchor="middle" fill="var(--amber)">21 层带 indexer</text>
+        <text x="164.0" y="414.5000000000001" text-anchor="middle" fill="var(--ink-2)">57 层复用（IndexShare）</text>
+        <text x="164.0" y="429.3000000000001" text-anchor="middle" fill="var(--ink-2)"></text>
+        <text x="164.0" y="444.10000000000014" text-anchor="middle" fill="var(--ink-2)">KV cache 576 / token / 层</text>
+        <text x="164.0" y="458.90000000000015" text-anchor="middle" fill="var(--ink-2)"></text>
+        <text x="164.0" y="473.70000000000016" text-anchor="middle" fill="var(--petrol)">742.6 B 参数 · 激活 25.5 B</text>
+      <rect x="56" y="568" width="216" height="32" rx="7" fill="url(#f2gn)" stroke="var(--line)" stroke-width="1" filter="url(#f2sh)"/>
+        <text x="164.0" y="588" text-anchor="middle" fill="var(--ink)">model.norm · RMSNorm(6144)</text>
+      <rect x="56" y="616" width="216" height="50" rx="7" fill="url(#f2gn)" stroke="var(--line)" stroke-width="1" filter="url(#f2sh)"/>
+        <text x="164.0" y="635" text-anchor="middle" font-family="Archivo, sans-serif" font-size="11.5" font-weight="600" fill="var(--ink)">lm_head</text>
+        <text x="164.0" y="651.0" text-anchor="middle" fill="var(--ink-2)">[154880, 6144] BF16 · 951.5 M</text>
+      <rect x="56" y="682" width="216" height="30" rx="7" fill="url(#f2gn)" stroke="var(--line)" stroke-width="1" filter="url(#f2sh)"/>
+        <text x="164.0" y="701.5" text-anchor="middle" fill="var(--ink)">logits  [T, 154880]</text>
+      <rect x="56" y="742" width="216" height="84" rx="7" fill="none" stroke="var(--amber-mark)" stroke-width="1.35" stroke-dasharray="5 4"/>
+        <text x="164.0" y="761" text-anchor="middle" font-family="Archivo, sans-serif" font-size="11.5" font-weight="600" fill="var(--amber)">layer 78 · MTP draft</text>
+        <text x="164.0" y="776.7" text-anchor="middle" fill="var(--ink-2)">eh_proj [6144, 12288]</text>
+        <text x="164.0" y="790.9000000000001" text-anchor="middle" fill="var(--ink-2)">enorm · hnorm · shared_head.norm</text>
+        <text x="164.0" y="805.1000000000001" text-anchor="middle" fill="var(--ink-2)">自带完整 indexer + 完整 MoE</text>
+        <text x="164.0" y="819.3000000000002" text-anchor="middle" fill="var(--amber)">9.95 B</text>
+      <rect x="26" y="170.00" width="13" height="4.10" rx="1" fill="var(--amber-mark)" opacity="1"/>
+        <rect x="26" y="174.90" width="13" height="4.10" rx="1" fill="var(--amber-mark)" opacity="1"/>
+        <rect x="26" y="179.79" width="13" height="4.10" rx="1" fill="var(--amber-mark)" opacity="1"/>
+        <rect x="26" y="184.69" width="13" height="4.10" rx="1" fill="var(--mute-mark)" opacity=".5"/>
+        <rect x="26" y="189.59" width="13" height="4.10" rx="1" fill="var(--mute-mark)" opacity=".5"/>
+        <rect x="26" y="194.49" width="13" height="4.10" rx="1" fill="var(--mute-mark)" opacity=".5"/>
+        <rect x="26" y="199.38" width="13" height="4.10" rx="1" fill="var(--amber-mark)" opacity="1"/>
+        <rect x="26" y="204.28" width="13" height="4.10" rx="1" fill="var(--mute-mark)" opacity=".5"/>
+        <rect x="26" y="209.18" width="13" height="4.10" rx="1" fill="var(--mute-mark)" opacity=".5"/>
+        <rect x="26" y="214.08" width="13" height="4.10" rx="1" fill="var(--mute-mark)" opacity=".5"/>
+        <rect x="26" y="218.97" width="13" height="4.10" rx="1" fill="var(--amber-mark)" opacity="1"/>
+        <rect x="26" y="223.87" width="13" height="4.10" rx="1" fill="var(--mute-mark)" opacity=".5"/>
+        <rect x="26" y="228.77" width="13" height="4.10" rx="1" fill="var(--mute-mark)" opacity=".5"/>
+        <rect x="26" y="233.67" width="13" height="4.10" rx="1" fill="var(--mute-mark)" opacity=".5"/>
+        <rect x="26" y="238.56" width="13" height="4.10" rx="1" fill="var(--amber-mark)" opacity="1"/>
+        <rect x="26" y="243.46" width="13" height="4.10" rx="1" fill="var(--mute-mark)" opacity=".5"/>
+        <rect x="26" y="248.36" width="13" height="4.10" rx="1" fill="var(--mute-mark)" opacity=".5"/>
+        <rect x="26" y="253.26" width="13" height="4.10" rx="1" fill="var(--mute-mark)" opacity=".5"/>
+        <rect x="26" y="258.15" width="13" height="4.10" rx="1" fill="var(--amber-mark)" opacity="1"/>
+        <rect x="26" y="263.05" width="13" height="4.10" rx="1" fill="var(--mute-mark)" opacity=".5"/>
+        <rect x="26" y="267.95" width="13" height="4.10" rx="1" fill="var(--mute-mark)" opacity=".5"/>
+        <rect x="26" y="272.85" width="13" height="4.10" rx="1" fill="var(--mute-mark)" opacity=".5"/>
+        <rect x="26" y="277.74" width="13" height="4.10" rx="1" fill="var(--amber-mark)" opacity="1"/>
+        <rect x="26" y="282.64" width="13" height="4.10" rx="1" fill="var(--mute-mark)" opacity=".5"/>
+        <rect x="26" y="287.54" width="13" height="4.10" rx="1" fill="var(--mute-mark)" opacity=".5"/>
+        <rect x="26" y="292.44" width="13" height="4.10" rx="1" fill="var(--mute-mark)" opacity=".5"/>
+        <rect x="26" y="297.33" width="13" height="4.10" rx="1" fill="var(--amber-mark)" opacity="1"/>
+        <rect x="26" y="302.23" width="13" height="4.10" rx="1" fill="var(--mute-mark)" opacity=".5"/>
+        <rect x="26" y="307.13" width="13" height="4.10" rx="1" fill="var(--mute-mark)" opacity=".5"/>
+        <rect x="26" y="312.03" width="13" height="4.10" rx="1" fill="var(--mute-mark)" opacity=".5"/>
+        <rect x="26" y="316.92" width="13" height="4.10" rx="1" fill="var(--amber-mark)" opacity="1"/>
+        <rect x="26" y="321.82" width="13" height="4.10" rx="1" fill="var(--mute-mark)" opacity=".5"/>
+        <rect x="26" y="326.72" width="13" height="4.10" rx="1" fill="var(--mute-mark)" opacity=".5"/>
+        <rect x="26" y="331.62" width="13" height="4.10" rx="1" fill="var(--mute-mark)" opacity=".5"/>
+        <rect x="26" y="336.51" width="13" height="4.10" rx="1" fill="var(--amber-mark)" opacity="1"/>
+        <rect x="26" y="341.41" width="13" height="4.10" rx="1" fill="var(--mute-mark)" opacity=".5"/>
+        <rect x="26" y="346.31" width="13" height="4.10" rx="1" fill="var(--mute-mark)" opacity=".5"/>
+        <rect x="26" y="351.21" width="13" height="4.10" rx="1" fill="var(--mute-mark)" opacity=".5"/>
+        <rect x="26" y="356.10" width="13" height="4.10" rx="1" fill="var(--amber-mark)" opacity="1"/>
+        <rect x="26" y="361.00" width="13" height="4.10" rx="1" fill="var(--mute-mark)" opacity=".5"/>
+        <rect x="26" y="365.90" width="13" height="4.10" rx="1" fill="var(--mute-mark)" opacity=".5"/>
+        <rect x="26" y="370.79" width="13" height="4.10" rx="1" fill="var(--mute-mark)" opacity=".5"/>
+        <rect x="26" y="375.69" width="13" height="4.10" rx="1" fill="var(--amber-mark)" opacity="1"/>
+        <rect x="26" y="380.59" width="13" height="4.10" rx="1" fill="var(--mute-mark)" opacity=".5"/>
+        <rect x="26" y="385.49" width="13" height="4.10" rx="1" fill="var(--mute-mark)" opacity=".5"/>
+        <rect x="26" y="390.38" width="13" height="4.10" rx="1" fill="var(--mute-mark)" opacity=".5"/>
+        <rect x="26" y="395.28" width="13" height="4.10" rx="1" fill="var(--amber-mark)" opacity="1"/>
+        <rect x="26" y="400.18" width="13" height="4.10" rx="1" fill="var(--mute-mark)" opacity=".5"/>
+        <rect x="26" y="405.08" width="13" height="4.10" rx="1" fill="var(--mute-mark)" opacity=".5"/>
+        <rect x="26" y="409.97" width="13" height="4.10" rx="1" fill="var(--mute-mark)" opacity=".5"/>
+        <rect x="26" y="414.87" width="13" height="4.10" rx="1" fill="var(--amber-mark)" opacity="1"/>
+        <rect x="26" y="419.77" width="13" height="4.10" rx="1" fill="var(--mute-mark)" opacity=".5"/>
+        <rect x="26" y="424.67" width="13" height="4.10" rx="1" fill="var(--mute-mark)" opacity=".5"/>
+        <rect x="26" y="429.56" width="13" height="4.10" rx="1" fill="var(--mute-mark)" opacity=".5"/>
+        <rect x="26" y="434.46" width="13" height="4.10" rx="1" fill="var(--amber-mark)" opacity="1"/>
+        <rect x="26" y="439.36" width="13" height="4.10" rx="1" fill="var(--mute-mark)" opacity=".5"/>
+        <rect x="26" y="444.26" width="13" height="4.10" rx="1" fill="var(--mute-mark)" opacity=".5"/>
+        <rect x="26" y="449.15" width="13" height="4.10" rx="1" fill="var(--mute-mark)" opacity=".5"/>
+        <rect x="26" y="454.05" width="13" height="4.10" rx="1" fill="var(--amber-mark)" opacity="1"/>
+        <rect x="26" y="458.95" width="13" height="4.10" rx="1" fill="var(--mute-mark)" opacity=".5"/>
+        <rect x="26" y="463.85" width="13" height="4.10" rx="1" fill="var(--mute-mark)" opacity=".5"/>
+        <rect x="26" y="468.74" width="13" height="4.10" rx="1" fill="var(--mute-mark)" opacity=".5"/>
+        <rect x="26" y="473.64" width="13" height="4.10" rx="1" fill="var(--amber-mark)" opacity="1"/>
+        <rect x="26" y="478.54" width="13" height="4.10" rx="1" fill="var(--mute-mark)" opacity=".5"/>
+        <rect x="26" y="483.44" width="13" height="4.10" rx="1" fill="var(--mute-mark)" opacity=".5"/>
+        <rect x="26" y="488.33" width="13" height="4.10" rx="1" fill="var(--mute-mark)" opacity=".5"/>
+        <rect x="26" y="493.23" width="13" height="4.10" rx="1" fill="var(--amber-mark)" opacity="1"/>
+        <rect x="26" y="498.13" width="13" height="4.10" rx="1" fill="var(--mute-mark)" opacity=".5"/>
+        <rect x="26" y="503.03" width="13" height="4.10" rx="1" fill="var(--mute-mark)" opacity=".5"/>
+        <rect x="26" y="507.92" width="13" height="4.10" rx="1" fill="var(--mute-mark)" opacity=".5"/>
+        <rect x="26" y="512.82" width="13" height="4.10" rx="1" fill="var(--amber-mark)" opacity="1"/>
+        <rect x="26" y="517.72" width="13" height="4.10" rx="1" fill="var(--mute-mark)" opacity=".5"/>
+        <rect x="26" y="522.62" width="13" height="4.10" rx="1" fill="var(--mute-mark)" opacity=".5"/>
+        <rect x="26" y="527.51" width="13" height="4.10" rx="1" fill="var(--mute-mark)" opacity=".5"/>
+        <rect x="26" y="532.41" width="13" height="4.10" rx="1" fill="var(--amber-mark)" opacity="1"/>
+        <rect x="26" y="537.31" width="13" height="4.10" rx="1" fill="var(--mute-mark)" opacity=".5"/>
+        <rect x="26" y="542.21" width="13" height="4.10" rx="1" fill="var(--mute-mark)" opacity=".5"/>
+        <rect x="26" y="547.10" width="13" height="4.10" rx="1" fill="var(--mute-mark)" opacity=".5"/>
+      <text x="32.5" y="164" text-anchor="middle" font-size="8" fill="var(--ink-2)">0</text><text x="32.5" y="566" text-anchor="middle" font-size="8" fill="var(--ink-2)">77</text>
+      <path d="M164,82 L164,94" fill="none" stroke="currentColor" stroke-width="1.15" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#f2ar)"/>
+      <path d="M164,152 L164,166" fill="none" stroke="currentColor" stroke-width="1.15" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#f2ar)"/>
+      <path d="M164,228 L164,242" fill="none" stroke="currentColor" stroke-width="1.15" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#f2ar)"/>
+      <path d="M164,552 L164,564" fill="none" stroke="currentColor" stroke-width="1.15" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#f2ar)"/>
+      <path d="M164,600 L164,612" fill="none" stroke="currentColor" stroke-width="1.15" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#f2ar)"/>
+      <path d="M164,666 L164,678" fill="none" stroke="currentColor" stroke-width="1.15" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#f2ar)"/>
+      <path d="M272,246 L384,76 L384,860 L272,552 Z" fill="currentColor" opacity=".035"/><path d="M272,246 L384,76 M272,552 L384,860" fill="none" stroke="currentColor" stroke-width=".9" opacity=".32" stroke-dasharray="5 4"/>
+      <text x="392" y="26" font-family="Archivo, sans-serif" font-size="12.5" font-weight="600" fill="currentColor">DecoderLayer 展开（层 3–77 之一）</text>
+      <text x="392" y="41" font-size="9.5" fill="var(--ink-2)">一层 9.88 B（full 索引层）/ 9.87 B（shared 索引层）</text>
+      <rect x="368" y="52" width="13" height="808" rx="6.5" fill="url(#f2spine)"/>
+      <text x="362" y="456" text-anchor="middle" font-size="9.5" fill="var(--ink-2)" transform="rotate(-90 362 456)">residual stream · [T, 6144]</text>
+      <rect x="392" y="52" width="672" height="34" rx="7" fill="url(#f2gn)" stroke="var(--line)" stroke-width="1" filter="url(#f2sh)"/>
+        <text x="728.0" y="73.5" text-anchor="middle" fill="var(--ink)">input_layernorm · RMSNorm(6144)</text>
+      <rect x="392" y="102" width="672" height="66" rx="7" fill="url(#f2gp)" stroke="var(--petrol-mark)" stroke-width="1.35" filter="url(#f2sh)"/>
+        <path d="M392,109 a7,7 0 0 1 7,-7 h2 v66 h-2 a7,7 0 0 1 -7,-7 z" fill="var(--petrol-mark)" opacity=".85"/>
+        <text x="728.0" y="121" text-anchor="middle" font-family="Archivo, sans-serif" font-size="11.5" font-weight="600" fill="var(--petrol)">fused_qkv_a_proj · 一次 GEMM，输出按列切三份</text>
+        <text x="728.0" y="137.5" text-anchor="middle" fill="var(--ink)">[2624, 6144]   2624 = 2048 + 512 + 64   ·   16.1 M</text>
+        <text x="728.0" y="152.5" text-anchor="middle" fill="var(--ink-2)">ATOM 构造期把 q_a_proj 与 kv_a_proj_with_mqa 合并；checkpoint 里它们是分开的两张量</text>
+        <circle cx="407" cy="117" r="10.5" fill="var(--surface)" stroke="var(--petrol-mark)" stroke-width="1.2"/>
+        <text x="407" y="120.8" text-anchor="middle" font-family="Archivo, sans-serif" font-size="10.5" font-weight="700" fill="var(--petrol)">1</text>
+      <rect x="392" y="186" width="216" height="46" rx="7" fill="url(#f2gn)" stroke="var(--line)" stroke-width="1" filter="url(#f2sh)"/>
+        <text x="500.0" y="205" text-anchor="middle" font-family="Archivo, sans-serif" font-size="11" font-weight="600" fill="var(--ink)">q_a_layernorm</text>
+        <text x="500.0" y="220.5" text-anchor="middle" fill="var(--ink-2)">RMSNorm(2048)</text>
+      <rect x="620" y="186" width="216" height="46" rx="7" fill="url(#f2gn)" stroke="var(--line)" stroke-width="1" filter="url(#f2sh)"/>
+        <text x="728.0" y="205" text-anchor="middle" font-family="Archivo, sans-serif" font-size="11" font-weight="600" fill="var(--ink)">kv_a_layernorm</text>
+        <text x="728.0" y="220.5" text-anchor="middle" fill="var(--ink-2)">RMSNorm(512)</text>
+      <rect x="848" y="186" width="216" height="46" rx="7" fill="url(#f2ga)" stroke="var(--amber-mark)" stroke-width="1.35" filter="url(#f2sh)"/>
+        <path d="M848,193 a7,7 0 0 1 7,-7 h2 v46 h-2 a7,7 0 0 1 -7,-7 z" fill="var(--amber-mark)" opacity=".85"/>
+        <text x="956.0" y="205" text-anchor="middle" font-family="Archivo, sans-serif" font-size="11" font-weight="600" fill="var(--amber)">RoPE</text>
+        <text x="956.0" y="220.5" text-anchor="middle" fill="var(--ink-2)">交错式 · θ = 8e6</text>
+      <rect x="392" y="250" width="216" height="56" rx="7" fill="url(#f2gn)" stroke="var(--line)" stroke-width="1" filter="url(#f2sh)"/>
+        <text x="500.0" y="269" text-anchor="middle" font-family="Archivo, sans-serif" font-size="11" font-weight="600" fill="var(--ink)">q_b_proj</text>
+        <text x="500.0" y="284.5" text-anchor="middle" fill="var(--ink-2)">[16384, 2048] → 64 × 256</text>
+        <text x="500.0" y="298.5" text-anchor="middle" fill="var(--petrol)">33.6 M</text>
+      <rect x="620" y="250" width="216" height="56" rx="7" fill="url(#f2gn)" stroke="var(--line)" stroke-width="1" filter="url(#f2sh)"/>
+        <text x="728.0" y="269" text-anchor="middle" font-family="Archivo, sans-serif" font-size="11" font-weight="600" fill="var(--ink)">kv_b_proj</text>
+        <text x="728.0" y="284.5" text-anchor="middle" fill="var(--ink-2)">[28672, 512] → 64 × (192+256)</text>
+        <text x="728.0" y="298.5" text-anchor="middle" fill="var(--petrol)">14.7 M</text>
+      <rect x="848" y="250" width="216" height="56" rx="7" fill="url(#f2ga)" stroke="var(--amber-mark)" stroke-width="1.35" filter="url(#f2sh)"/>
+        <path d="M848,257 a7,7 0 0 1 7,-7 h2 v56 h-2 a7,7 0 0 1 -7,-7 z" fill="var(--amber-mark)" opacity=".85"/>
+        <text x="956.0" y="269" text-anchor="middle" font-family="Archivo, sans-serif" font-size="11" font-weight="600" fill="var(--amber)">k_pe</text>
+        <text x="956.0" y="284.5" text-anchor="middle" fill="var(--ink-2)">[T, 64] 旋转后入 cache</text>
+        <text x="956.0" y="298.5" text-anchor="middle" fill="var(--amber)">与 512 latent 拼成 576</text>
+      <rect x="392" y="324" width="672" height="78" rx="7" fill="url(#f2ga)" stroke="var(--amber-mark)" stroke-width="1.35" filter="url(#f2sh)"/>
+        <path d="M392,331 a7,7 0 0 1 7,-7 h2 v78 h-2 a7,7 0 0 1 -7,-7 z" fill="var(--amber-mark)" opacity=".85"/>
+        <text x="728.0" y="343" text-anchor="middle" font-family="Archivo, sans-serif" font-size="11.5" font-weight="600" fill="var(--amber)">indexer（仅 21 个 full 层拥有）</text>
+        <text x="728.0" y="359.5" text-anchor="middle" fill="var(--ink)">wq_b [4096, 2048] → 32 头 × 128    wk [128, 6144] → k_norm(128)</text>
+        <text x="728.0" y="374.5" text-anchor="middle" fill="var(--ink)">weights_proj [32, 6144] · FP8 打分 → top-k(2048) → _sparse_kv_indices_gpu</text>
+        <text x="728.0" y="389.5" text-anchor="middle" fill="var(--ink-2)">9.37 M / 层 —— shared 层这一格整块不存在</text>
+        <circle cx="407" cy="339" r="10.5" fill="var(--surface)" stroke="var(--amber-mark)" stroke-width="1.2"/>
+        <text x="407" y="342.8" text-anchor="middle" font-family="Archivo, sans-serif" font-size="10.5" font-weight="700" fill="var(--amber)">2</text>
+      <rect x="392" y="420" width="672" height="76" rx="7" fill="url(#f2gp)" stroke="var(--petrol-mark)" stroke-width="1.35" filter="url(#f2sh)"/>
+        <path d="M392,427 a7,7 0 0 1 7,-7 h2 v76 h-2 a7,7 0 0 1 -7,-7 z" fill="var(--petrol-mark)" opacity=".85"/>
+        <text x="728.0" y="439" text-anchor="middle" font-family="Archivo, sans-serif" font-size="11.5" font-weight="600" fill="var(--petrol)">MLA · 稀疏因果注意力</text>
+        <text x="728.0" y="455.5" text-anchor="middle" fill="var(--ink)">查询 [T, 64, 576]  ⟷  KV entry [slots, 576] = 512 latent + 64 rope</text>
+        <text x="728.0" y="470.5" text-anchor="middle" fill="var(--ink-2)">只读 indexer 选出的 2048 个槽；seq ≤ 2048 时 top-k 选中全部，等价稠密</text>
+        <circle cx="407" cy="435" r="10.5" fill="var(--surface)" stroke="var(--petrol-mark)" stroke-width="1.2"/>
+        <text x="407" y="438.8" text-anchor="middle" font-family="Archivo, sans-serif" font-size="10.5" font-weight="700" fill="var(--petrol)">3</text>
+      <rect x="392" y="514" width="672" height="44" rx="7" fill="url(#f2gn)" stroke="var(--line)" stroke-width="1" filter="url(#f2sh)"/>
+        <text x="728.0" y="541" text-anchor="middle" font-family="Archivo, sans-serif" font-size="11" font-weight="600" fill="var(--ink)">o_proj  [6144, 16384] = 64 × v_head_dim 256</text>
+      <rect x="392" y="576" width="672" height="34" rx="7" fill="url(#f2gn)" stroke="var(--line)" stroke-width="1" filter="url(#f2sh)"/>
+        <text x="728.0" y="597.5" text-anchor="middle" fill="var(--ink)">post_attention_layernorm · RMSNorm(6144)</text>
+      <rect x="392" y="626" width="672" height="108" rx="7" fill="url(#f2gm)" stroke="var(--moss-mark)" stroke-width="1.35" filter="url(#f2sh)"/>
+        <path d="M392,633 a7,7 0 0 1 7,-7 h2 v108 h-2 a7,7 0 0 1 -7,-7 z" fill="var(--moss-mark)" opacity=".85"/>
+        <text x="728.0" y="645" text-anchor="middle" font-family="Archivo, sans-serif" font-size="11.5" font-weight="600" fill="var(--moss)">mlp · MoE</text>
+        <text x="728.0" y="662.0" text-anchor="middle" fill="var(--ink)">gate [256, 6144] → sigmoid → noaux_tc top-8 / 256</text>
+        <text x="728.0" y="677.5" text-anchor="middle" fill="var(--amber)">e_score_correction_bias [256] fp32 —— 路由必须在 fp32 里做（见图 4）</text>
+        <text x="728.0" y="693.0" text-anchor="middle" fill="var(--ink)">每专家 gate/up [2048, 6144] · down [6144, 2048] = 37.75 M</text>
+        <text x="728.0" y="708.5" text-anchor="middle" fill="var(--ink-2)">+ 1 shared expert · × routed_scaling_factor 2.5</text>
+        <circle cx="407" cy="641" r="10.5" fill="var(--surface)" stroke="var(--moss-mark)" stroke-width="1.2"/>
+        <text x="407" y="644.8" text-anchor="middle" font-family="Archivo, sans-serif" font-size="10.5" font-weight="700" fill="var(--moss)">4</text>
+      <rect x="392" y="754" width="672" height="106" rx="7" fill="url(#f2gg)" stroke="var(--line-soft)" stroke-width="1.35" filter="url(#f2sh)"/>
+        <text x="728.0" y="774" text-anchor="middle" font-family="Archivo, sans-serif" font-size="11" font-weight="600" fill="var(--ink-2)">这一层的账</text>
+        <text x="728.0" y="791.5" text-anchor="middle" fill="var(--ink-2)">· self_attn 165.0 M（full 层 174.4 M，多出来的就是那个 indexer）</text>
+        <text x="728.0" y="807.5" text-anchor="middle" fill="var(--ink-2)">· mlp 9.70 B —— 256 个专家占了全模型 96.2 % 的参数</text>
+        <text x="728.0" y="823.5" text-anchor="middle" fill="var(--ink-2)">· 单 token 只碰 8 + 1 个专家：339.8 M，其余 9.36 B 一动不动</text>
+        <text x="728.0" y="839.5" text-anchor="middle" fill="var(--ink-2)">· KV 只存 576 宽的 latent，不存 64 头 × 256 的展开形态</text>
+      <path d="M728,86 L728,98" fill="none" stroke="currentColor" stroke-width="1.15" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#f2ar)"/>
+      <path d="M728,168 L728,182" fill="none" stroke="currentColor" stroke-width="1.15" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#f2ar)"/>
+      <path d="M728,306 L728,320" fill="none" stroke="currentColor" stroke-width="1.15" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#f2ar)"/>
+      <path d="M728,402 L728,416" fill="none" stroke="currentColor" stroke-width="1.15" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#f2ar)"/>
+      <path d="M728,496 L728,510" fill="none" stroke="currentColor" stroke-width="1.15" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#f2ar)"/>
+      <path d="M728,558 L728,572" fill="none" stroke="currentColor" stroke-width="1.15" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#f2ar)"/>
+      <path d="M728,610 L728,622" fill="none" stroke="currentColor" stroke-width="1.15" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#f2ar)"/>
+      <path d="M728,734 L728,750" fill="none" stroke="currentColor" stroke-width="1.15" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#f2ar)"/>
+      <path d="M381,66 L388,66" fill="none" stroke="var(--amber-mark)" stroke-width="1.15" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#f2ara)"/>
+    </svg>
+    <figcaption><strong>请盯住 <code>fused_qkv_a_proj</code> 那一格</strong>：它是一次 <code>[2624, 6144]</code> 的 GEMM，输出<strong>按列切成三份</strong>（<code>2624 = 2048 + 512 + 64</code>），而不是投影到某个三维形状。checkpoint 里它本是 <code>q_a_proj [2048, 6144]</code> 与 <code>kv_a_proj_with_mqa [576, 6144]</code> 两张量，合并发生在 ATOM 构造期。右侧第 2 格（indexer）在 57 个 shared 层里整块不存在。</figcaption>
+  </figure>
+</section>
+
+<section>
+  <hr class="rule">
+  <p class="eyebrow">稀疏注意力</p>
+  <h2>2048 这个数字在不同上下文下的含义完全不同</h2>
+  <figure>
+    <p class="fignum">图 3 · 稀疏度</p>
+    <svg viewBox="0 0 1060 336" role="img" aria-label="稀疏注意力的三步：indexer 对全历史打分得到 logits，top-k 取出 2048 个槽位下标写入共享缓冲区，MLA 只读这 2048 个 KV entry。下方比例条显示同样的 2048 在 2048、8192、131072、1048576 四种上下文长度下分别占全部 token 的 100%、25%、1.6% 与 0.2%。">
+      <defs>
+      <marker id="f3ar" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z" fill="currentColor"/></marker>
+      <marker id="f3ara" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z" fill="var(--amber-mark)"/></marker>
+      <marker id="f3arp" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z" fill="var(--petrol-mark)"/></marker>
+      <marker id="f3arm" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z" fill="var(--moss-mark)"/></marker>
+      <marker id="f3arb" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z" fill="var(--brick)"/></marker>
+      <linearGradient id="f3gn" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--surface)"/><stop offset="100%" stop-color="var(--surface-2)"/></linearGradient>
+      <linearGradient id="f3gp" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--petrol-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+      <linearGradient id="f3ga" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--amber-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+      <linearGradient id="f3gm" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--moss-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+      <linearGradient id="f3gb" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--brick-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+      <linearGradient id="f3gg" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--sunk)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+      <linearGradient id="f3spine" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="var(--petrol-mark)" stop-opacity=".7"/><stop offset="48%" stop-color="var(--amber-mark)" stop-opacity=".55"/><stop offset="100%" stop-color="var(--petrol-mark)" stop-opacity=".7"/></linearGradient>
+      <pattern id="f3zero" width="8" height="8" patternTransform="rotate(45)" patternUnits="userSpaceOnUse"><rect width="8" height="8" fill="var(--surface)"/><line x1="0" y1="0" x2="0" y2="8" stroke="var(--amber-mark)" stroke-width="2.6" opacity=".55"/></pattern>
+      <filter id="f3sh" x="-12%" y="-24%" width="124%" height="150%"><feDropShadow dx="0" dy="1.6" stdDeviation="2.6" flood-opacity=".16"/></filter>
+      </defs>
+      <text x="24" y="26" font-family="Archivo, sans-serif" font-size="12.5" font-weight="600" fill="currentColor">一次 forward 里，注意力实际读了多少</text>
+      <text x="24" y="41" font-size="9.5" fill="var(--ink-2)">index_topk = 2048 · max_position_embeddings = 1 048 576</text>
+      <rect x="40" y="58" width="300" height="92" rx="7" fill="url(#f3gn)" stroke="var(--line)" stroke-width="1" filter="url(#f3sh)"/>
+        <text x="190.0" y="77" text-anchor="middle" font-family="Archivo, sans-serif" font-size="11.5" font-weight="600" fill="var(--ink)">indexer 打分</text>
+        <text x="190.0" y="93.5" text-anchor="middle" fill="var(--ink)">q [T, 32, 128] · k [ctx, 128] 全部 FP8</text>
+        <text x="190.0" y="108.5" text-anchor="middle" fill="var(--petrol)">logits [T, ctx] fp32</text>
+        <text x="190.0" y="123.5" text-anchor="middle" fill="var(--ink-2)">每 token 对全历史打一次分</text>
+        <circle cx="55" cy="73" r="10.5" fill="var(--surface)" stroke="var(--line)" stroke-width="1.2"/>
+        <text x="55" y="76.8" text-anchor="middle" font-family="Archivo, sans-serif" font-size="10.5" font-weight="700" fill="var(--ink)">1</text>
+      <rect x="380" y="58" width="300" height="92" rx="7" fill="url(#f3ga)" stroke="var(--amber-mark)" stroke-width="1.35" filter="url(#f3sh)"/>
+        <path d="M380,65 a7,7 0 0 1 7,-7 h2 v92 h-2 a7,7 0 0 1 -7,-7 z" fill="var(--amber-mark)" opacity=".85"/>
+        <text x="530.0" y="77" text-anchor="middle" font-family="Archivo, sans-serif" font-size="11.5" font-weight="600" fill="var(--amber)">top-k(2048)</text>
+        <text x="530.0" y="93.5" text-anchor="middle" fill="var(--ink)">→ [T, 2048] int32 槽位下标</text>
+        <text x="530.0" y="108.5" text-anchor="middle" fill="var(--amber)">写入 _sparse_kv_indices_gpu</text>
+        <text x="530.0" y="123.5" text-anchor="middle" fill="var(--ink-2)">后面 3 个 shared 层直接读它</text>
+        <circle cx="395" cy="73" r="10.5" fill="var(--surface)" stroke="var(--amber-mark)" stroke-width="1.2"/>
+        <text x="395" y="76.8" text-anchor="middle" font-family="Archivo, sans-serif" font-size="10.5" font-weight="700" fill="var(--amber)">2</text>
+      <rect x="720" y="58" width="300" height="92" rx="7" fill="url(#f3gp)" stroke="var(--petrol-mark)" stroke-width="1.35" filter="url(#f3sh)"/>
+        <path d="M720,65 a7,7 0 0 1 7,-7 h2 v92 h-2 a7,7 0 0 1 -7,-7 z" fill="var(--petrol-mark)" opacity=".85"/>
+        <text x="870.0" y="77" text-anchor="middle" font-family="Archivo, sans-serif" font-size="11.5" font-weight="600" fill="var(--petrol)">MLA 只读这 2048 个</text>
+        <text x="870.0" y="93.5" text-anchor="middle" fill="var(--ink)">KV entry [2048, 576]</text>
+        <text x="870.0" y="108.5" text-anchor="middle" fill="var(--ink-2)">ctx ≤ 2048 时选中全部 → 等价稠密</text>
+        <text x="870.0" y="123.5" text-anchor="middle" fill="var(--petrol)">ctx = 1 M 时读 0.2 %</text>
+        <circle cx="735" cy="73" r="10.5" fill="var(--surface)" stroke="var(--petrol-mark)" stroke-width="1.2"/>
+        <text x="735" y="76.8" text-anchor="middle" font-family="Archivo, sans-serif" font-size="10.5" font-weight="700" fill="var(--petrol)">3</text>
+      <path d="M340,104 L376,104" fill="none" stroke="currentColor" stroke-width="1.15" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#f3ar)"/>
+      <path d="M680,104 L716,104" fill="none" stroke="currentColor" stroke-width="1.15" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#f3ar)"/>
+      <text x="40" y="196" font-family="Archivo, sans-serif" font-size="11.5" font-weight="600" fill="currentColor">同一个 2048，在不同上下文长度下占的比例</text>
+      <text x="40" y="227" font-size="10" fill="var(--ink-2)" text-anchor="end" transform="translate(76,0)">2 048</text>
+      <rect x="128" y="214" width="760" height="17" rx="2.5" fill="var(--sunk)"/>
+      <rect x="128" y="214" width="760.0" height="17" rx="2.5" fill="var(--amber-mark)"/>
+      <text x="900" y="226.5" font-size="9.4" fill="var(--ink-2)">全部选中 · 与稠密因果注意力逐位相同</text>
+      <text x="40" y="254" font-size="10" fill="var(--ink-2)" text-anchor="end" transform="translate(76,0)">8 192</text>
+      <rect x="128" y="241" width="760" height="17" rx="2.5" fill="var(--sunk)"/>
+      <rect x="128" y="241" width="190.0" height="17" rx="2.5" fill="var(--amber-mark)"/>
+      <text x="900" y="253.5" font-size="9.4" fill="var(--ink-2)">每 4 个 token 里有 1 个进入注意力</text>
+      <text x="40" y="281" font-size="10" fill="var(--ink-2)" text-anchor="end" transform="translate(76,0)">131 072</text>
+      <rect x="128" y="268" width="760" height="17" rx="2.5" fill="var(--sunk)"/>
+      <rect x="128" y="268" width="11.9" height="17" rx="2.5" fill="var(--amber-mark)"/>
+      <text x="900" y="280.5" font-size="9.4" fill="var(--ink-2)">1.6 %</text>
+      <text x="40" y="308" font-size="10" fill="var(--ink-2)" text-anchor="end" transform="translate(76,0)">1 048 576</text>
+      <rect x="128" y="295" width="760" height="17" rx="2.5" fill="var(--sunk)"/>
+      <rect x="128" y="295" width="2.2" height="17" rx="2.5" fill="var(--amber-mark)"/>
+      <text x="900" y="307.5" font-size="9.4" fill="var(--ink-2)">0.2 % —— KV cache 仍然是全量 89.9 KB/token</text>
+    </svg>
+    <figcaption>注意最后一行：<strong>被读的只有 2048 个，但 KV cache 仍然按全长存</strong>。稀疏省的是注意力的计算与带宽，不是显存。1 M 上下文的 KV 依然是 89.9 KB × 1 M ≈ 87.7 GiB（BF16）。</figcaption>
+  </figure>
+  <div class="callout">
+    <p class="eyebrow">容易踩的地方：上下文不到 2048 时 indexer 是 no-op</p>
+    <p>
+      <code>index_topk = 2048</code> 意味着历史长度 ≤ 2048 时 top-k 会选中<strong>每一个</strong> token，
+      稀疏路径与稠密因果注意力逐位相同。此时 indexer 照算不误，结果却不改变任何东西——
+      所以<strong>短上下文下的对比说明不了稀疏选择是对的</strong>，只能说明它没把事情弄坏。
+    </p>
+  </div>
+</section>
+
+<section id="router">
+  <hr class="rule">
+  <p class="eyebrow">GLM-5.3 特有</p>
+  <h2>唯一新增的 config 字段，指向一个 4 个数量级的精度问题</h2>
+  <figure>
+    <p class="fignum">图 4 · fp32 路由</p>
+    <svg viewBox="0 0 1060 386" role="img" aria-label="MoE 路由修正偏置的精度塌缩。上方数轴是 checkpoint 里 layer 40 的 256 个 fp32 偏置值，密集分布在 7.85 到 8.30 之间，共 225 个互不相同的值；下方数轴是同一批值舍入到 bf16 之后的结果，只剩 7.84375、7.96875、8.0、8.0625、8.125、8.1875、8.25、8.3125 八个落点。">
+      <defs>
+      <marker id="f4ar" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z" fill="currentColor"/></marker>
+      <marker id="f4ara" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z" fill="var(--amber-mark)"/></marker>
+      <marker id="f4arp" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z" fill="var(--petrol-mark)"/></marker>
+      <marker id="f4arm" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z" fill="var(--moss-mark)"/></marker>
+      <marker id="f4arb" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z" fill="var(--brick)"/></marker>
+      <linearGradient id="f4gn" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--surface)"/><stop offset="100%" stop-color="var(--surface-2)"/></linearGradient>
+      <linearGradient id="f4gp" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--petrol-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+      <linearGradient id="f4ga" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--amber-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+      <linearGradient id="f4gm" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--moss-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+      <linearGradient id="f4gb" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--brick-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+      <linearGradient id="f4gg" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--sunk)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+      <linearGradient id="f4spine" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="var(--petrol-mark)" stop-opacity=".7"/><stop offset="48%" stop-color="var(--amber-mark)" stop-opacity=".55"/><stop offset="100%" stop-color="var(--petrol-mark)" stop-opacity=".7"/></linearGradient>
+      <pattern id="f4zero" width="8" height="8" patternTransform="rotate(45)" patternUnits="userSpaceOnUse"><rect width="8" height="8" fill="var(--surface)"/><line x1="0" y1="0" x2="0" y2="8" stroke="var(--amber-mark)" stroke-width="2.6" opacity=".55"/></pattern>
+      <filter id="f4sh" x="-12%" y="-24%" width="124%" height="150%"><feDropShadow dx="0" dy="1.6" stdDeviation="2.6" flood-opacity=".16"/></filter>
+      </defs>
+      <text x="24" y="26" font-family="Archivo, sans-serif" font-size="12.5" font-weight="600" fill="currentColor">noaux_tc 的 e_score_correction_bias 落进 bf16 会发生什么</text>
+      <text x="24" y="41" font-size="9.5" fill="var(--ink-2)">model.layers.40.mlp.gate.e_score_correction_bias · 实测 256 个值</text>
+      <text x="24" y="76" font-size="10" fill="var(--ink)">fp32（checkpoint 里的样子）</text>
+      <line x1="90" y1="108" x2="1000" y2="108" stroke="currentColor" stroke-width="1" opacity=".45"/>
+      <line x1="905.27" y1="94" x2="905.27" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="721.61" y1="94" x2="721.61" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="901.96" y1="94" x2="901.96" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="888.73" y1="94" x2="888.73" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="858.95" y1="94" x2="858.95" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="728.24" y1="94" x2="728.24" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="865.57" y1="94" x2="865.57" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="723.30" y1="94" x2="723.30" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="900.31" y1="94" x2="900.31" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="898.65" y1="94" x2="898.65" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="898.66" y1="94" x2="898.66" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="797.70" y1="94" x2="797.70" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="817.61" y1="94" x2="817.61" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="875.53" y1="94" x2="875.53" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="885.42" y1="94" x2="885.42" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="868.88" y1="94" x2="868.88" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="860.60" y1="94" x2="860.60" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="595.81" y1="94" x2="595.81" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="850.66" y1="94" x2="850.66" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="873.83" y1="94" x2="873.83" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="524.61" y1="94" x2="524.61" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="882.12" y1="94" x2="882.12" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="875.49" y1="94" x2="875.49" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="895.35" y1="94" x2="895.35" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="882.11" y1="94" x2="882.11" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="827.51" y1="94" x2="827.51" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="776.24" y1="94" x2="776.24" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="549.55" y1="94" x2="549.55" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="890.39" y1="94" x2="890.39" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="888.74" y1="94" x2="888.74" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="872.18" y1="94" x2="872.18" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="873.84" y1="94" x2="873.84" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="885.42" y1="94" x2="885.42" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="657.05" y1="94" x2="657.05" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="822.56" y1="94" x2="822.56" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="728.23" y1="94" x2="728.23" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="645.47" y1="94" x2="645.47" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="863.90" y1="94" x2="863.90" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="901.96" y1="94" x2="901.96" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="870.52" y1="94" x2="870.52" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="733.24" y1="94" x2="733.24" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="842.42" y1="94" x2="842.42" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="887.08" y1="94" x2="887.08" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="867.22" y1="94" x2="867.22" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="892.04" y1="94" x2="892.04" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="865.56" y1="94" x2="865.56" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="898.66" y1="94" x2="898.66" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="892.04" y1="94" x2="892.04" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="852.32" y1="94" x2="852.32" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="903.62" y1="94" x2="903.62" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="761.34" y1="94" x2="761.34" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="852.33" y1="94" x2="852.33" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="905.28" y1="94" x2="905.28" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="824.23" y1="94" x2="824.23" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="844.05" y1="94" x2="844.05" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="812.63" y1="94" x2="812.63" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="901.97" y1="94" x2="901.97" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="898.66" y1="94" x2="898.66" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="882.11" y1="94" x2="882.11" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="892.04" y1="94" x2="892.04" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="829.17" y1="94" x2="829.17" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="895.34" y1="94" x2="895.34" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="814.30" y1="94" x2="814.30" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="905.27" y1="94" x2="905.27" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="840.76" y1="94" x2="840.76" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="865.56" y1="94" x2="865.56" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="857.29" y1="94" x2="857.29" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="635.57" y1="94" x2="635.57" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="883.77" y1="94" x2="883.77" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="829.19" y1="94" x2="829.19" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="849.03" y1="94" x2="849.03" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="782.87" y1="94" x2="782.87" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="893.69" y1="94" x2="893.69" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="888.73" y1="94" x2="888.73" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="771.23" y1="94" x2="771.23" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="660.42" y1="94" x2="660.42" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="782.84" y1="94" x2="782.84" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="849.02" y1="94" x2="849.02" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="744.80" y1="94" x2="744.80" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="658.75" y1="94" x2="658.75" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="810.98" y1="94" x2="810.98" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="723.28" y1="94" x2="723.28" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="741.46" y1="94" x2="741.46" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="665.32" y1="94" x2="665.32" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="880.46" y1="94" x2="880.46" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="887.07" y1="94" x2="887.07" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="787.81" y1="94" x2="787.81" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="873.84" y1="94" x2="873.84" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="799.37" y1="94" x2="799.37" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="898.68" y1="94" x2="898.68" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="882.11" y1="94" x2="882.11" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="858.93" y1="94" x2="858.93" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="486.67" y1="94" x2="486.67" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="883.76" y1="94" x2="883.76" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="888.73" y1="94" x2="888.73" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="857.30" y1="94" x2="857.30" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="739.81" y1="94" x2="739.81" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="812.63" y1="94" x2="812.63" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="807.68" y1="94" x2="807.68" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="834.12" y1="94" x2="834.12" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="901.97" y1="94" x2="901.97" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="802.71" y1="94" x2="802.71" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="822.54" y1="94" x2="822.54" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="433.80" y1="94" x2="433.80" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="858.95" y1="94" x2="858.95" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="865.57" y1="94" x2="865.57" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="840.76" y1="94" x2="840.76" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="756.35" y1="94" x2="756.35" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="868.88" y1="94" x2="868.88" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="810.99" y1="94" x2="810.99" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="888.73" y1="94" x2="888.73" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="882.11" y1="94" x2="882.11" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="815.93" y1="94" x2="815.93" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="883.77" y1="94" x2="883.77" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="895.35" y1="94" x2="895.35" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="910.25" y1="94" x2="910.25" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="802.71" y1="94" x2="802.71" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="796.08" y1="94" x2="796.08" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="842.41" y1="94" x2="842.41" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="792.78" y1="94" x2="792.78" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="883.78" y1="94" x2="883.78" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="892.03" y1="94" x2="892.03" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="882.12" y1="94" x2="882.12" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="865.57" y1="94" x2="865.57" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="751.40" y1="94" x2="751.40" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="900.31" y1="94" x2="900.31" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="865.56" y1="94" x2="865.56" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="862.26" y1="94" x2="862.26" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="850.66" y1="94" x2="850.66" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="772.91" y1="94" x2="772.91" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="893.70" y1="94" x2="893.70" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="865.56" y1="94" x2="865.56" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="819.24" y1="94" x2="819.24" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="673.63" y1="94" x2="673.63" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="640.54" y1="94" x2="640.54" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="868.88" y1="94" x2="868.88" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="473.43" y1="94" x2="473.43" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="657.10" y1="94" x2="657.10" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="695.20" y1="94" x2="695.20" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="696.76" y1="94" x2="696.76" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="908.59" y1="94" x2="908.59" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="814.28" y1="94" x2="814.28" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="870.53" y1="94" x2="870.53" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="825.87" y1="94" x2="825.87" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="762.98" y1="94" x2="762.98" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="882.10" y1="94" x2="882.10" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="847.38" y1="94" x2="847.38" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="892.03" y1="94" x2="892.03" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="815.93" y1="94" x2="815.93" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="855.63" y1="94" x2="855.63" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="624.02" y1="94" x2="624.02" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="683.55" y1="94" x2="683.55" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="805.99" y1="94" x2="805.99" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="885.42" y1="94" x2="885.42" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="897.00" y1="94" x2="897.00" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="433.72" y1="94" x2="433.72" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="878.81" y1="94" x2="878.81" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="802.71" y1="94" x2="802.71" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="883.77" y1="94" x2="883.77" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="890.38" y1="94" x2="890.38" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="370.83" y1="94" x2="370.83" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="427.11" y1="94" x2="427.11" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="895.35" y1="94" x2="895.35" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="893.69" y1="94" x2="893.69" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="854.02" y1="94" x2="854.02" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="872.18" y1="94" x2="872.18" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="796.09" y1="94" x2="796.09" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="791.11" y1="94" x2="791.11" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="863.91" y1="94" x2="863.91" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="855.65" y1="94" x2="855.65" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="870.53" y1="94" x2="870.53" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="895.35" y1="94" x2="895.35" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="400.66" y1="94" x2="400.66" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="685.25" y1="94" x2="685.25" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="767.98" y1="94" x2="767.98" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="893.69" y1="94" x2="893.69" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="888.73" y1="94" x2="888.73" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="882.12" y1="94" x2="882.12" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="888.73" y1="94" x2="888.73" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="827.54" y1="94" x2="827.54" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="883.76" y1="94" x2="883.76" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="847.38" y1="94" x2="847.38" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="901.97" y1="94" x2="901.97" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="892.04" y1="94" x2="892.04" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="880.46" y1="94" x2="880.46" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="883.76" y1="94" x2="883.76" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="389.02" y1="94" x2="389.02" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="458.57" y1="94" x2="458.57" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="844.05" y1="94" x2="844.05" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="897.00" y1="94" x2="897.00" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="887.07" y1="94" x2="887.07" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="849.03" y1="94" x2="849.03" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="792.79" y1="94" x2="792.79" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="862.27" y1="94" x2="862.27" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="901.96" y1="94" x2="901.96" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="888.73" y1="94" x2="888.73" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="807.66" y1="94" x2="807.66" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="892.04" y1="94" x2="892.04" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="892.04" y1="94" x2="892.04" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="895.35" y1="94" x2="895.35" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="784.49" y1="94" x2="784.49" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="885.42" y1="94" x2="885.42" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="877.15" y1="94" x2="877.15" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="761.37" y1="94" x2="761.37" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="653.81" y1="94" x2="653.81" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="893.70" y1="94" x2="893.70" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="796.10" y1="94" x2="796.10" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="852.31" y1="94" x2="852.31" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="901.96" y1="94" x2="901.96" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="877.15" y1="94" x2="877.15" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="175.65" y1="94" x2="175.65" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="893.69" y1="94" x2="893.69" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="905.28" y1="94" x2="905.28" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="807.69" y1="94" x2="807.69" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="829.17" y1="94" x2="829.17" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="893.69" y1="94" x2="893.69" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="675.34" y1="94" x2="675.34" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="878.80" y1="94" x2="878.80" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="810.98" y1="94" x2="810.98" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="858.95" y1="94" x2="858.95" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="887.07" y1="94" x2="887.07" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="885.43" y1="94" x2="885.43" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="873.84" y1="94" x2="873.84" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="888.72" y1="94" x2="888.72" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="622.37" y1="94" x2="622.37" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="567.73" y1="94" x2="567.73" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="870.52" y1="94" x2="870.52" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="892.04" y1="94" x2="892.04" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="625.64" y1="94" x2="625.64" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="789.48" y1="94" x2="789.48" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="883.76" y1="94" x2="883.76" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="844.05" y1="94" x2="844.05" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="804.35" y1="94" x2="804.35" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="825.87" y1="94" x2="825.87" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="819.25" y1="94" x2="819.25" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="782.92" y1="94" x2="782.92" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="827.53" y1="94" x2="827.53" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="882.10" y1="94" x2="882.10" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="527.97" y1="94" x2="527.97" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="693.49" y1="94" x2="693.49" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="880.46" y1="94" x2="880.46" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="872.18" y1="94" x2="872.18" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="715.00" y1="94" x2="715.00" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="905.27" y1="94" x2="905.27" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="877.14" y1="94" x2="877.14" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="519.81" y1="94" x2="519.81" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="895.35" y1="94" x2="895.35" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="845.74" y1="94" x2="845.74" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="850.67" y1="94" x2="850.67" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="900.31" y1="94" x2="900.31" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="844.04" y1="94" x2="844.04" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="893.69" y1="94" x2="893.69" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="746.44" y1="94" x2="746.44" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="834.15" y1="94" x2="834.15" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="572.71" y1="94" x2="572.71" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <line x1="895.34" y1="94" x2="895.34" y2="108" stroke="var(--petrol-mark)" stroke-width="1" opacity=".5"/>
+      <text x="1000" y="86" text-anchor="end" font-size="9.5" fill="var(--petrol)">225 个互不相同的值</text>
+      <path d="M545,124 L545,168" fill="none" stroke="var(--brick)" stroke-width="1.15" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#f4arb)"/>
+      <text x="562" y="152" font-size="9.6" fill="var(--brick)">round to nearest bf16</text>
+      <text x="24" y="200" font-size="10" fill="var(--ink)">bf16（模型 dtype，ULP = 1/16）</text>
+      <line x1="90" y1="232" x2="1000" y2="232" stroke="currentColor" stroke-width="1" opacity=".45"/>
+      <line x1="162.39" y1="212" x2="162.39" y2="232" stroke="var(--brick)" stroke-width="2.6"/>
+      <text x="162.39" y="248" text-anchor="middle" font-size="8.4" fill="var(--ink-2)">7.84375</text>
+      <line x1="369.20" y1="212" x2="369.20" y2="232" stroke="var(--brick)" stroke-width="2.6"/>
+      <text x="369.20" y="248" text-anchor="middle" font-size="8.4" fill="var(--ink-2)">7.96875</text>
+      <line x1="420.91" y1="212" x2="420.91" y2="232" stroke="var(--brick)" stroke-width="2.6"/>
+      <text x="420.91" y="248" text-anchor="middle" font-size="8.4" fill="var(--ink-2)">8</text>
+      <line x1="524.32" y1="212" x2="524.32" y2="232" stroke="var(--brick)" stroke-width="2.6"/>
+      <text x="524.32" y="248" text-anchor="middle" font-size="8.4" fill="var(--ink-2)">8.0625</text>
+      <line x1="627.73" y1="212" x2="627.73" y2="232" stroke="var(--brick)" stroke-width="2.6"/>
+      <text x="627.73" y="248" text-anchor="middle" font-size="8.4" fill="var(--ink-2)">8.125</text>
+      <line x1="731.14" y1="212" x2="731.14" y2="232" stroke="var(--brick)" stroke-width="2.6"/>
+      <text x="731.14" y="248" text-anchor="middle" font-size="8.4" fill="var(--ink-2)">8.1875</text>
+      <line x1="834.55" y1="212" x2="834.55" y2="232" stroke="var(--brick)" stroke-width="2.6"/>
+      <text x="834.55" y="248" text-anchor="middle" font-size="8.4" fill="var(--ink-2)">8.25</text>
+      <line x1="937.95" y1="212" x2="937.95" y2="232" stroke="var(--brick)" stroke-width="2.6"/>
+      <text x="937.95" y="248" text-anchor="middle" font-size="8.4" fill="var(--ink-2)">8.3125</text>
+      <text x="1000" y="206" text-anchor="end" font-size="9.5" fill="var(--brick)">只剩 8 个 —— 256 个专家挤在 8 个刻度上</text>
+      <rect x="40" y="274" width="480" height="92" rx="7" fill="url(#f4gb)" stroke="var(--brick)" stroke-width="1.35" filter="url(#f4sh)"/>
+        <path d="M40,281 a7,7 0 0 1 7,-7 h2 v92 h-2 a7,7 0 0 1 -7,-7 z" fill="var(--brick)" opacity=".85"/>
+        <text x="280.0" y="293" text-anchor="middle" font-family="Archivo, sans-serif" font-size="11" font-weight="600" fill="var(--brick)">后果</text>
+        <text x="280.0" y="310.0" text-anchor="middle" fill="var(--ink)">这张表存在的意义就是给 256 个专家排序</text>
+        <text x="280.0" y="325.5" text-anchor="middle" fill="var(--ink-2)">塌到 8 个值之后，绝大多数专家在偏置上完全同分</text>
+        <text x="280.0" y="341.0" text-anchor="middle" fill="var(--brick)">top-8 的选择信号几乎被丢光</text>
+      <rect x="548" y="274" width="472" height="92" rx="7" fill="url(#f4gp)" stroke="var(--petrol-mark)" stroke-width="1.35" filter="url(#f4sh)"/>
+        <path d="M548,281 a7,7 0 0 1 7,-7 h2 v92 h-2 a7,7 0 0 1 -7,-7 z" fill="var(--petrol-mark)" opacity=".85"/>
+        <text x="784.0" y="293" text-anchor="middle" font-family="Archivo, sans-serif" font-size="11" font-weight="600" fill="var(--petrol)">ATOM 的处理</text>
+        <text x="784.0" y="310.0" text-anchor="middle" fill="var(--ink)">_moe_router_dtype() 对 glm_moe_dsa 无条件返回 fp32</text>
+        <text x="784.0" y="325.5" text-anchor="middle" fill="var(--ink-2)">gate(hidden, otype=fp32)，logits 与 bias 同宽</text>
+        <text x="784.0" y="341.0" text-anchor="middle" fill="var(--ink-2)">两者必须同宽：biased_grouped_topk 按 logits.dtype</text>
+        <text x="784.0" y="356.5" text-anchor="middle" fill="var(--ink-2)">reinterpret_cast bias，宽度不一致就读错缓冲区</text>
+    </svg>
+    <figcaption>这是 GLM-5.3 相对 GLM-5.2 <strong>唯一新增的 config 字段</strong>（<code>moe_router_dtype: "float32"</code>）背后的东西。实测全部 78 层：每层 115–229 个互不相同的 fp32 偏置值，落到 bf16 后只剩 3–9 个。ATOM 不看这个字段而是<strong>按 model_type 判定</strong>——GLM-5 / 5.1 / 5.2 的 config 早于这个字段，没法自己声明，但它们的偏置有一模一样的分布。</figcaption>
+  </figure>
+  <div class="callout">
+    <p class="eyebrow">为什么 gate 的输出 dtype 不是一个独立选择</p>
+    <p>
+      把 logits 舍到 bf16 本身几乎不动 top-k，但它与偏置的宽度<strong>不是独立的</strong>：
+      aiter 的 <code>biased_grouped_topk</code> 按 <code>gating_output.dtype()</code> 分发，
+      然后把 <code>correction_bias</code> <code>reinterpret_cast</code> 成同一个 <code>scalar_t</code>。
+      两者必须同宽，否则内核会按错误的宽度去读偏置缓冲区。
+      所以这一个 dtype 同时管住了两件事。
+    </p>
+  </div>
+</section>
+
+<section>
+  <hr class="rule">
+  <p class="eyebrow">权重实测</p>
+  <h2>从 141 个 safetensors 分片头部读到的真实形状</h2>
+  <div class="tscroll">
+  <table>
+    <thead><tr><th>checkpoint 张量</th><th>dtype</th><th>shape</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td class="k">model.embed_tokens.weight</td><td class="k">BF16</td><td class="num">[154880, 6144]</td><td>951.5 M</td></tr>
+      <tr><td colspan="4" style="background:var(--surface-2); font-weight:600">注意力（每层都有）</td></tr>
+      <tr><td class="k">self_attn.q_a_proj</td><td class="k">F8_E4M3</td><td class="num">[2048, 6144]</td><td>与下一行在 ATOM 里合并成 <code>fused_qkv_a_proj [2624, 6144]</code></td></tr>
+      <tr><td class="k">self_attn.kv_a_proj_with_mqa</td><td class="k">F8_E4M3</td><td class="num">[576, 6144]</td><td>576 = 512 latent + 64 rope</td></tr>
+      <tr><td class="k">self_attn.q_a_layernorm / kv_a_layernorm</td><td class="k">BF16</td><td class="num">[2048] / [512]</td><td></td></tr>
+      <tr><td class="k">self_attn.q_b_proj</td><td class="k">F8_E4M3</td><td class="num">[16384, 2048]</td><td>64 头 × 256（192 nope + 64 rope）</td></tr>
+      <tr><td class="k">self_attn.kv_b_proj</td><td class="k">F8_E4M3</td><td class="num">[28672, 512]</td><td>64 × (192 + 256)</td></tr>
+      <tr><td class="k">self_attn.o_proj</td><td class="k">F8_E4M3</td><td class="num">[6144, 16384]</td><td>64 × <code>v_head_dim</code> 256</td></tr>
+      <tr><td colspan="4" style="background:var(--surface-2); font-weight:600">indexer（只有 21 个 full 层 + MTP 层有）</td></tr>
+      <tr><td class="k">indexer.wq_b</td><td class="k">F8_E4M3</td><td class="num">[4096, 2048]</td><td>32 头 × 128</td></tr>
+      <tr><td class="k">indexer.wk</td><td class="k">F8_E4M3</td><td class="num">[128, 6144]</td><td></td></tr>
+      <tr><td class="k">indexer.weights_proj</td><td class="k hl">BF16</td><td class="num">[32, 6144]</td><td>就是量化排除名映射守住的那一个</td></tr>
+      <tr><td class="k">indexer.k_norm.weight / .bias</td><td class="k">BF16</td><td class="num">[128] / [128]</td><td>带 bias 的 LayerNorm，不是 RMSNorm</td></tr>
+      <tr><td class="k dim">layers.5.self_attn.indexer.*</td><td class="k dim">—</td><td class="num dim">不存在</td><td class="dim">shared 层，一个 indexer 张量都没有</td></tr>
+      <tr><td colspan="4" style="background:var(--surface-2); font-weight:600">FFN</td></tr>
+      <tr><td class="k">mlp.gate.weight / e_score_correction_bias</td><td class="k">BF16 / <span class="hl">F32</span></td><td class="num">[256, 6144] / [256]</td><td>偏置的 fp32 不是可选项</td></tr>
+      <tr><td class="k">mlp.experts.{0..255}.gate_proj / up_proj</td><td class="k">F8_E4M3</td><td class="num">[2048, 6144]</td><td>单专家 37.75 M</td></tr>
+      <tr><td class="k">mlp.experts.*.down_proj</td><td class="k">F8_E4M3</td><td class="num">[6144, 2048]</td><td></td></tr>
+      <tr><td class="k">mlp.shared_experts.*</td><td class="k">F8_E4M3</td><td class="num">同上</td><td>1 个，与 routed 输出相加</td></tr>
+      <tr><td class="k">mlp.gate_proj / up_proj（层 0–2）</td><td class="k">F8_E4M3</td><td class="num">[12288, 6144]</td><td>稠密 MLP，每层 226.5 M</td></tr>
+      <tr><td colspan="4" style="background:var(--surface-2); font-weight:600">MTP</td></tr>
+      <tr><td class="k">layers.78.eh_proj</td><td class="k">BF16</td><td class="num">[6144, 12288]</td><td>拼接“末层 hidden + 下一 token embed”后降回 6144</td></tr>
+      <tr><td class="k">layers.78.enorm / hnorm / shared_head.norm</td><td class="k">BF16</td><td class="num">[6144]</td><td>草稿块自带完整 indexer 与完整 MoE，9.95 B</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section>
+  <hr class="rule">
+  <p class="eyebrow">显存</p>
+  <h2>缓存账</h2>
+  <div class="tscroll">
+  <table>
+    <thead><tr><th>缓存</th><th>计费单位</th><th>大小</th><th>备注</th></tr></thead>
+    <tbody>
+      <tr><td>MLA KV</td><td class="k">78 层 × 576 × dtype / token</td>
+          <td class="num">89 856 B/token<br><span class="dim">= 87.8 KiB · BF16</span></td>
+          <td>FP8 时减半；存的是 latent，不是 64 头 × 256 的展开</td></tr>
+      <tr><td>索引 key</td><td class="k">21 个 full 层 × 144 B / token</td>
+          <td class="num">3 024 B/token</td>
+          <td>144 = (128 + 4) 向上对齐到 16 B；57 个 shared 层<strong>不占</strong></td></tr>
+      <tr><td><strong>合计</strong></td><td class="k">每 token</td>
+          <td class="num"><strong>92 880 B ≈ 90.7 KiB</strong></td>
+          <td>1 M 上下文 ≈ 88.6 GiB（BF16 KV）</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="note" style="margin-top:14px">
+    索引缓存只由 full 层承担，是 IndexShare 除算力之外的第二项收益：
+    若 78 层都建索引缓存，这一项会是 11 232 B/token，涨到 3.7 倍。
+  </p>
+</section>
+
+<section>
+  <hr class="rule">
+  <p class="eyebrow">投机解码</p>
+  <h2>MTP 层自带 indexer，不复用主模型的 top-k</h2>
+  <p>
+    checkpoint 层 78 是一个完整的解码层，外加 <code>eh_proj</code> / <code>enorm</code> /
+    <code>hnorm</code> / <code>shared_head.norm</code>，并且<strong>自带完整的 indexer 权重</strong>。
+    ATOM 的 <code>_should_skip_index_topk</code> 对层号 ≥ <code>num_hidden_layers</code> 的层直接返回
+    <code>False</code>——也就是不跳过：草稿块要为它自己那个被草拟的位置算 top-k。
+  </p>
+  <div class="callout">
+    <p class="eyebrow">index_share_for_mtp_iteration 说的不是这件事</p>
+    <p>
+      这个字段只管<strong>多个草稿步之间</strong>的共享（<code>num_speculative_tokens &gt; 1</code>），
+      不表示 MTP 复用目标模型的索引。上游 vLLM 与 ATOM 的 sglang 插件都是独立跑 MTP indexer 的。
+      把它理解反了，草稿层就会读到目标模型上一层留下的下标。
+    </p>
+  </div>
+</section>
+
+<section>
+  <hr class="rule">
+  <p class="eyebrow">读码路线</p>
+  <h2>按这个顺序看</h2>
+  <div class="tscroll">
+  <table>
+    <thead><tr><th>#</th><th>文件 · 位置</th><th>看什么</th></tr></thead>
+    <tbody>
+      <tr><td class="num">1</td><td class="k">atom/config.py · _CONFIG_REGISTRY</td>
+          <td><code>glm_moe_dsa → deepseek_v3</code>：为什么没有 GLM 自己的 config 类</td></tr>
+      <tr><td class="num">2</td><td class="k">atom/models/deepseek_v2.py · GlmMoeDsaForCausalLM</td>
+          <td>整个子类只有一张量化排除名映射</td></tr>
+      <tr><td class="num">3</td><td class="k">_should_skip_index_topk / _indexer_weights_shared</td>
+          <td>IndexShare 的两处落点：运行期跳过 top-k，构造期不建模块。
+              注意 MTP 层的提前返回</td></tr>
+      <tr><td class="num">4</td><td class="k">_moe_router_dtype</td>
+          <td>为什么按 <code>model_type</code> 判定而不是读 <code>moe_router_dtype</code>，
+              以及 logits 与 bias 为什么必须同宽</td></tr>
+      <tr><td class="num">5</td><td class="k">DeepseekV2Attention.__init__ · fused_qkv_a_proj</td>
+          <td>2624 = 2048 + 512 + 64 的合并发生在哪一步</td></tr>
+      <tr><td class="num">6</td><td class="k">model_ops/attentions/aiter_mla.py</td>
+          <td><code>mla_kv_entry_dim</code>、<code>aligned_index_cache_dim</code>、
+              以及 <code>_global_index_cache_layer_ids</code> 如何按 <code>indexer_types</code> 排掉 shared 层</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<footer>
+  <p>
+    数据来源：<code>/data/amd_int/models/GLM-5.3-FP8</code> 的 config 与 141 个 safetensors 分片头部 ·
+    <code>atom/models/deepseek_v2.py</code>。参数量由 shape 相加得出，
+    fp8 的 <code>weight_scale_inv</code> 不计入；图 4 的两条数轴是该 checkpoint 里
+    <code>layers.40</code> 的偏置张量实际取值。
+  </p>
+  <p>姊妹篇：<a href="glm53_flash_anatomy.html">GLM-5.3-Flash 架构解剖</a> · <a href="https://github.com/PerryZhang01/LLM/blob/main/models/GLM/model.md">GLM-5.2 结构解剖</a></p>
+</footer>
+
+</div>
