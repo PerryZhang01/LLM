@@ -1,0 +1,1202 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GLM-5.2 架构解剖</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
+
+<style>
+:root{
+  --bg:#E8EBEA; --surface:#F6F8F7; --surface-2:#DDE3E2; --sunk:#D3DAD9;
+  --ink:#141A1C; --ink-2:#4B5A5C; --ink-3:#75858880;
+  --line:#C3CDCC; --line-soft:#D4DCDB;
+  --amber:#8A5D0C; --amber-mark:#C79433; --amber-bg:#EFE2C2;
+  --petrol:#1D5A74; --petrol-mark:#3D87A6; --petrol-bg:#D3E3EA;
+  --brick:#8E3629; --brick-bg:#F0DAD5;
+  --mute-mark:#9FADAF;
+  --shadow:0 1px 2px rgba(20,26,28,.06), 0 8px 24px -14px rgba(20,26,28,.24);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0D1315; --surface:#141C1E; --surface-2:#1C2629; --sunk:#101819;
+    --ink:#E3EAE9; --ink-2:#94A4A6; --ink-3:#6E7E8080;
+    --line:#283437; --line-soft:#1F2B2E;
+    --amber:#E0AB53; --amber-mark:#D69B36; --amber-bg:#3B2E13;
+    --petrol:#6FB6D5; --petrol-mark:#4C93B4; --petrol-bg:#12303D;
+    --brick:#E58472; --brick-bg:#3A1D18;
+    --mute-mark:#3C4A4D;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 30px -18px rgba(0,0,0,.8);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0D1315; --surface:#141C1E; --surface-2:#1C2629; --sunk:#101819;
+  --ink:#E3EAE9; --ink-2:#94A4A6; --ink-3:#6E7E8080;
+  --line:#283437; --line-soft:#1F2B2E;
+  --amber:#E0AB53; --amber-mark:#D69B36; --amber-bg:#3B2E13;
+  --petrol:#6FB6D5; --petrol-mark:#4C93B4; --petrol-bg:#12303D;
+  --brick:#E58472; --brick-bg:#3A1D18;
+  --mute-mark:#3C4A4D;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 30px -18px rgba(0,0,0,.8);
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:"Source Serif 4", "Songti SC", "Noto Serif CJK SC", "Source Han Serif SC", Georgia, serif;
+  font-size:16.5px; line-height:1.72;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1140px; margin:0 auto; padding:0 28px 96px}
+
+/* ---------- type ---------- */
+h1,h2,h3,.eyebrow,.stat-n,.lgd,.tag,th{
+  font-family:Archivo, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+}
+h1{font-size:clamp(2.4rem,5.6vw,3.9rem); line-height:1.02; letter-spacing:-.028em; font-weight:700; margin:0; text-wrap:balance}
+h2{font-size:clamp(1.35rem,2.6vw,1.72rem); line-height:1.2; letter-spacing:-.014em; font-weight:600; margin:0 0 .2em; text-wrap:balance}
+h3{font-size:1.0rem; letter-spacing:.005em; font-weight:600; margin:0 0 .35em}
+p{margin:0 0 1em; max-width:70ch}
+a{color:var(--petrol)}
+code,.mono{font-family:"IBM Plex Mono", ui-monospace, monospace; font-size:.855em; font-variant-ligatures:none}
+:not(pre) > code{background:var(--surface-2); padding:.1em .38em; border-radius:3px; color:var(--ink)}
+.eyebrow{
+  font-size:.66rem; font-weight:600; letter-spacing:.16em; text-transform:uppercase;
+  color:var(--ink-2); margin:0 0 .55em;
+}
+.lede{font-size:1.12rem; color:var(--ink-2); max-width:62ch}
+.note{font-size:.9rem; color:var(--ink-2)}
+
+/* ---------- masthead ---------- */
+header.mast{
+  border-bottom:1px solid var(--line); margin-bottom:52px;
+  padding:72px 0 34px;
+}
+.mast-id{
+  display:flex; flex-wrap:wrap; gap:8px; margin-bottom:22px;
+}
+.tag{
+  font-size:.68rem; font-weight:600; letter-spacing:.09em; text-transform:uppercase;
+  padding:.32em .7em; border:1px solid var(--line); border-radius:2px; color:var(--ink-2);
+  background:var(--surface);
+}
+.tag.hot{border-color:var(--amber); color:var(--amber); background:var(--amber-bg)}
+.mast p.lede{margin-top:18px}
+
+.stats{
+  display:grid; grid-template-columns:repeat(auto-fit,minmax(128px,1fr));
+  gap:1px; background:var(--line-soft); border:1px solid var(--line-soft);
+  margin-top:34px;
+}
+.stat{background:var(--surface); padding:14px 16px 16px}
+.stat-n{
+  display:block; font-size:1.5rem; font-weight:700; letter-spacing:-.02em;
+  font-variant-numeric:tabular-nums; line-height:1.15;
+}
+.stat-l{display:block; font-size:.74rem; color:var(--ink-2); letter-spacing:.02em; margin-top:3px;
+  font-family:"IBM Plex Mono", monospace}
+
+/* ---------- sections ---------- */
+section{margin:0 0 68px; scroll-margin-top:20px}
+.rule{border:0; border-top:1px solid var(--line); margin:0 0 34px}
+
+/* ---------- ribbon ---------- */
+.ribbon-frame{
+  background:var(--surface); border:1px solid var(--line); box-shadow:var(--shadow);
+  padding:22px 24px 18px; margin-top:26px;
+}
+.ribbon-scroll{overflow-x:auto; padding-bottom:6px}
+.ribbon{min-width:820px}
+.rrow{display:flex; align-items:stretch; gap:0; margin-bottom:3px}
+.rlab{
+  flex:0 0 96px; font-family:"IBM Plex Mono",monospace; font-size:.7rem;
+  color:var(--ink-2); display:flex; align-items:center; letter-spacing:.02em;
+}
+.rcells{display:flex; gap:1.5px; flex:1}
+.cell{
+  flex:1 1 0; height:26px; background:var(--mute-mark); border-radius:1px;
+  position:relative; cursor:default; transition:transform .08s ease;
+}
+.cell:hover{transform:scaleY(1.14); z-index:2}
+.cell.full{background:var(--amber-mark)}
+.cell.sparse{background:var(--petrol-mark)}
+.cell.dense{background:var(--brick)}
+.cell.mtp{background:transparent; border:1.5px dashed var(--amber-mark)}
+.cell.mtpm{background:transparent; border:1.5px dashed var(--petrol-mark)}
+.gapcell{flex:0 0 16px}
+.raxis{display:flex; gap:1.5px; margin-top:5px; padding-left:96px}
+.tick{flex:1 1 0; font-family:"IBM Plex Mono",monospace; font-size:.62rem; color:var(--ink-2);
+  text-align:center; font-variant-numeric:tabular-nums}
+.legend{display:flex; flex-wrap:wrap; gap:8px 20px; margin-top:18px; padding-top:14px; border-top:1px solid var(--line-soft)}
+.lgd{display:flex; align-items:center; gap:7px; font-size:.76rem; color:var(--ink-2); font-weight:500}
+.sw{width:13px; height:13px; border-radius:1px; flex:none}
+.sw.full{background:var(--amber-mark)} .sw.shared{background:var(--mute-mark)}
+.sw.sparse{background:var(--petrol-mark)} .sw.dense{background:var(--brick)}
+.sw.mtp{border:1.5px dashed var(--amber-mark)}
+.readout{
+  font-family:"IBM Plex Mono",monospace; font-size:.78rem; color:var(--ink);
+  margin-top:14px; min-height:1.5em; background:var(--sunk); padding:7px 11px;
+  border-left:2px solid var(--amber-mark);
+}
+
+/* ---------- figure ---------- */
+figure{margin:26px 0 0; background:var(--surface); border:1px solid var(--line);
+  padding:24px 22px 16px; box-shadow:var(--shadow); overflow-x:auto}
+figure svg{max-width:100%; height:auto; display:block; margin:0 auto; color:var(--ink-2)}
+figcaption{font-size:.86rem; color:var(--ink-2); margin-top:16px; padding-top:12px;
+  border-top:1px solid var(--line-soft); max-width:76ch}
+
+/* ---------- tables ---------- */
+.tscroll{overflow-x:auto; margin-top:22px; border:1px solid var(--line); background:var(--surface); box-shadow:var(--shadow)}
+table{border-collapse:collapse; width:100%; min-width:600px; font-size:.9rem}
+th{
+  text-align:left; font-size:.68rem; letter-spacing:.11em; text-transform:uppercase;
+  font-weight:600; color:var(--ink-2); padding:11px 16px; background:var(--surface-2);
+  border-bottom:1px solid var(--line); white-space:nowrap;
+}
+td{padding:10px 16px; border-bottom:1px solid var(--line-soft); vertical-align:top; line-height:1.55}
+tbody tr:last-child td{border-bottom:0}
+td.num{font-family:"IBM Plex Mono",monospace; font-variant-numeric:tabular-nums; white-space:nowrap}
+td.k{font-family:"IBM Plex Mono",monospace; font-size:.82rem; white-space:nowrap}
+.hl{color:var(--amber); font-weight:600}
+.dim{color:var(--ink-2)}
+
+/* ---------- cards ---------- */
+.grid2{display:grid; grid-template-columns:repeat(auto-fit,minmax(310px,1fr)); gap:18px; margin-top:24px}
+.card{background:var(--surface); border:1px solid var(--line); padding:18px 20px 16px; box-shadow:var(--shadow)}
+.card h3{color:var(--ink)}
+.card p:last-child{margin-bottom:0}
+.card.warn{border-left:3px solid var(--brick)}
+.card.good{border-left:3px solid var(--petrol)}
+.card.key{border-left:3px solid var(--amber-mark)}
+.card .eyebrow{margin-bottom:.4em}
+
+ul.tight{margin:0 0 0 0; padding-left:1.15em}
+ul.tight li{margin-bottom:.42em}
+ul.tight li:last-child{margin-bottom:0}
+
+/* ---------- bar chart ---------- */
+.bars{display:flex; flex-direction:column; gap:9px; margin-top:22px;
+  background:var(--surface); border:1px solid var(--line); box-shadow:var(--shadow); padding:20px 22px 18px}
+.brow{display:grid; grid-template-columns:minmax(150px,232px) 1fr minmax(112px,124px); gap:14px; align-items:center}
+.blab{font-family:"IBM Plex Mono",monospace; font-size:.78rem; color:var(--ink); line-height:1.35}
+.blab i{display:block; font-style:normal; font-size:.7rem; color:var(--ink-2)}
+.btrack{height:17px; background:var(--sunk); border-radius:1px; overflow:hidden}
+.bfill{height:100%; background:var(--petrol-mark); border-radius:1px}
+.bfill.a{background:var(--amber-mark)}
+.bfill.d{background:var(--mute-mark)}
+.bval{font-family:"IBM Plex Mono",monospace; font-size:.78rem; text-align:right;
+  font-variant-numeric:tabular-nums; color:var(--ink)}
+.bval em{font-style:normal; color:var(--ink-2); font-size:.72rem; display:block}
+.bfoot{display:flex; justify-content:space-between; gap:16px; flex-wrap:wrap;
+  margin-top:16px; padding-top:13px; border-top:1px solid var(--line-soft);
+  font-size:.78rem; color:var(--ink-2); font-family:"IBM Plex Mono",monospace}
+@media (max-width:620px){
+  .brow{grid-template-columns:1fr; gap:4px}
+  .bval{text-align:left}
+}
+
+.pathline{
+  font-family:"IBM Plex Mono",monospace; font-size:.76rem; color:var(--ink-2);
+  background:var(--sunk); padding:5px 9px; display:inline-block; margin-top:10px;
+  border-radius:2px; word-break:break-all;
+}
+
+.callout{
+  background:var(--amber-bg); border:1px solid var(--amber-mark); padding:16px 20px;
+  margin-top:24px;
+}
+.callout .eyebrow{color:var(--amber)}
+.callout p:last-child{margin-bottom:0}
+
+footer{border-top:1px solid var(--line); padding-top:22px; color:var(--ink-2); font-size:.85rem}
+
+@media (max-width:640px){
+  .wrap{padding:0 18px 64px}
+  header.mast{padding-top:44px}
+  .rlab{flex-basis:66px; font-size:.62rem}
+  .raxis{padding-left:66px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+:focus-visible{outline:2px solid var(--petrol); outline-offset:2px}
+
+.backnav{padding:22px 0 0; font-family:Archivo,"PingFang SC",system-ui,sans-serif; font-size:.8rem}
+.backnav a{color:var(--ink-2); text-decoration:none; letter-spacing:.02em}
+.backnav a:hover{color:var(--amber)}
+</style>
+
+<div class="wrap">
+
+<nav class="backnav"><a href="../index.html">← LLM 模型结构手册</a></nav>
+
+<header class="mast">
+  <div class="mast-id">
+    <span class="tag">GlmMoeDsaForCausalLM</span>
+    <span class="tag">model_type · glm_moe_dsa</span>
+    <span class="tag hot">IndexShare</span>
+    <span class="tag">MLA + DSA</span>
+    <span class="tag">MTP ×1</span>
+  </div>
+  <h1>GLM-5.2 架构解剖</h1>
+  <p class="lede">
+    GLM-5.2 在 ATOM 里<strong>没有自己的模型文件</strong>——它挂在 <code>atom/models/deepseek_v2.py</code> 上，
+    子类只覆盖了一张量化排除名映射。真正需要读懂的不是模型定义，而是 config 里那 78 项 <code>indexer_types</code>
+    如何一路改写构造期的模块树、运行期的 buffer 绑定、PP 的跨 rank 通信，以及 MTP 的草稿循环。
+  </p>
+
+  <div class="stats">
+    <div class="stat"><span class="stat-n">753 B</span><span class="stat-l">总参数（含 MTP）</span></div>
+    <div class="stat"><span class="stat-n">~41 B</span><span class="stat-l">单 token 激活</span></div>
+    <div class="stat"><span class="stat-n">78 + 1</span><span class="stat-l">主干层 + MTP 层</span></div>
+    <div class="stat"><span class="stat-n">21 / 78</span><span class="stat-l">拥有 indexer 的层</span></div>
+    <div class="stat"><span class="stat-n">6144</span><span class="stat-l">hidden_size</span></div>
+    <div class="stat"><span class="stat-n">1 M</span><span class="stat-l">max_position</span></div>
+    <div class="stat"><span class="stat-n">2048</span><span class="stat-l">index_topk</span></div>
+  </div>
+</header>
+
+<!-- ============ 0. 规模 ============ -->
+<section>
+  <hr class="rule">
+  <p class="eyebrow">规模</p>
+  <h2>753.3 B 参数，单 token 只碰 41.25 B</h2>
+  <p>
+    总量的 <strong>96.2 %</strong> 是 MoE 路由专家（75 层 × 256 专家 = 724.8 B），
+    画成条形图只会是一根长柱加七条细缝。真正有信息量的是<strong>单 token 前向实际碰到的 41.25 B</strong>：
+  </p>
+
+  <div class="bars">
+    <div class="brow">
+      <span class="blab">MoE 专家<i>8 routed + 1 shared × 75 层</i></span>
+      <span class="btrack"><span class="bfill" style="width:100%"></span></span>
+      <span class="bval">25.48 B<em>61.8 %</em></span>
+    </div>
+    <div class="brow">
+      <span class="blab">注意力 MLA<i>78 层 × 165.0 M</i></span>
+      <span class="btrack"><span class="bfill" style="width:50.5%"></span></span>
+      <span class="bval">12.87 B<em>31.2 %</em></span>
+    </div>
+    <div class="brow">
+      <span class="blab">Embed + LM head<i>2 × 154880 × 6144</i></span>
+      <span class="btrack"><span class="bfill d" style="width:7.5%"></span></span>
+      <span class="bval">1.90 B<em>4.6 %</em></span>
+    </div>
+    <div class="brow">
+      <span class="blab">稠密 MLP<i>层 0–2 × 226.5 M</i></span>
+      <span class="btrack"><span class="bfill d" style="width:2.7%"></span></span>
+      <span class="bval">0.68 B<em>1.6 %</em></span>
+    </div>
+    <div class="brow">
+      <span class="blab">Indexer（DSA）<i>21 个 full 层 × 9.4 M</i></span>
+      <span class="btrack"><span class="bfill a" style="width:0.8%"></span></span>
+      <span class="bval">0.20 B<em>0.5 %</em></span>
+    </div>
+    <div class="brow">
+      <span class="blab">MoE gate<i>75 层 × 1.57 M</i></span>
+      <span class="btrack"><span class="bfill d" style="width:0.5%"></span></span>
+      <span class="bval">0.12 B<em>0.3 %</em></span>
+    </div>
+    <div class="bfoot">
+      <span>激活合计 41.25 B / 总量 753.3 B　→　5.5 %</span>
+      <span>IndexShare 让 indexer 只占激活的 0.5 %（不共享时 1.8 %）</span>
+    </div>
+  </div>
+
+  <div class="tscroll">
+    <table>
+      <thead><tr><th>总参数构成</th><th>参数量</th><th>占比</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td>MoE 路由专家</td><td class="num">724.78 B</td><td class="num">96.21 %</td><td class="dim">75 层 × 256 专家 × 3 投影 × 2048 × 6144</td></tr>
+        <tr><td>注意力 MLA</td><td class="num">12.87 B</td><td class="num">1.71 %</td><td class="dim">78 层 × 165.0 M</td></tr>
+        <tr><td>MTP 块（层 78）</td><td class="num">9.95 B</td><td class="num">1.32 %</td><td class="dim">自带完整注意力 + MoE + indexer</td></tr>
+        <tr><td>MoE 共享专家</td><td class="num">2.83 B</td><td class="num">0.38 %</td><td class="dim">75 层 × 37.75 M</td></tr>
+        <tr><td>Embed + LM head</td><td class="num">1.90 B</td><td class="num">0.25 %</td><td class="dim">BF16，未量化</td></tr>
+        <tr><td>稠密 MLP</td><td class="num">0.68 B</td><td class="num">0.09 %</td><td class="dim">层 0–2</td></tr>
+        <tr><td>Indexer（DSA）</td><td class="num hl">0.20 B</td><td class="num">0.03 %</td><td class="dim">仅 21 个 full 层</td></tr>
+        <tr><td>MoE gate</td><td class="num">0.12 B</td><td class="num">0.02 %</td><td class="dim">75 层</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="note" style="margin-top:14px">
+    按张量形状累加得 <strong>753.3 B</strong>，与 checkpoint 的
+    <code>total_size = 755 617 140 416</code> 字节（FP8 主体 + BF16 embedding/scale）互相印证。
+  </p>
+</section>
+
+<!-- ============ 1. 定位 ============ -->
+<section>
+  <hr class="rule">
+  <p class="eyebrow">定位</p>
+  <h2>它是 DeepSeek-V3.2 的骨架，配 GLM 自己的尺寸</h2>
+  <p>
+    ATOM 的入口判断只有一句：<code>hasattr(config, "index_topk")</code> 为真 → 这是稀疏 MLA（DSA）模型，
+    走 DeepSeek-V3.2 的全部代码路径。GLM 的子类薄到只剩一件事：
+  </p>
+  <div class="grid2">
+    <div class="card key">
+      <p class="eyebrow">唯一的子类覆盖</p>
+      <h3>一张量化排除名映射</h3>
+      <p class="note">GLM 的 HF 量化配置写的是 <code>indexers_proj</code>，而 ATOM 的模块路径叫
+      <code>indexer.weights_proj</code>；不映射的话这条 BF16 投影会被 FP4/MXFP4 回退量化掉。</p>
+      <span class="pathline">atom/models/deepseek_v2.py:3444 <span class="dim">GlmMoeDsaForCausalLM.quant_exclude_name_mapping</span></span>
+    </div>
+    <div class="card">
+      <p class="eyebrow">构造期的一次合并</p>
+      <h3><code>fused_qkv_a_proj</code></h3>
+      <p class="note">checkpoint 里的注意力权重是拆开的 <code>q_a_proj</code> + <code>kv_a_proj_with_mqa</code>，
+      ATOM 合并成一条 <code>MergedReplicatedLinear</code>，且强制 <code>needs_preshuffled_weight</code>——
+      它的前向调用的是 preshuffle blockscale GEMM。</p>
+      <span class="pathline">6144 → 2048 + 576 · 16.1 M 参数 / 层</span>
+    </div>
+  </div>
+  <p style="margin-top:22px">
+    其余全部由 config 数值驱动，没有一处新的算子拓扑。所以这份文档的重心不在"模型怎么写"，
+    而在<strong>那 78 项 <code>indexer_types</code> 在 ATOM 里落到了哪几处代码</strong>。
+  </p>
+</section>
+
+<!-- ============ 2. 层调度带 ============ -->
+<section>
+  <hr class="rule">
+  <p class="eyebrow">核心机制 · 层调度</p>
+  <h2>78 层里只有 21 层真的算 top-k</h2>
+  <p>
+    这是 GLM-5.2 相对 GLM-5 / 5.1 唯一的结构性改动，也是整份 config 里唯一真正新的东西：
+    <code>indexer_types</code> 把每层标成 <code>full</code>（自己跑 indexer，选出 2048 个 KV）
+    或 <code>shared</code>（不带 indexer 权重，直接复用上一个 full 层选出来的下标）。
+    节奏是 <span class="hl">前 3 层连续 full，之后每 4 层一个 full</span>。
+  </p>
+
+  <div class="ribbon-frame">
+    <div class="ribbon-scroll">
+      <div class="ribbon">
+        <div class="rrow">
+          <div class="rlab">indexer</div>
+          <div class="rcells" id="row-idx"></div>
+        </div>
+        <div class="rrow">
+          <div class="rlab">mlp</div>
+          <div class="rcells" id="row-mlp"></div>
+        </div>
+        <div class="raxis" id="axis"></div>
+      </div>
+    </div>
+    <div class="readout" id="readout">悬停任一格查看该层配置 · 右端虚线格为 MTP 层 78</div>
+    <div class="legend">
+      <span class="lgd"><i class="sw full"></i>full — 本层计算 top-k，写入共享 buffer</span>
+      <span class="lgd"><i class="sw shared"></i>shared — 无 indexer 权重，读上一层结果</span>
+      <span class="lgd"><i class="sw dense"></i>dense MLP — intermediate 12288</span>
+      <span class="lgd"><i class="sw sparse"></i>MoE — 256 专家 / top-8 / 1 共享</span>
+      <span class="lgd"><i class="sw mtp"></i>MTP 层 78 — 自带完整 indexer</span>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <div class="card key">
+      <p class="eyebrow">来自 checkpoint 的直接证据</p>
+      <p class="note">
+        <code>model.layers.0.self_attn.</code> 下有 <code>indexer.wq_b / wk / weights_proj / k_norm</code>；
+        <code>model.layers.5.self_attn.</code> 下这四个张量<strong>完全不存在</strong>。
+        shared 层不是"算了但丢弃"，是磁盘上就没有权重。
+      </p>
+    </div>
+    <div class="card good">
+      <p class="eyebrow">省了多少</p>
+      <p class="note">
+        indexer 前向从 78 次降到 21 次（÷3.7）。index cache 也同步减少：
+        每 token 每 full 层 <code>index_head_dim + 4 = 132 B</code>（uint8 装 fp8 + scale），
+        21 层共 ≈ 2.7 KB/token，而不是 10.3 KB/token。
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 3. 数据流 ============ -->
+<section>
+  <hr class="rule">
+  <p class="eyebrow">结构全图</p>
+  <h2>从 input_ids 到 logits，再放大其中一层</h2>
+  <p>
+    左边是完整模型栈，最左侧那条窄色带按层高比例画出 78 层的 indexer 调度（琥珀=full，灰=shared）。
+    右边把层 3–77 中的任意一层完全展开，每个模块标了权重形状与参数量。
+    <strong>注意 <code>fused_qkv_a_proj</code> 那一格</strong>——它是一次 <code>[2624, 6144]</code> 的 GEMM，
+    输出 <strong>按列切成三份</strong>（<code>2624 = 2048 + 512 + 64</code>），不是投影到某个三维形状；
+    三条分叉箭头上的胶囊标签就是各自的宽度。
+  </p>
+
+  <figure>
+    <svg viewBox="0 0 1060 930" role="img" aria-label="GLM-5.2 完整模型结构图：左侧是从 input_ids 经 embed_tokens、3 层稠密解码层、75 层 MoE 解码层、model.norm、lm_head 到 MTP 层 78 的整体栈，并用色带标出 78 层的 indexer full/shared 调度；右侧把一层 MoE 解码层展开，逐个模块标注形状与参数量，重点画出 fused_qkv_a_proj 的 2624 列如何拆成 2048 的 q_c、512 的 kv_c 和 64 的 k_pe 三路。">
+      <defs>
+        <marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+          <path d="M0,1.2 L9,5 L0,8.8 z" fill="currentColor"/>
+        </marker>
+        <marker id="a2a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+          <path d="M0,1.2 L9,5 L0,8.8 z" fill="var(--amber-mark)"/>
+        </marker>
+        <marker id="a2p" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+          <path d="M0,1.2 L9,5 L0,8.8 z" fill="var(--petrol-mark)"/>
+        </marker>
+        <linearGradient id="spine" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="var(--petrol-mark)" stop-opacity=".55"/>
+          <stop offset="55%" stop-color="var(--amber-mark)" stop-opacity=".45"/>
+          <stop offset="100%" stop-color="var(--petrol-mark)" stop-opacity=".55"/>
+        </linearGradient>
+      </defs>
+
+      <!-- ================= LEFT · 完整模型栈 ================= -->
+      <text x="20" y="38" font-family="Archivo, sans-serif" font-size="12.5" font-weight="600" fill="currentColor">完整模型栈</text>
+      <text x="20" y="53" font-family="IBM Plex Mono, monospace" font-size="9.5" fill="var(--ink-2)">GlmMoeDsaForCausalLM · 753.3 B</text>
+
+      <g font-family="IBM Plex Mono, monospace" font-size="10.5">
+        <rect x="44" y="64" width="196" height="30" rx="3" fill="var(--surface-2)" stroke="currentColor" stroke-width=".9"/>
+        <text x="142" y="83" text-anchor="middle" fill="var(--ink)">input_ids  [T]</text>
+
+        <rect x="44" y="110" width="196" height="46" rx="3" fill="var(--surface-2)" stroke="currentColor" stroke-width=".9"/>
+        <text x="142" y="127" text-anchor="middle" fill="var(--ink)">embed_tokens</text>
+        <text x="142" y="141" text-anchor="middle" fill="var(--ink-2)">154880 × 6144 · BF16</text>
+        <text x="142" y="152" text-anchor="middle" fill="var(--petrol)">951.5 M · 每 rank 全表</text>
+
+        <rect x="44" y="176" width="196" height="54" rx="3" fill="var(--brick-bg)" stroke="var(--brick)" stroke-width="1.1"/>
+        <text x="142" y="194" text-anchor="middle" fill="var(--ink)">layers 0–2 · dense</text>
+        <text x="142" y="208" text-anchor="middle" fill="var(--ink-2)">MLP 6144 ↔ 12288</text>
+        <text x="142" y="222" text-anchor="middle" fill="var(--brick)">0.68 B</text>
+
+        <rect x="52" y="254" width="196" height="340" rx="3" fill="none" stroke="var(--petrol-mark)" stroke-width=".8" opacity=".35"/>
+        <rect x="48" y="250" width="196" height="340" rx="3" fill="none" stroke="var(--petrol-mark)" stroke-width=".8" opacity=".6"/>
+        <rect x="44" y="246" width="196" height="340" rx="3" fill="var(--petrol-bg)" stroke="var(--petrol-mark)" stroke-width="1.4"/>
+        <text x="142" y="278" text-anchor="middle" font-family="Archivo, sans-serif" font-size="12" font-weight="600" fill="var(--petrol)">layers 3–77 · MoE</text>
+        <text x="142" y="296" text-anchor="middle" fill="var(--ink-2)">× 75 层</text>
+        <text x="142" y="322" text-anchor="middle" fill="var(--ink)">256 routed (top-8)</text>
+        <text x="142" y="336" text-anchor="middle" fill="var(--ink)">+ 1 shared · d_ff 2048</text>
+        <text x="142" y="358" text-anchor="middle" fill="var(--petrol)">742.6 B 参数</text>
+        <text x="142" y="372" text-anchor="middle" fill="var(--ink-2)">激活 25.5 B</text>
+        <line x1="70" y1="392" x2="214" y2="392" stroke="var(--petrol-mark)" stroke-width=".8" opacity=".5"/>
+        <text x="142" y="412" text-anchor="middle" fill="var(--ink-2)">每层 self_attn 165.0 M</text>
+        <text x="142" y="426" text-anchor="middle" fill="var(--ink-2)">每层 mlp 9.70 B</text>
+        <text x="142" y="452" text-anchor="middle" fill="var(--amber)">21 层带 indexer</text>
+        <text x="142" y="466" text-anchor="middle" fill="var(--ink-2)">57 层复用（IndexShare）</text>
+        <line x1="70" y1="486" x2="214" y2="486" stroke="var(--petrol-mark)" stroke-width=".8" opacity=".5"/>
+        <text x="142" y="506" text-anchor="middle" fill="var(--ink-2)">KV cache 576 / token / 层</text>
+        <text x="142" y="520" text-anchor="middle" fill="var(--ink-2)">index cache 132 B（仅 full）</text>
+        <text x="142" y="548" text-anchor="middle" font-family="Archivo, sans-serif" font-size="10.5" font-weight="600" fill="var(--ink-2)">↓ 右侧展开其中一层</text>
+        <text x="142" y="568" text-anchor="middle" fill="var(--ink-2)">结构逐层相同</text>
+
+        <rect x="44" y="612" width="196" height="30" rx="3" fill="var(--surface-2)" stroke="currentColor" stroke-width=".9"/>
+        <text x="142" y="631" text-anchor="middle" fill="var(--ink)">model.norm  RMSNorm(6144)</text>
+
+        <rect x="44" y="658" width="196" height="46" rx="3" fill="var(--surface-2)" stroke="currentColor" stroke-width=".9"/>
+        <text x="142" y="675" text-anchor="middle" fill="var(--ink)">lm_head</text>
+        <text x="142" y="689" text-anchor="middle" fill="var(--ink-2)">154880 × 6144 · BF16</text>
+        <text x="142" y="700" text-anchor="middle" fill="var(--petrol)">951.5 M · TP 分片</text>
+
+        <rect x="44" y="720" width="196" height="28" rx="3" fill="none" stroke="currentColor" stroke-width=".9"/>
+        <text x="142" y="738" text-anchor="middle" fill="var(--ink)">logits  [T, 154880]</text>
+
+        <rect x="44" y="778" width="196" height="76" rx="3" fill="var(--amber-bg)" stroke="var(--amber-mark)" stroke-width="1.2" stroke-dasharray="4 3"/>
+        <text x="142" y="797" text-anchor="middle" font-family="Archivo, sans-serif" font-size="11.5" font-weight="600" fill="var(--amber)">layers.78 · MTP</text>
+        <text x="142" y="813" text-anchor="middle" fill="var(--ink-2)">enorm · hnorm · shared_head.norm</text>
+        <text x="142" y="827" text-anchor="middle" fill="var(--ink-2)">eh_proj [6144 × 12288]</text>
+        <text x="142" y="845" text-anchor="middle" fill="var(--amber)">完整注意力 + MoE + indexer · 9.95 B</text>
+      </g>
+
+      <!-- 78 层 indexer 调度色带 -->
+      <text x="27" y="170" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="8" fill="var(--ink-2)">idx</text>
+      <g>
+        <rect x="22" y="176.00" width="10" height="4.21" fill="var(--amber-mark)" opacity="1"/>
+        <rect x="22" y="181.26" width="10" height="4.21" fill="var(--amber-mark)" opacity="1"/>
+        <rect x="22" y="186.51" width="10" height="4.21" fill="var(--amber-mark)" opacity="1"/>
+        <rect x="22" y="191.77" width="10" height="4.21" fill="var(--mute-mark)" opacity=".55"/>
+        <rect x="22" y="197.03" width="10" height="4.21" fill="var(--mute-mark)" opacity=".55"/>
+        <rect x="22" y="202.28" width="10" height="4.21" fill="var(--mute-mark)" opacity=".55"/>
+        <rect x="22" y="207.54" width="10" height="4.21" fill="var(--amber-mark)" opacity="1"/>
+        <rect x="22" y="212.79" width="10" height="4.21" fill="var(--mute-mark)" opacity=".55"/>
+        <rect x="22" y="218.05" width="10" height="4.21" fill="var(--mute-mark)" opacity=".55"/>
+        <rect x="22" y="223.31" width="10" height="4.21" fill="var(--mute-mark)" opacity=".55"/>
+        <rect x="22" y="228.56" width="10" height="4.21" fill="var(--amber-mark)" opacity="1"/>
+        <rect x="22" y="233.82" width="10" height="4.21" fill="var(--mute-mark)" opacity=".55"/>
+        <rect x="22" y="239.08" width="10" height="4.21" fill="var(--mute-mark)" opacity=".55"/>
+        <rect x="22" y="244.33" width="10" height="4.21" fill="var(--mute-mark)" opacity=".55"/>
+        <rect x="22" y="249.59" width="10" height="4.21" fill="var(--amber-mark)" opacity="1"/>
+        <rect x="22" y="254.85" width="10" height="4.21" fill="var(--mute-mark)" opacity=".55"/>
+        <rect x="22" y="260.10" width="10" height="4.21" fill="var(--mute-mark)" opacity=".55"/>
+        <rect x="22" y="265.36" width="10" height="4.21" fill="var(--mute-mark)" opacity=".55"/>
+        <rect x="22" y="270.62" width="10" height="4.21" fill="var(--amber-mark)" opacity="1"/>
+        <rect x="22" y="275.87" width="10" height="4.21" fill="var(--mute-mark)" opacity=".55"/>
+        <rect x="22" y="281.13" width="10" height="4.21" fill="var(--mute-mark)" opacity=".55"/>
+        <rect x="22" y="286.38" width="10" height="4.21" fill="var(--mute-mark)" opacity=".55"/>
+        <rect x="22" y="291.64" width="10" height="4.21" fill="var(--amber-mark)" opacity="1"/>
+        <rect x="22" y="296.90" width="10" height="4.21" fill="var(--mute-mark)" opacity=".55"/>
+        <rect x="22" y="302.15" width="10" height="4.21" fill="var(--mute-mark)" opacity=".55"/>
+        <rect x="22" y="307.41" width="10" height="4.21" fill="var(--mute-mark)" opacity=".55"/>
+        <rect x="22" y="312.67" width="10" height="4.21" fill="var(--amber-mark)" opacity="1"/>
+        <rect x="22" y="317.92" width="10" height="4.21" fill="var(--mute-mark)" opacity=".55"/>
+        <rect x="22" y="323.18" width="10" height="4.21" fill="var(--mute-mark)" opacity=".55"/>
+        <rect x="22" y="328.44" width="10" height="4.21" fill="var(--mute-mark)" opacity=".55"/>
+        <rect x="22" y="333.69" width="10" height="4.21" fill="var(--amber-mark)" opacity="1"/>
+        <rect x="22" y="338.95" width="10" height="4.21" fill="var(--mute-mark)" opacity=".55"/>
+        <rect x="22" y="344.21" width="10" height="4.21" fill="var(--mute-mark)" opacity=".55"/>
+        <rect x="22" y="349.46" width="10" height="4.21" fill="var(--mute-mark)" opacity=".55"/>
+        <rect x="22" y="354.72" width="10" height="4.21" fill="var(--amber-mark)" opacity="1"/>
+        <rect x="22" y="359.97" width="10" height="4.21" fill="var(--mute-mark)" opacity=".55"/>
+        <rect x="22" y="365.23" width="10" height="4.21" fill="var(--mute-mark)" opacity=".55"/>
+        <rect x="22" y="370.49" width="10" height="4.21" fill="var(--mute-mark)" opacity=".55"/>
+        <rect x="22" y="375.74" width="10" height="4.21" fill="var(--amber-mark)" opacity="1"/>
+        <rect x="22" y="381.00" width="10" height="4.21" fill="var(--mute-mark)" opacity=".55"/>
+        <rect x="22" y="386.26" width="10" height="4.21" fill="var(--mute-mark)" opacity=".55"/>
+        <rect x="22" y="391.51" width="10" height="4.21" fill="var(--mute-mark)" opacity=".55"/>
+        <rect x="22" y="396.77" width="10" height="4.21" fill="var(--amber-mark)" opacity="1"/>
+        <rect x="22" y="402.03" width="10" height="4.21" fill="var(--mute-mark)" opacity=".55"/>
+        <rect x="22" y="407.28" width="10" height="4.21" fill="var(--mute-mark)" opacity=".55"/>
+        <rect x="22" y="412.54" width="10" height="4.21" fill="var(--mute-mark)" opacity=".55"/>
+        <rect x="22" y="417.79" width="10" height="4.21" fill="var(--amber-mark)" opacity="1"/>
+        <rect x="22" y="423.05" width="10" height="4.21" fill="var(--mute-mark)" opacity=".55"/>
+        <rect x="22" y="428.31" width="10" height="4.21" fill="var(--mute-mark)" opacity=".55"/>
+        <rect x="22" y="433.56" width="10" height="4.21" fill="var(--mute-mark)" opacity=".55"/>
+        <rect x="22" y="438.82" width="10" height="4.21" fill="var(--amber-mark)" opacity="1"/>
+        <rect x="22" y="444.08" width="10" height="4.21" fill="var(--mute-mark)" opacity=".55"/>
+        <rect x="22" y="449.33" width="10" height="4.21" fill="var(--mute-mark)" opacity=".55"/>
+        <rect x="22" y="454.59" width="10" height="4.21" fill="var(--mute-mark)" opacity=".55"/>
+        <rect x="22" y="459.85" width="10" height="4.21" fill="var(--amber-mark)" opacity="1"/>
+        <rect x="22" y="465.10" width="10" height="4.21" fill="var(--mute-mark)" opacity=".55"/>
+        <rect x="22" y="470.36" width="10" height="4.21" fill="var(--mute-mark)" opacity=".55"/>
+        <rect x="22" y="475.62" width="10" height="4.21" fill="var(--mute-mark)" opacity=".55"/>
+        <rect x="22" y="480.87" width="10" height="4.21" fill="var(--amber-mark)" opacity="1"/>
+        <rect x="22" y="486.13" width="10" height="4.21" fill="var(--mute-mark)" opacity=".55"/>
+        <rect x="22" y="491.38" width="10" height="4.21" fill="var(--mute-mark)" opacity=".55"/>
+        <rect x="22" y="496.64" width="10" height="4.21" fill="var(--mute-mark)" opacity=".55"/>
+        <rect x="22" y="501.90" width="10" height="4.21" fill="var(--amber-mark)" opacity="1"/>
+        <rect x="22" y="507.15" width="10" height="4.21" fill="var(--mute-mark)" opacity=".55"/>
+        <rect x="22" y="512.41" width="10" height="4.21" fill="var(--mute-mark)" opacity=".55"/>
+        <rect x="22" y="517.67" width="10" height="4.21" fill="var(--mute-mark)" opacity=".55"/>
+        <rect x="22" y="522.92" width="10" height="4.21" fill="var(--amber-mark)" opacity="1"/>
+        <rect x="22" y="528.18" width="10" height="4.21" fill="var(--mute-mark)" opacity=".55"/>
+        <rect x="22" y="533.44" width="10" height="4.21" fill="var(--mute-mark)" opacity=".55"/>
+        <rect x="22" y="538.69" width="10" height="4.21" fill="var(--mute-mark)" opacity=".55"/>
+        <rect x="22" y="543.95" width="10" height="4.21" fill="var(--amber-mark)" opacity="1"/>
+        <rect x="22" y="549.21" width="10" height="4.21" fill="var(--mute-mark)" opacity=".55"/>
+        <rect x="22" y="554.46" width="10" height="4.21" fill="var(--mute-mark)" opacity=".55"/>
+        <rect x="22" y="559.72" width="10" height="4.21" fill="var(--mute-mark)" opacity=".55"/>
+        <rect x="22" y="564.97" width="10" height="4.21" fill="var(--amber-mark)" opacity="1"/>
+        <rect x="22" y="570.23" width="10" height="4.21" fill="var(--mute-mark)" opacity=".55"/>
+        <rect x="22" y="575.49" width="10" height="4.21" fill="var(--mute-mark)" opacity=".55"/>
+        <rect x="22" y="580.74" width="10" height="4.21" fill="var(--mute-mark)" opacity=".55"/>
+      </g>
+      <text x="27" y="600" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="8" fill="var(--ink-2)">77</text>
+
+      <!-- 主干竖向箭头 -->
+      <g stroke="currentColor" stroke-width="1.1" fill="none" marker-end="url(#a2)">
+        <line x1="142" y1="94"  x2="142" y2="106"/>
+        <line x1="142" y1="156" x2="142" y2="172"/>
+        <line x1="142" y1="230" x2="142" y2="242"/>
+        <line x1="142" y1="586" x2="142" y2="608"/>
+        <line x1="142" y1="642" x2="142" y2="654"/>
+        <line x1="142" y1="704" x2="142" y2="716"/>
+      </g>
+      <g stroke="var(--amber-mark)" stroke-width="1.1" fill="none" marker-end="url(#a2a)" stroke-dasharray="4 3">
+        <path d="M142,600 L34,600 L34,812 L40,812"/>
+      </g>
+      <text x="44" y="772" font-family="IBM Plex Mono, monospace" font-size="8.5" fill="var(--amber)">末层 hidden + 下一 token embed</text>
+
+      <!-- ================= detail callout ================= -->
+      <path d="M240,246 L358,100 L358,514 L240,586 Z" fill="currentColor" opacity=".045"/>
+      <g stroke="currentColor" stroke-width=".9" opacity=".4" stroke-dasharray="5 4" fill="none">
+        <line x1="240" y1="246" x2="358" y2="100"/>
+        <line x1="240" y1="586" x2="358" y2="514"/>
+      </g>
+
+      <!-- ================= RIGHT · 单层展开 ================= -->
+      <text x="362" y="38" font-family="Archivo, sans-serif" font-size="12.5" font-weight="600" fill="currentColor">DecoderLayer 展开（层 3–77 之一）</text>
+      <text x="362" y="53" font-family="IBM Plex Mono, monospace" font-size="9.5" fill="var(--ink-2)">单层 9.88 B（full 索引层） / 9.87 B（shared 索引层）</text>
+
+      <!-- residual spine -->
+      <rect x="332" y="76" width="14" height="826" rx="7" fill="url(#spine)"/>
+      <text x="326" y="470" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9.5" fill="var(--ink-2)" transform="rotate(-90 326 470)">residual stream · 6144</text>
+
+      <!-- ·· MLA group ·· -->
+      <rect x="362" y="100" width="674" height="414" rx="6" fill="currentColor" opacity=".035"/>
+      <rect x="362" y="100" width="674" height="414" rx="6" fill="none" stroke="currentColor" stroke-width=".9" opacity=".35"/>
+      <rect x="362" y="100" width="176" height="19" rx="3" fill="var(--surface-2)" stroke="currentColor" stroke-width=".9" opacity=".8"/>
+      <text x="450" y="113.5" text-anchor="middle" font-family="Archivo, sans-serif" font-size="10" font-weight="600" fill="var(--ink)">self_attn · MLA + DSA</text>
+
+      <g font-family="IBM Plex Mono, monospace" font-size="10.5">
+        <rect x="380" y="128" width="646" height="28" rx="3" fill="var(--surface-2)" stroke="currentColor" stroke-width=".9"/>
+        <text x="703" y="146" text-anchor="middle" fill="var(--ink)">input_layernorm  ·  RMSNorm(6144)   <tspan fill="var(--ink-2)">ATOM 可与 all-reduce + quant 融成一个 kernel</tspan></text>
+
+        <rect x="380" y="170" width="428" height="52" rx="3" fill="var(--surface-2)" stroke="currentColor" stroke-width="1.2"/>
+        <text x="594" y="188" text-anchor="middle" font-family="Archivo, sans-serif" font-size="11.5" font-weight="600" fill="var(--ink)">fused_qkv_a_proj</text>
+        <text x="594" y="203" text-anchor="middle" fill="var(--ink)">[2624, 6144]   一次 GEMM，输出按列切三份</text>
+        <text x="594" y="216" text-anchor="middle" fill="var(--petrol)">2624 = 2048 + 512 + 64   ·   16.1 M</text>
+
+        <!-- 三路分叉 -->
+        <rect x="380" y="256" width="150" height="30" rx="3" fill="var(--surface-2)" stroke="currentColor" stroke-width=".9"/>
+        <text x="455" y="268" text-anchor="middle" fill="var(--ink)">q_a_layernorm</text>
+        <text x="455" y="280" text-anchor="middle" fill="var(--ink-2)">RMSNorm(2048)</text>
+
+        <rect x="546" y="256" width="150" height="30" rx="3" fill="var(--surface-2)" stroke="currentColor" stroke-width=".9"/>
+        <text x="621" y="268" text-anchor="middle" fill="var(--ink)">kv_a_layernorm</text>
+        <text x="621" y="280" text-anchor="middle" fill="var(--ink-2)">RMSNorm(512)</text>
+
+        <rect x="712" y="256" width="96" height="30" rx="3" fill="var(--surface-2)" stroke="currentColor" stroke-width=".9"/>
+        <text x="760" y="268" text-anchor="middle" fill="var(--ink)">RoPE</text>
+        <text x="760" y="280" text-anchor="middle" fill="var(--ink-2)">交错 · θ=8e6</text>
+
+        <rect x="380" y="304" width="150" height="42" rx="3" fill="var(--surface-2)" stroke="currentColor" stroke-width=".9"/>
+        <text x="455" y="319" text-anchor="middle" fill="var(--ink)">q_b_proj</text>
+        <text x="455" y="331" text-anchor="middle" fill="var(--ink-2)">2048 → 64×256</text>
+        <text x="455" y="342" text-anchor="middle" fill="var(--petrol)">33.6 M</text>
+
+        <rect x="546" y="304" width="150" height="42" rx="3" fill="var(--surface-2)" stroke="currentColor" stroke-width=".9"/>
+        <text x="621" y="319" text-anchor="middle" fill="var(--ink)">kv_b_proj</text>
+        <text x="621" y="331" text-anchor="middle" fill="var(--ink-2)">512 → 64×(192+256)</text>
+        <text x="621" y="342" text-anchor="middle" fill="var(--petrol)">14.7 M</text>
+
+        <rect x="712" y="304" width="96" height="42" rx="6" fill="var(--sunk)" stroke="var(--petrol-mark)" stroke-width="1.1"/>
+        <text x="760" y="319" text-anchor="middle" fill="var(--ink)">KV cache</text>
+        <text x="760" y="331" text-anchor="middle" fill="var(--ink-2)">latent 512 + 64</text>
+        <text x="760" y="342" text-anchor="middle" fill="var(--petrol)">576 B/token/层</text>
+
+        <rect x="380" y="374" width="428" height="56" rx="3" fill="var(--surface-2)" stroke="currentColor" stroke-width="1.2"/>
+        <text x="594" y="392" text-anchor="middle" font-family="Archivo, sans-serif" font-size="11.5" font-weight="600" fill="var(--ink)">sparse MLA</text>
+        <text x="594" y="407" text-anchor="middle" fill="var(--ink)">64 heads · q [64, 256] × latent KV [576] → out [64, 256]</text>
+        <text x="594" y="421" text-anchor="middle" fill="var(--amber)">只在 top-k 选中的 2048 个 KV 上计算</text>
+
+        <rect x="380" y="452" width="428" height="34" rx="3" fill="var(--surface-2)" stroke="currentColor" stroke-width=".9"/>
+        <text x="594" y="467" text-anchor="middle" fill="var(--ink)">o_proj   [6144, 16384]</text>
+        <text x="594" y="479" text-anchor="middle" fill="var(--petrol)">100.7 M — 单层最大的注意力权重</text>
+      </g>
+
+      <!-- ·· indexer lane ·· -->
+      <g font-family="IBM Plex Mono, monospace" font-size="10">
+        <rect x="830" y="170" width="196" height="166" rx="3" fill="var(--amber-bg)" stroke="var(--amber-mark)" stroke-width="1.6"/>
+        <text x="928" y="188" text-anchor="middle" font-family="Archivo, sans-serif" font-size="11" font-weight="600" fill="var(--amber)">Indexer · DSA</text>
+        <text x="928" y="201" text-anchor="middle" fill="var(--ink-2)">仅 21 个 full 层拥有此模块</text>
+        <line x1="846" y1="210" x2="1010" y2="210" stroke="var(--amber-mark)" stroke-width=".8" opacity=".55"/>
+        <text x="928" y="225" text-anchor="middle" fill="var(--ink)">wq_b  2048 → 32×128   8.4 M</text>
+        <text x="928" y="239" text-anchor="middle" fill="var(--ink)">wk    6144 → 128      0.79 M</text>
+        <text x="928" y="253" text-anchor="middle" fill="var(--ink)">weights_proj 6144→32  0.20 M</text>
+        <text x="928" y="269" text-anchor="middle" fill="var(--ink-2)">k_norm = LayerNorm fp32（含 bias）</text>
+        <text x="928" y="283" text-anchor="middle" fill="var(--ink-2)">rope 交错 · fp8 per_1x128 (ue8m0)</text>
+        <text x="928" y="297" text-anchor="middle" fill="var(--ink-2)">写 index cache · 132 B/token/层</text>
+        <line x1="846" y1="307" x2="1010" y2="307" stroke="var(--amber-mark)" stroke-width=".8" opacity=".55"/>
+        <text x="928" y="323" text-anchor="middle" fill="var(--amber)">9.4 M  →  top-k = 2048</text>
+
+        <rect x="830" y="360" width="196" height="46" rx="6" fill="var(--sunk)" stroke="var(--amber-mark)" stroke-width="1.4"/>
+        <text x="928" y="376" text-anchor="middle" font-family="Archivo, sans-serif" font-size="10.5" font-weight="600" fill="var(--ink)">_sparse_kv_indices_gpu</text>
+        <text x="928" y="389" text-anchor="middle" fill="var(--ink-2)">int32 [tokens × 2048] · 全部层共用</text>
+        <text x="928" y="401" text-anchor="middle" fill="var(--ink-2)">aiter_mla.py:384 分配 · :522 重绑</text>
+
+        <rect x="830" y="428" width="196" height="52" rx="3" fill="none" stroke="var(--mute-mark)" stroke-width="1.2" stroke-dasharray="5 4"/>
+        <text x="928" y="444" text-anchor="middle" fill="var(--ink-2)">57 个 shared 层：indexer = None</text>
+        <text x="928" y="457" text-anchor="middle" fill="var(--ink-2)">0 参数 · 0 计算 · skip_topk = True</text>
+        <text x="928" y="470" text-anchor="middle" fill="var(--ink-2)">跳过上面那个框，直接用此 buffer</text>
+      </g>
+
+      <!-- ·· MoE group ·· -->
+      <rect x="362" y="548" width="674" height="274" rx="6" fill="var(--petrol-mark)" opacity=".05"/>
+      <rect x="362" y="548" width="674" height="274" rx="6" fill="none" stroke="var(--petrol-mark)" stroke-width=".9" opacity=".45"/>
+      <rect x="362" y="548" width="150" height="19" rx="3" fill="var(--petrol-bg)" stroke="var(--petrol-mark)" stroke-width=".9" opacity=".9"/>
+      <text x="437" y="561.5" text-anchor="middle" font-family="Archivo, sans-serif" font-size="10" font-weight="600" fill="var(--petrol)">mlp · MoE</text>
+
+      <g font-family="IBM Plex Mono, monospace" font-size="10.5">
+        <rect x="380" y="576" width="646" height="28" rx="3" fill="var(--surface-2)" stroke="currentColor" stroke-width=".9"/>
+        <text x="703" y="594" text-anchor="middle" fill="var(--ink)">post_attention_layernorm  ·  RMSNorm(6144)</text>
+
+        <rect x="380" y="622" width="280" height="52" rx="3" fill="var(--surface-2)" stroke="currentColor" stroke-width=".9"/>
+        <text x="520" y="639" text-anchor="middle" fill="var(--ink)">gate   [256, 6144]  ·  1.57 M</text>
+        <text x="520" y="653" text-anchor="middle" fill="var(--ink-2)">sigmoid + e_score_correction_bias</text>
+        <text x="520" y="667" text-anchor="middle" fill="var(--ink-2)">noaux_tc → top-8 · scale 2.5 · fp32 路由</text>
+
+        <rect x="830" y="622" width="196" height="52" rx="3" fill="var(--petrol-bg)" stroke="var(--petrol-mark)" stroke-width="1.1"/>
+        <text x="928" y="639" text-anchor="middle" fill="var(--ink)">shared_experts × 1</text>
+        <text x="928" y="653" text-anchor="middle" fill="var(--ink-2)">6144 ↔ 2048 · 37.7 M</text>
+        <text x="928" y="667" text-anchor="middle" fill="var(--petrol)">与路由专家双流并行</text>
+
+        <rect x="380" y="700" width="428" height="62" rx="3" fill="var(--petrol-bg)" stroke="var(--petrol-mark)" stroke-width="1.4"/>
+        <text x="594" y="718" text-anchor="middle" font-family="Archivo, sans-serif" font-size="11.5" font-weight="600" fill="var(--petrol)">routed_experts × 256</text>
+        <text x="594" y="733" text-anchor="middle" fill="var(--ink)">每专家 gate_proj / up_proj [2048, 6144] + down_proj [6144, 2048]</text>
+        <text x="594" y="747" text-anchor="middle" fill="var(--ink)">9.66 B 参数</text>
+        <text x="594" y="758" text-anchor="middle" fill="var(--petrol)">每 token 只激活 8 个 → 302 M</text>
+
+        <rect x="380" y="782" width="646" height="28" rx="3" fill="var(--surface-2)" stroke="currentColor" stroke-width=".9"/>
+        <text x="703" y="800" text-anchor="middle" fill="var(--ink)">combine  =  routed  +  shared   <tspan fill="var(--ink-2)">（scale 2.5 已在 topk 权重里乘过）</tspan></text>
+      </g>
+
+      <!-- ·· 箭头：主干 ·· -->
+      <g stroke="currentColor" stroke-width="1.1" fill="none" marker-end="url(#a2)">
+        <line x1="346" y1="142" x2="376" y2="142"/>
+        <line x1="594" y1="156" x2="594" y2="166"/>
+        <line x1="455" y1="286" x2="455" y2="300"/>
+        <line x1="621" y1="286" x2="621" y2="300"/>
+        <line x1="760" y1="286" x2="760" y2="300"/>
+        <line x1="455" y1="346" x2="455" y2="370"/>
+        <line x1="621" y1="346" x2="621" y2="370"/>
+        <line x1="594" y1="430" x2="594" y2="448"/>
+        <line x1="346" y1="590" x2="376" y2="590"/>
+        <line x1="520" y1="674" x2="520" y2="696"/>
+        <line x1="594" y1="762" x2="594" y2="778"/>
+      </g>
+
+      <!-- 三路分叉：从 fused_qkv_a_proj 下沿 -->
+      <g stroke="currentColor" stroke-width="1.3" fill="none" marker-end="url(#a2)">
+        <path d="M594,222 L594,232 L455,232 L455,252"/>
+        <path d="M594,222 L594,232 L621,232 L621,252"/>
+        <path d="M594,222 L594,232 L760,232 L760,252"/>
+      </g>
+      <g font-family="IBM Plex Mono, monospace" font-size="9.5">
+        <rect x="415" y="236" width="80" height="15" rx="7.5" fill="var(--surface)" stroke="currentColor" stroke-width=".8"/>
+        <text x="455" y="247" text-anchor="middle" fill="var(--ink)">q_c  2048</text>
+        <rect x="580" y="236" width="82" height="15" rx="7.5" fill="var(--surface)" stroke="currentColor" stroke-width=".8"/>
+        <text x="621" y="247" text-anchor="middle" fill="var(--ink)">kv_c  512</text>
+        <rect x="722" y="236" width="76" height="15" rx="7.5" fill="var(--surface)" stroke="currentColor" stroke-width=".8"/>
+        <text x="760" y="247" text-anchor="middle" fill="var(--ink)">k_pe  64</text>
+      </g>
+
+      <!-- kv / pe → KV cache -->
+      <g stroke="var(--petrol-mark)" stroke-width="1.1" fill="none" marker-end="url(#a2p)">
+        <path d="M696,271 L704,271 L704,318 L707,318"/>
+      </g>
+
+      <!-- indexer 输入 -->
+      <g stroke="var(--amber-mark)" stroke-width="1.2" fill="none" marker-end="url(#a2a)">
+        <path d="M952,156 L952,166"/>
+        <path d="M498,286 L498,296 L818,296 L818,216 L826,216"/>
+      </g>
+      <text x="958" y="167" font-family="IBM Plex Mono, monospace" font-size="8.5" fill="var(--amber)">hidden 6144 bf16</text>
+      <text x="548" y="292" font-family="IBM Plex Mono, monospace" font-size="8.5" fill="var(--amber)">q_c 2048</text>
+
+      <!-- indexer → buffer → MLA -->
+      <g stroke="var(--amber-mark)" stroke-width="1.8" fill="none" marker-end="url(#a2a)">
+        <path d="M928,336 L928,356"/>
+      </g>
+      <text x="936" y="350" font-family="IBM Plex Mono, monospace" font-size="8.5" fill="var(--amber)">full 层 writes</text>
+      <g stroke="var(--mute-mark)" stroke-width="1.2" fill="none" marker-end="url(#a2)" stroke-dasharray="5 4">
+        <path d="M928,428 L928,410"/>
+      </g>
+      <g stroke="var(--amber-mark)" stroke-width="1.8" fill="none" marker-end="url(#a2a)" stroke-dasharray="6 4">
+        <path d="M830,383 L818,383 L818,402 L812,402"/>
+      </g>
+      <text x="596" y="447" font-family="IBM Plex Mono, monospace" font-size="8.5" fill="var(--amber)">reads · 决定这 64 个头读哪 2048 个 KV</text>
+
+      <!-- 残差 -->
+      <g stroke="currentColor" stroke-width="1.1" fill="none" marker-end="url(#a2)">
+        <path d="M380,469 L360,469 L360,504"/>
+        <path d="M380,796 L360,796 L360,832"/>
+      </g>
+      <circle cx="339" cy="516" r="11" fill="var(--surface)" stroke="currentColor" stroke-width="1.2"/>
+      <text x="339" y="520.5" text-anchor="middle" font-family="Archivo, sans-serif" font-size="13" font-weight="600" fill="var(--ink)">+</text>
+      <circle cx="339" cy="844" r="11" fill="var(--surface)" stroke="currentColor" stroke-width="1.2"/>
+      <text x="339" y="848.5" text-anchor="middle" font-family="Archivo, sans-serif" font-size="13" font-weight="600" fill="var(--ink)">+</text>
+      <text x="356" y="500" font-family="IBM Plex Mono, monospace" font-size="9" fill="var(--ink-2)">residual add</text>
+      <text x="356" y="828" font-family="IBM Plex Mono, monospace" font-size="9" fill="var(--ink-2)">residual add</text>
+
+      <!-- 输出 -->
+      <rect x="380" y="874" width="280" height="28" rx="3" fill="none" stroke="currentColor" stroke-width=".9"/>
+      <text x="520" y="892" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--ink)">→ 下一层  [T, 6144]</text>
+      <g stroke="currentColor" stroke-width="1.1" fill="none" marker-end="url(#a2)">
+        <line x1="346" y1="888" x2="376" y2="888"/>
+      </g>
+    </svg>
+    <figcaption>
+      右侧琥珀色那条 lane 是全图的重心：<code>Indexer</code> 只存在于 21 个 full 层（9.4 M 参数，
+      占单层 9.88 B 的 0.095 %），它把 top-k 写进 <code>_sparse_kv_indices_gpu</code>；
+      57 个 shared 层的 <code>self.indexer</code> 是 <code>None</code>，跳过整个框直接读同一块 buffer。
+      两类层的其余部分——注意力、MoE、残差——逐字节相同。
+      稀疏性由模型级标志 <code>mla_modules.is_sparse</code> 决定，而不是"本层是否有 indexer"，
+      这正是 shared 层能在没有 indexer 的情况下仍然跑稀疏 MLA 的原因
+      （<code>atom/model_ops/attention_mla.py:486</code>）。
+    </figcaption>
+  </figure>
+
+  <div class="grid2">
+    <div class="card">
+      <p class="eyebrow">构造期</p>
+      <h3><code>_indexer_weights_shared()</code></h3>
+      <p class="note">按 <code>indexer_types[layer_id] == "shared"</code> 判定，直接把
+      <code>self.indexer</code> 置为 <code>None</code>，不建任何参数。</p>
+      <span class="pathline">atom/models/deepseek_v2.py:406 · 2612</span>
+    </div>
+    <div class="card">
+      <p class="eyebrow">运行期</p>
+      <h3>metadata builder 统一重绑</h3>
+      <p class="note">遍历 <code>static_forward_context</code>，把每个带 <code>sparse_kv_indices_buffer</code>
+      属性的模块和 impl 都指向同一块 GPU buffer（DCP 的两个补偿 buffer 一起绑）。</p>
+      <span class="pathline">atom/model_ops/attentions/aiter_mla.py:522-533</span>
+    </div>
+    <div class="card">
+      <p class="eyebrow">流水并行</p>
+      <h3>跨 rank 传递 top-k</h3>
+      <p class="note">若某 rank 的首层是 shared，它需要上一 rank 的选择结果。
+      ModelRunner 预先算好 <code>_pp_recv_needs_sparse</code> / <code>_pp_send_needs_sparse</code>，
+      只在必要时收发。</p>
+      <span class="pathline">atom/model_engine/model_runner.py:2956-3010 · 3133</span>
+    </div>
+    <div class="card warn">
+      <p class="eyebrow">不变量</p>
+      <h3>第一层不能是 shared</h3>
+      <p class="note">否则它会读到一块从未写入的 buffer。SGLang 插件在 setup 时显式断言这一点；
+      GLM-5.2 的 config 用连续三个 <code>full</code> 开头正好满足。</p>
+      <span class="pathline">atom/plugin/sglang/models/glm52_dsa.py:60-70</span>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 4. 尺寸表 ============ -->
+<section>
+  <hr class="rule">
+  <p class="eyebrow">尺寸对照</p>
+  <h2>GLM-5 → 5.1 → 5.2：骨架没动，只加了 IndexShare 和长上下文</h2>
+  <p>
+    把三代 GLM-5 和 DeepSeek-V3.2 并排放，就能看清 ATOM 为什么能一个文件全吃下：
+    所有差异都是 config 数值，没有一处是新的算子拓扑。
+  </p>
+  <div class="tscroll">
+    <table>
+      <thead>
+        <tr><th>config 字段</th><th>GLM-5 / 5.1</th><th>GLM-5.2</th><th>DeepSeek-V3.2</th><th>说明</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="k">num_hidden_layers</td><td class="num">78</td><td class="num">78</td><td class="num">61</td><td class="dim">+1 层 MTP（index 78）</td></tr>
+        <tr><td class="k">hidden_size</td><td class="num">6144</td><td class="num">6144</td><td class="num">7168</td><td class="dim">—</td></tr>
+        <tr><td class="k">num_attention_heads</td><td class="num">64</td><td class="num">64</td><td class="num">128</td><td class="dim">头少一半，头维更宽</td></tr>
+        <tr><td class="k">q_lora_rank</td><td class="num">2048</td><td class="num">2048</td><td class="num">1536</td><td class="dim">indexer 的 wq_b 也吃这个秩</td></tr>
+        <tr><td class="k">kv_lora_rank</td><td class="num">512</td><td class="num">512</td><td class="num">512</td><td class="dim">latent KV 宽度 512+64=576</td></tr>
+        <tr><td class="k">qk_nope / qk_rope</td><td class="num">192 / 64</td><td class="num">192 / 64</td><td class="num">128 / 64</td><td class="dim">qk_head_dim = 256</td></tr>
+        <tr><td class="k">v_head_dim</td><td class="num">256</td><td class="num hl">256</td><td class="num">128</td><td class="dim">V 比 K 的 nope 部分还宽，DeepSeek 系没有这种配置</td></tr>
+        <tr><td class="k">n_group / topk_group</td><td class="num">1 / 1</td><td class="num">1 / 1</td><td class="num">8 / 4</td><td class="dim">分组路由退化为全局 top-8</td></tr>
+        <tr><td class="k">index_n_heads</td><td class="num">32</td><td class="num">32</td><td class="num">64</td><td class="dim">index_head_dim 三者都是 128</td></tr>
+        <tr><td class="k">index_topk_freq</td><td class="dim">—</td><td class="num hl">4</td><td class="dim">—</td><td class="dim">GLM-5.2 引入</td></tr>
+        <tr><td class="k">indexer_types</td><td class="dim">—</td><td class="num hl">78 项</td><td class="dim">—</td><td class="dim">逐层 full/shared，权威于 freq</td></tr>
+        <tr><td class="k">index_share_for_mtp_iteration</td><td class="dim">—</td><td class="num hl">true</td><td class="dim">—</td><td class="dim">草稿步之间复用 top-k</td></tr>
+        <tr><td class="k">max_position_embeddings</td><td class="num">202 752</td><td class="num hl">1 048 576</td><td class="num">163 840</td><td class="dim">GLM-5.2 迈进 1M</td></tr>
+        <tr><td class="k">rope_theta</td><td class="num">1e6</td><td class="num hl">8e6</td><td class="num">1e4 + YaRN×40</td><td class="dim">GLM 不用 YaRN，纯 default rope</td></tr>
+        <tr><td class="k">rope_interleave</td><td class="num">true</td><td class="num">true</td><td class="dim">未设</td><td class="dim">→ is_neox_style = false</td></tr>
+        <tr><td class="k">indexer_rope_interleave</td><td class="num">true</td><td class="num">true</td><td class="dim">未设（默认 neox）</td><td class="dim">GLM 把 indexer rope 也改成交错</td></tr>
+        <tr><td class="k">vocab_size</td><td class="num">154 880</td><td class="num">154 880</td><td class="num">129 280</td><td class="dim">embed 与 lm_head 各 951 M 参数</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout">
+    <p class="eyebrow">rope 的两个开关容易搞反</p>
+    <p class="note" style="margin:0">
+      <code>_is_neox_rope_style()</code> 的语义是 <em>interleave 为真 ⇒ neox 为假</em>，两者互斥。
+      主 MLA rope 在 DeepSeek 缺省下就是交错的（<code>default_is_neox=False</code>），
+      而 indexer rope 在 DeepSeek 缺省下是 neox（<code>default_is_neox=True</code>）——
+      GLM-5.x 用 <code>indexer_rope_interleave=true</code> 把后者也翻成交错。
+      两个默认值方向相反，是这段代码最容易读错的地方。
+      <span class="pathline" style="margin-top:8px">atom/models/deepseek_v2.py:308-322</span>
+    </p>
+  </div>
+</section>
+
+<!-- ============ 5. 权重形状 ============ -->
+<section>
+  <hr class="rule">
+  <p class="eyebrow">权重实测</p>
+  <h2>从 safetensors 头部读到的真实形状</h2>
+  <p>
+    下面每一行都是从 <code>GLM-5.2-FP8</code> 的 141 个分片头里直接读出来的，不是从 config 推的。
+    整个 checkpoint <code>total_size = 755 617 140 416</code> 字节，与 753 B 参数量互相印证。
+  </p>
+  <div class="tscroll">
+    <table>
+      <thead><tr><th>张量</th><th>dtype</th><th>shape</th><th>拆解</th></tr></thead>
+      <tbody>
+        <tr><td class="k">model.embed_tokens.weight</td><td class="k">BF16</td><td class="num">[154880, 6144]</td><td class="dim">未量化；ATOM 对 GLM 默认整表复制到每个 rank</td></tr>
+        <tr><td class="k">…self_attn.q_a_proj.weight</td><td class="k">F8_E4M3</td><td class="num">[2048, 6144]</td><td class="dim">与 kv_a 合并成 fused_qkv_a_proj</td></tr>
+        <tr><td class="k">…self_attn.kv_a_proj_with_mqa.weight</td><td class="k">F8_E4M3</td><td class="num">[576, 6144]</td><td class="dim">512 latent + 64 rope</td></tr>
+        <tr><td class="k">…self_attn.q_b_proj.weight</td><td class="k">F8_E4M3</td><td class="num">[16384, 2048]</td><td class="dim">64 × (192+64)</td></tr>
+        <tr><td class="k">…self_attn.kv_b_proj.weight</td><td class="k">F8_E4M3</td><td class="num">[28672, 512]</td><td class="dim">64 × (192 nope + <span class="hl">256 v</span>)</td></tr>
+        <tr><td class="k">…self_attn.o_proj.weight</td><td class="k">F8_E4M3</td><td class="num">[6144, 16384]</td><td class="dim">64 × 256 → 6144；单层最大的注意力权重</td></tr>
+        <tr><td class="k">…indexer.wq_b.weight</td><td class="k">F8_E4M3</td><td class="num">[4096, 2048]</td><td class="dim">32 index 头 × 128</td></tr>
+        <tr><td class="k">…indexer.wk.weight</td><td class="k">F8_E4M3</td><td class="num">[128, 6144]</td><td class="dim">只有一份 key，32 个 index 头共享（MQA 式）</td></tr>
+        <tr><td class="k">…indexer.weights_proj.weight</td><td class="k">BF16</td><td class="num">[32, 6144]</td><td class="dim">保持 BF16，量化排除名单里</td></tr>
+        <tr><td class="k">…indexer.k_norm.{weight,bias}</td><td class="k">BF16</td><td class="num">[128]</td><td class="dim">带 bias，是 LayerNorm(fp32) 而非 RMSNorm</td></tr>
+        <tr><td class="k">…mlp.experts.N.gate_proj.weight</td><td class="k">F8_E4M3</td><td class="num">[2048, 6144]</td><td class="dim">×256 专家 ×3 投影 = 9.66 B / 层</td></tr>
+        <tr><td class="k">…layers.0.mlp.gate_proj.weight</td><td class="k">F8_E4M3</td><td class="num">[12288, 6144]</td><td class="dim">仅 layer 0–2 的稠密 MLP</td></tr>
+        <tr><td class="k">…layers.78.eh_proj.weight</td><td class="k">BF16</td><td class="num">[6144, 12288]</td><td class="dim">MTP：concat(enorm(e), hnorm(h)) → 6144</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="grid2">
+    <div class="card">
+      <p class="eyebrow">参数账</p>
+      <p class="note">
+        注意力 165.0 M/层 · indexer 9.4 M/full 层 · MoE 块 9.703 B/层 · 稠密 MLP 226.5 M/层<br>
+        → 主干 743.4 B + MTP 9.95 B ≈ <strong>753.3 B</strong>，单 token 激活 ≈ <strong>41 B</strong>。
+      </p>
+    </div>
+    <div class="card">
+      <p class="eyebrow">KV 账</p>
+      <p class="note">
+        MLA latent KV：<code>(512+64) × 2 B = 1152 B</code> 每层每 token，78 层 ≈ <strong>89.9 KB/token</strong>（BF16），
+        FP8 KV cache 时减半。index cache 另计 ≈ 2.7 KB/token。
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 6. ATOM 专属优化 ============ -->
+<section>
+  <hr class="rule">
+  <p class="eyebrow">ATOM 侧</p>
+  <h2>为 GLM-5.2 加的七处优化</h2>
+  <p>
+    这些都不是模型定义的一部分——它们是 ATOM 为了让这套结构在 MI355X 上跑得快而加的，
+    每一处都有独立的环境变量可以回退。
+  </p>
+  <div class="tscroll">
+    <table>
+      <thead><tr><th>优化</th><th>内容</th><th>门控</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>融合 indexer 内核</strong></td>
+          <td>q-rope + fp8 量化 + k-cache 写入合成一个 kernel。准入条件是
+            <code>index_head_dim == 128</code> 且 <code>qk_rope_head_dim == 64</code>，
+            GLM 与 DeepSeek-V3.2 同时满足，所以数学上与逐算子路径等价</td>
+          <td class="k">ATOM_ENABLE_GLM_FUSED_INDEXER</td>
+        </tr>
+        <tr>
+          <td><strong>wk + weights_proj GEMM 合并</strong></td>
+          <td><code>IndexerWkWeightsProjLinear</code> 把 <code>[128,6144]</code> 与
+            <code>[32,6144]</code> 拼成一次 GEMM 再 split。GLM checkpoint 用的是标准
+            <code>indexer.wk</code> / <code>indexer.weights_proj</code> 名字，合并加载路径直接可用</td>
+          <td class="k">ATOM_ENABLE_DS_INDEXER_<br>QK_ROPE_CACHE_FUSION</td>
+        </tr>
+        <tr>
+          <td><strong>复制词表 embedding</strong></td>
+          <td><code>ReplicatedEmbedding</code> 整表存每个 rank，省掉 embedding 后的 all-reduce。
+            因为 <code>tie_word_embeddings=false</code>，embedding 与仍然分片的 <code>lm_head</code>
+            解耦，查表结果与"分片 + masked + all-reduce"逐位相同。代价是每 rank 多 951 M 参数</td>
+          <td class="k">ATOM_REPLICATE_VOCAB_EMBED</td>
+        </tr>
+        <tr>
+          <td><strong><code>stable_topk</code></strong></td>
+          <td>TP &gt; 1 且是 GLM-5.2 时启用稳定排序，保证各 rank 选出<strong>完全相同</strong>的 KV 下标。
+            分数打平时不稳定排序会让各 rank 分歧，而 IndexShare 会把这个分歧传播到后面三层</td>
+          <td class="dim">自动（model_type + tp&gt;1）</td>
+        </tr>
+        <tr>
+          <td><strong>量化名映射</strong></td>
+          <td>HF 量化配置写 <code>indexers_proj</code>，ATOM 模块路径叫 <code>indexer.weights_proj</code>；
+            不映射的话这条 BF16 投影会被 FP4/MXFP4 回退量化掉</td>
+          <td class="dim">子类常量</td>
+        </tr>
+        <tr>
+          <td><strong>MoE 双流</strong></td>
+          <td>共享专家与路由专家在独立 CUDA stream 上并行，注册成对 Dynamo 不透明的 custom op，
+            避免 torch.compile 把 dummy-run 的分支烤进图里</td>
+          <td class="k">ATOM_DUAL_STREAM_MOE_<br>TOKEN_THRESHOLD</td>
+        </tr>
+        <tr>
+          <td><strong><code>fused_qkv_a_proj</code></strong></td>
+          <td>checkpoint 里拆开的 <code>q_a_proj</code> + <code>kv_a_proj_with_mqa</code>
+            合成一条 <code>MergedReplicatedLinear</code>，并强制 <code>needs_preshuffled_weight</code>
+            （其前向调的是 preshuffle blockscale GEMM）</td>
+          <td class="dim">默认开</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ============ 6b. 注意点 ============ -->
+<section>
+  <hr class="rule">
+  <p class="eyebrow">注意点</p>
+  <h2>两个容易踩的地方</h2>
+
+  <div class="card warn">
+    <p class="eyebrow">其一 · freq 回退公式与 config 的 offset 约定不一致</p>
+    <p class="note">
+      ATOM 的回退公式是 <code>max(layer_id − offset, 0) % index_topk_freq != 0</code>，
+      <code>offset</code> 默认取 1。而 GLM-5.2 的 config 写的是
+      <code>index_skip_topk_offset = 3</code>——代入这个公式，<code>max(3−3,0) % 4 == 0</code>
+      会把 layer 3 判成 <strong>full</strong>，与 <code>indexer_types</code> 里的
+      <code>shared</code> 相反，整张表整体偏一层。
+    </p>
+    <p class="note" style="margin-bottom:0">
+      <strong>当前无害</strong>，因为 <code>_should_skip_index_topk()</code> 优先读
+      <code>indexer_types</code>，公式只是兜底。但如果将来出现只给
+      <code>index_topk_freq</code> / <code>index_skip_topk_offset</code>、不给
+      <code>indexer_types</code> 的 checkpoint，回退路径会选错层——而且不会报错，
+      只会让某些层读到错误的 KV 选择。遇到这类权重时先确认 <code>indexer_types</code> 是否存在。
+      <span class="pathline" style="margin-top:10px">atom/models/deepseek_v2.py:361-404</span>
+    </p>
+  </div>
+
+  <div class="card warn" style="margin-top:18px">
+    <p class="eyebrow">其二 · 上下文长度不到 2048 时 indexer 是 no-op</p>
+    <p class="note" style="margin-bottom:0">
+      <code>index_topk = 2048</code>，低于这个长度时 top-k 会选中全部 KV，稀疏注意力退化成稠密。
+      真正的收益要到长上下文才出现——短序列的 benchmark 看不出 IndexShare 的任何价值，
+      调优时别拿 2K 以内的 ISL 去衡量它。
+    </p>
+  </div>
+</section>
+
+<!-- ============ 7. MTP ============ -->
+<section>
+  <hr class="rule">
+  <p class="eyebrow">投机解码</p>
+  <h2>MTP 层自带 indexer，但草稿步之间也共享</h2>
+  <p>
+    层 78 是一个完整的 nextn 块：<code>enorm</code> / <code>hnorm</code> / <code>eh_proj</code> /
+    <code>shared_head.norm</code>，加上一整套注意力、MoE，以及<strong>自己的一套 indexer 权重</strong>。
+    这一点两边代码都写了注释强调：<code>index_share_for_mtp_iteration</code> 说的不是"MTP 复用主干的 top-k"，
+    而是"多个草稿步之间复用第 0 步的 top-k"。
+  </p>
+  <div class="grid2">
+    <div class="card">
+      <p class="eyebrow">draft step 0</p>
+      <h3><code>set_skip_topk(False)</code></h3>
+      <p class="note">MTP 的 indexer 正常跑，为被草稿的位置选出 2048 个 KV。</p>
+    </div>
+    <div class="card">
+      <p class="eyebrow">draft step 1…N</p>
+      <h3><code>set_skip_topk(True)</code></h3>
+      <p class="note">跳过 indexer，直接复用第 0 步写进 buffer 的下标。</p>
+    </div>
+  </div>
+  <p style="margin-top:20px" class="note">
+    实现位置：<code>atom/spec_decode/eagle_proposer.py:343-357</code>，配合
+    <code>atom/models/deepseek_mtp.py:245</code> 的 <code>set_skip_topk()</code>。
+    层判定还额外挡了一道：<code>layer_id ≥ num_hidden_layers</code> 时一律不 skip，
+    避免 MTP 层被主干的 full/shared 表误判成 shared 而读到空 buffer。
+  </p>
+</section>
+
+<!-- ============ 8. 部署 ============ -->
+<section>
+  <hr class="rule">
+  <p class="eyebrow">已验证的部署形态</p>
+  <h2>仓库里跑通过的两套配置</h2>
+  <div class="grid2">
+    <div class="card good">
+      <p class="eyebrow">单机 · Agentic</p>
+      <h3>4×MI355X TP4 + MTP</h3>
+      <ul class="tight note">
+        <li>checkpoint <code>GLM-5.2-MXFP4</code>，FP8 KV cache</li>
+        <li>MTP 3 个草稿 token，接受率 0.6633 → 每次前向约 2.99 token</li>
+        <li>GPU 前缀缓存 + 200 GiB LMCache CPU 层</li>
+      </ul>
+      <span class="pathline">recipes/Agentic-GLM-5.2.md</span>
+    </div>
+    <div class="card good">
+      <p class="eyebrow">PD 分离 · atomesh</p>
+      <h3>PP4×TP1 prefill + TP4 decode</h3>
+      <ul class="tight note">
+        <li>Mooncake RDMA 传 KV，atomesh 路由</li>
+        <li><code>VLLM_PP_LAYER_PARTITION=18,20,20,20</code></li>
+        <li>前轻分层是因为 rank 0 还扛着 951 M 参数的 embedding，均分会 OOM</li>
+      </ul>
+      <span class="pathline">recipes/mesh/GLM-5.2.md</span>
+    </div>
+  </div>
+  <p class="note" style="margin-top:20px">
+    另有一条 SGLang 插件路径：<code>atom/plugin/sglang/models/glm52_dsa.py</code> 刻意<em>不</em>安装
+    SGLang 自己的 MLA 前端，而是保留 ATOM 原生 <code>MLAAttention</code>，这样 full 层写共享物理下标 buffer、
+    shared 层读同一块 buffer 的机制才能成立。
+  </p>
+</section>
+
+<!-- ============ 9. 读码路线 ============ -->
+<section>
+  <hr class="rule">
+  <p class="eyebrow">读码路线</p>
+  <h2>按这个顺序看，一小时能过完</h2>
+  <div class="tscroll">
+    <table>
+      <thead><tr><th>要理解的东西</th><th>文件 · 位置</th></tr></thead>
+      <tbody>
+        <tr><td>模型注册与类体</td><td class="k">atom/models/deepseek_v2.py:3444 <span class="dim">GlmMoeDsaForCausalLM</span></td></tr>
+        <tr><td>full/shared 判定</td><td class="k">atom/models/deepseek_v2.py:361 <span class="dim">_should_skip_index_topk</span> · :406 <span class="dim">_indexer_weights_shared</span></td></tr>
+        <tr><td>rope 交错/neox 解析</td><td class="k">atom/models/deepseek_v2.py:308 <span class="dim">_is_neox_rope_style</span></td></tr>
+        <tr><td>Indexer 模块与前向</td><td class="k">atom/models/deepseek_v2.py:2154 <span class="dim">class Indexer</span> · :2288 <span class="dim">forward_impl</span></td></tr>
+        <tr><td>top-k 内核（prefill / decode / DCP）</td><td class="k">atom/models/deepseek_v2.py:1536 <span class="dim">sparse_attn_indexer</span></td></tr>
+        <tr><td>MLA 构造：rope、indexer、MLAModules</td><td class="k">atom/models/deepseek_v2.py:2404-2700</td></tr>
+        <tr><td>稀疏标志与 buffer 读取</td><td class="k">atom/model_ops/attention_mla.py:486-500 · :1493</td></tr>
+        <tr><td>共享 buffer 分配与重绑</td><td class="k">atom/model_ops/attentions/aiter_mla.py:384 · :522</td></tr>
+        <tr><td>PP 跨 rank 传 top-k</td><td class="k">atom/model_engine/model_runner.py:2956 · 3133</td></tr>
+        <tr><td>MTP 的 skip_topk 切换</td><td class="k">atom/spec_decode/eagle_proposer.py:343 · atom/models/deepseek_mtp.py:245</td></tr>
+        <tr><td>MoE：sigmoid + noaux_tc + 双流</td><td class="k">atom/models/deepseek_v2.py:1077-1310</td></tr>
+        <tr><td>ATOM 专属优化的门控开关</td><td class="k">atom/utils/envs.py <span class="dim">ATOM_ENABLE_GLM_FUSED_INDEXER · ATOM_REPLICATE_VOCAB_EMBED</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<footer>
+  依据本机代码与权重实测：ATOM 分支 <code>qwen38_accuracy_rebase</code> @ <code>7387efaf</code>；
+  checkpoint <code>/data/amd_int/models/GLM-5.2-FP8</code>（141 分片）与
+  <code>GLM-5.2-MXFP4</code>（282 分片，两者 config 除量化段外完全一致）。
+  参数量为按形状累加的计算值。
+</footer>
+
+</div>
+
+<script>
+(function(){
+  var IDX = ["full","full","full","shared","shared","shared","full","shared","shared","shared","full","shared","shared","shared","full","shared","shared","shared","full","shared","shared","shared","full","shared","shared","shared","full","shared","shared","shared","full","shared","shared","shared","full","shared","shared","shared","full","shared","shared","shared","full","shared","shared","shared","full","shared","shared","shared","full","shared","shared","shared","full","shared","shared","shared","full","shared","shared","shared","full","shared","shared","shared","full","shared","shared","shared","full","shared","shared","shared","full","shared","shared","shared"];
+  var N = IDX.length;                       // 78
+  var DENSE = 3;                            // first_k_dense_replace
+  var rowIdx = document.getElementById('row-idx');
+  var rowMlp = document.getElementById('row-mlp');
+  var axis   = document.getElementById('axis');
+  var readout= document.getElementById('readout');
+  var DEFAULT= readout.textContent;
+  var lastFull = 0;
+
+  function say(t){ readout.textContent = t; }
+
+  for (var i = 0; i < N; i++){
+    if (IDX[i] === 'full') lastFull = i;
+    var a = document.createElement('div');
+    a.className = 'cell ' + (IDX[i] === 'full' ? 'full' : 'shared');
+    a.dataset.msg = IDX[i] === 'full'
+      ? 'layer ' + i + '  ·  indexer = full  ·  本层计算 top-k(2048) 并写入 _sparse_kv_indices_gpu'
+      : 'layer ' + i + '  ·  indexer = shared  ·  无 indexer 权重，复用 layer ' + lastFull + ' 的 top-k';
+    rowIdx.appendChild(a);
+
+    var b = document.createElement('div');
+    var isDense = i < DENSE;
+    b.className = 'cell ' + (isDense ? 'dense' : 'sparse');
+    b.dataset.msg = isDense
+      ? 'layer ' + i + '  ·  dense MLP  ·  intermediate_size = 12288  (first_k_dense_replace = 3)'
+      : 'layer ' + i + '  ·  MoE  ·  256 routed (top-8, scale 2.5) + 1 shared, moe_intermediate = 2048';
+    rowMlp.appendChild(b);
+  }
+
+  // MTP layer 78, set apart
+  var gapA = document.createElement('div'); gapA.className = 'gapcell'; rowIdx.appendChild(gapA);
+  var gapB = document.createElement('div'); gapB.className = 'gapcell'; rowMlp.appendChild(gapB);
+
+  var m1 = document.createElement('div');
+  m1.className = 'cell mtp';
+  m1.dataset.msg = 'layer 78  ·  MTP  ·  自带完整 indexer；草稿 step 0 算 top-k，step 1+ 靠 set_skip_topk(True) 复用';
+  rowIdx.appendChild(m1);
+
+  var m2 = document.createElement('div');
+  m2.className = 'cell mtpm';
+  m2.dataset.msg = 'layer 78  ·  MTP MoE  ·  enorm / hnorm / eh_proj[6144×12288] / shared_head.norm';
+  rowMlp.appendChild(m2);
+
+  // axis ticks every 6 layers
+  for (var j = 0; j < N; j++){
+    var t = document.createElement('div');
+    t.className = 'tick';
+    t.textContent = (j % 6 === 0) ? j : '';
+    axis.appendChild(t);
+  }
+  var gapC = document.createElement('div'); gapC.className = 'gapcell'; axis.appendChild(gapC);
+  var t78 = document.createElement('div'); t78.className = 'tick'; t78.textContent = '78'; axis.appendChild(t78);
+
+  function bind(row){
+    row.addEventListener('mouseover', function(e){
+      var c = e.target.closest('.cell');
+      if (c && c.dataset.msg) say(c.dataset.msg);
+    });
+    row.addEventListener('mouseleave', function(){ say(DEFAULT); });
+  }
+  bind(rowIdx); bind(rowMlp);
+})();
+</script>
