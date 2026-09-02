@@ -119,13 +119,13 @@ flowchart TB
     subgraph L6["Layer 6 — indexer = full"]
         direction TB
         A1["hidden_states<br/>T × 6144"]
-        A2["fused_qkv_a_proj + RMSNorm<br/>6144 → 2048 · 512 · 64<br/>16.1 M"]
+        A2["fused_qkv_a_proj  [2624, 6144]<br/>一次 GEMM，输出按列切三份<br/>2624 = 2048 + 512 + 64 · 16.1 M"]
         A3["Indexer · DSA<br/>wq_b 2048→32×128 · wk 6144→128 · weights_proj 6144→32<br/>k_norm = LayerNorm fp32 带 bias · rope 交错 · fp8 per_1x128<br/>9.4 M → top-k = 2048"]
         A4["sparse MLA<br/>64 heads · qk 256 · v 256 · latent KV 576<br/>q_b 33.6 M + kv_b 14.7 M + o_proj 100.7 M"]
         A5["MoE<br/>256 routed top-8 + 1 shared · d_ff 2048<br/>9.70 B 参数 · 340 M 激活"]
         A1 --> A2
-        A2 -->|"q_c 2048 + hidden"| A3
-        A2 -->|"kv_c 512 · k_pe 64"| A4
+        A2 -->|"q_c 2048（过 q_a_layernorm）+ normed hidden 6144"| A3
+        A2 -->|"kv_c 512 + k_pe 64 → latent KV 576"| A4
         A4 --> A5
     end
 
@@ -134,13 +134,13 @@ flowchart TB
     subgraph L7["Layer 7 — indexer = shared"]
         direction TB
         B1["hidden_states<br/>T × 6144"]
-        B2["fused_qkv_a_proj + RMSNorm<br/>6144 → 2048 · 512 · 64<br/>16.1 M"]
+        B2["fused_qkv_a_proj  [2624, 6144]<br/>一次 GEMM，输出按列切三份<br/>2624 = 2048 + 512 + 64 · 16.1 M"]
         B3["self.indexer = None<br/>磁盘上无 indexer.* 张量<br/>skip_topk = True<br/>0 参数 · 0 计算"]
         B4["sparse MLA<br/>64 heads · qk 256 · v 256 · latent KV 576<br/>q_b 33.6 M + kv_b 14.7 M + o_proj 100.7 M"]
         B5["MoE<br/>256 routed top-8 + 1 shared · d_ff 2048<br/>9.70 B 参数 · 340 M 激活"]
         B1 --> B2
         B2 -.-> B3
-        B2 -->|"kv_c 512 · k_pe 64"| B4
+        B2 -->|"kv_c 512 + k_pe 64 → latent KV 576"| B4
         B4 --> B5
     end
 
