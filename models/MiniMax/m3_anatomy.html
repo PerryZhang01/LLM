@@ -1,0 +1,943 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MiniMax-M3 架构解剖</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
+
+<style>
+:root{
+  --bg:#E8EBEA; --surface:#F6F8F7; --surface-2:#DDE3E2; --sunk:#D3DAD9;
+  --ink:#141A1C; --ink-2:#4B5A5C; --ink-3:#75858880;
+  --line:#C3CDCC; --line-soft:#D4DCDB;
+  --amber:#8A5D0C; --amber-mark:#C79433; --amber-bg:#EFE2C2;
+  --petrol:#1D5A74; --petrol-mark:#3D87A6; --petrol-bg:#D3E3EA;
+  --brick:#8E3629; --brick-bg:#F0DAD5;
+  --moss:#3F6034; --moss-mark:#6E9A5C; --moss-bg:#DDE8D6;
+  --mute-mark:#9FADAF;
+  --shadow:0 1px 2px rgba(20,26,28,.06), 0 8px 24px -14px rgba(20,26,28,.24);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0D1315; --surface:#141C1E; --surface-2:#1C2629; --sunk:#101819;
+    --ink:#E3EAE9; --ink-2:#94A4A6; --ink-3:#6E7E8080;
+    --line:#283437; --line-soft:#1F2B2E;
+    --amber:#E0AB53; --amber-mark:#D69B36; --amber-bg:#3B2E13;
+    --petrol:#6FB6D5; --petrol-mark:#4C93B4; --petrol-bg:#12303D;
+    --brick:#E58472; --brick-bg:#3A1D18;
+    --moss:#A8CE96; --moss-mark:#7FAE6B; --moss-bg:#22301B;
+    --mute-mark:#3C4A4D;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 30px -18px rgba(0,0,0,.8);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0D1315; --surface:#141C1E; --surface-2:#1C2629; --sunk:#101819;
+  --ink:#E3EAE9; --ink-2:#94A4A6; --ink-3:#6E7E8080;
+  --line:#283437; --line-soft:#1F2B2E;
+  --amber:#E0AB53; --amber-mark:#D69B36; --amber-bg:#3B2E13;
+  --petrol:#6FB6D5; --petrol-mark:#4C93B4; --petrol-bg:#12303D;
+  --brick:#E58472; --brick-bg:#3A1D18;
+  --moss:#A8CE96; --moss-mark:#7FAE6B; --moss-bg:#22301B;
+  --mute-mark:#3C4A4D;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 30px -18px rgba(0,0,0,.8);
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:"Source Serif 4", "Songti SC", "Noto Serif CJK SC", "Source Han Serif SC", Georgia, serif;
+  font-size:16.5px; line-height:1.72;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1140px; margin:0 auto; padding:0 28px 96px}
+
+/* ---------- type ---------- */
+h1,h2,h3,.eyebrow,.stat-n,.lgd,.tag,th{
+  font-family:Archivo, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+}
+h1{font-size:clamp(2.4rem,5.6vw,3.9rem); line-height:1.02; letter-spacing:-.028em; font-weight:700; margin:0; text-wrap:balance}
+h2{font-size:clamp(1.35rem,2.6vw,1.72rem); line-height:1.2; letter-spacing:-.014em; font-weight:600; margin:0 0 .2em; text-wrap:balance}
+h3{font-size:1.0rem; letter-spacing:.005em; font-weight:600; margin:0 0 .35em}
+p{margin:0 0 1em; max-width:70ch}
+a{color:var(--petrol)}
+code,.mono{font-family:"IBM Plex Mono", ui-monospace, monospace; font-size:.855em; font-variant-ligatures:none}
+:not(pre) > code{background:var(--surface-2); padding:.1em .38em; border-radius:3px; color:var(--ink)}
+.eyebrow{
+  font-size:.66rem; font-weight:600; letter-spacing:.16em; text-transform:uppercase;
+  color:var(--ink-2); margin:0 0 .55em;
+}
+.lede{font-size:1.12rem; color:var(--ink-2); max-width:64ch}
+.note{font-size:.9rem; color:var(--ink-2)}
+
+/* ---------- masthead ---------- */
+header.mast{border-bottom:1px solid var(--line); margin-bottom:52px; padding:72px 0 34px}
+.mast-id{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:22px}
+.tag{
+  font-size:.68rem; font-weight:600; letter-spacing:.09em; text-transform:uppercase;
+  padding:.32em .7em; border:1px solid var(--line); border-radius:2px; color:var(--ink-2);
+  background:var(--surface);
+}
+.tag.hot{border-color:var(--amber); color:var(--amber); background:var(--amber-bg)}
+.mast p.lede{margin-top:18px}
+
+.stats{
+  display:grid; grid-template-columns:repeat(auto-fit,minmax(128px,1fr));
+  gap:1px; background:var(--line-soft); border:1px solid var(--line-soft); margin-top:34px;
+}
+.stat{background:var(--surface); padding:14px 16px 16px}
+.stat-n{display:block; font-size:1.5rem; font-weight:700; letter-spacing:-.02em;
+  font-variant-numeric:tabular-nums; line-height:1.15}
+.stat-l{display:block; font-size:.74rem; color:var(--ink-2); letter-spacing:.02em; margin-top:3px;
+  font-family:"IBM Plex Mono", monospace}
+
+/* ---------- sections ---------- */
+section{margin:0 0 68px; scroll-margin-top:20px}
+.rule{border:0; border-top:1px solid var(--line); margin:0 0 34px}
+
+/* ---------- ribbon ---------- */
+.ribbon-frame{background:var(--surface); border:1px solid var(--line); box-shadow:var(--shadow);
+  padding:22px 24px 18px; margin-top:26px}
+.ribbon-scroll{overflow-x:auto; padding-bottom:6px}
+.ribbon{min-width:760px}
+.rrow{display:flex; align-items:stretch; gap:0; margin-bottom:3px}
+.rlab{flex:0 0 104px; font-family:"IBM Plex Mono",monospace; font-size:.7rem;
+  color:var(--ink-2); display:flex; align-items:center; letter-spacing:.02em}
+.rcells{display:flex; gap:1.5px; flex:1}
+.cell{flex:1 1 0; height:26px; background:var(--mute-mark); border-radius:1px;
+  position:relative; transition:transform .08s ease}
+.cell:hover{transform:scaleY(1.14); z-index:2}
+.cell.dsa{background:var(--amber-mark)}
+.cell.kda{background:var(--petrol-mark)}
+.cell.sparse{background:var(--moss-mark)}
+.cell.dense{background:var(--brick)}
+.cell.mtp{background:transparent; border:1.5px dashed var(--amber-mark)}
+.gapcell{flex:0 0 16px}
+.raxis{display:flex; gap:1.5px; margin-top:5px; padding-left:104px}
+.tick{flex:1 1 0; font-family:"IBM Plex Mono",monospace; font-size:.62rem; color:var(--ink-2);
+  text-align:center; font-variant-numeric:tabular-nums}
+.legend{display:flex; flex-wrap:wrap; gap:8px 20px; margin-top:18px; padding-top:14px; border-top:1px solid var(--line-soft)}
+.lgd{display:flex; align-items:center; gap:7px; font-size:.76rem; color:var(--ink-2); font-weight:500}
+.sw{width:13px; height:13px; border-radius:1px; flex:none}
+.sw.dsa{background:var(--amber-mark)} .sw.kda{background:var(--petrol-mark)}
+.sw.sparse{background:var(--moss-mark)} .sw.dense{background:var(--brick)}
+.sw.mtp{border:1.5px dashed var(--amber-mark)}
+
+/* ---------- figure ---------- */
+figure{margin:26px 0 0; background:var(--surface); border:1px solid var(--line);
+  padding:24px 22px 16px; box-shadow:var(--shadow); overflow-x:auto}
+figure svg{max-width:100%; height:auto; display:block; margin:0 auto; color:var(--ink-2);
+  font-family:"IBM Plex Mono", ui-monospace, monospace; font-size:10.5px}
+figure svg text{fill:var(--ink)}
+figure.wide{padding:26px 18px 16px}
+figure .fignum{font-family:Archivo,sans-serif; font-size:.66rem; font-weight:600; letter-spacing:.16em;
+  text-transform:uppercase; color:var(--ink-2); margin:0 0 14px}
+figcaption strong{color:var(--ink)}
+figcaption{font-size:.86rem; color:var(--ink-2); margin-top:16px; padding-top:12px;
+  border-top:1px solid var(--line-soft); max-width:78ch}
+
+/* ---------- tables ---------- */
+.tscroll{overflow-x:auto; margin-top:22px; border:1px solid var(--line); background:var(--surface); box-shadow:var(--shadow)}
+table{border-collapse:collapse; width:100%; min-width:620px; font-size:.9rem}
+th{text-align:left; font-size:.68rem; letter-spacing:.11em; text-transform:uppercase;
+  font-weight:600; color:var(--ink-2); padding:11px 16px; background:var(--surface-2);
+  border-bottom:1px solid var(--line); white-space:nowrap}
+td{padding:10px 16px; border-bottom:1px solid var(--line-soft); vertical-align:top; line-height:1.55}
+tbody tr:last-child td{border-bottom:0}
+td.num{font-family:"IBM Plex Mono",monospace; font-variant-numeric:tabular-nums; white-space:nowrap}
+td.k{font-family:"IBM Plex Mono",monospace; font-size:.82rem; white-space:nowrap}
+.hl{color:var(--amber); font-weight:600}
+.dim{color:var(--ink-2)}
+
+/* ---------- cards ---------- */
+.grid2{display:grid; grid-template-columns:repeat(auto-fit,minmax(310px,1fr)); gap:18px; margin-top:24px}
+.card{background:var(--surface); border:1px solid var(--line); padding:18px 20px 16px; box-shadow:var(--shadow)}
+.card h3{color:var(--ink)}
+.card p:last-child{margin-bottom:0}
+.card.warn{border-left:3px solid var(--brick)}
+.card.good{border-left:3px solid var(--petrol)}
+.card.key{border-left:3px solid var(--amber-mark)}
+.card .eyebrow{margin-bottom:.4em}
+
+ul.tight{margin:0; padding-left:1.15em}
+ul.tight li{margin-bottom:.42em}
+ul.tight li:last-child{margin-bottom:0}
+
+/* ---------- bar chart ---------- */
+.bars{display:flex; flex-direction:column; gap:9px; margin-top:22px;
+  background:var(--surface); border:1px solid var(--line); box-shadow:var(--shadow); padding:20px 22px 18px}
+.brow{display:grid; grid-template-columns:minmax(150px,244px) 1fr minmax(112px,132px); gap:14px; align-items:center}
+.blab{font-family:"IBM Plex Mono",monospace; font-size:.78rem; color:var(--ink); line-height:1.35}
+.blab i{display:block; font-style:normal; font-size:.7rem; color:var(--ink-2)}
+.btrack{height:17px; background:var(--sunk); border-radius:1px; overflow:hidden}
+.bfill{height:100%; background:var(--petrol-mark); border-radius:1px}
+.bfill.a{background:var(--amber-mark)}
+.bfill.m{background:var(--moss-mark)}
+.bfill.d{background:var(--mute-mark)}
+.bval{font-family:"IBM Plex Mono",monospace; font-size:.78rem; text-align:right;
+  font-variant-numeric:tabular-nums; color:var(--ink)}
+.bval em{font-style:normal; color:var(--ink-2); font-size:.72rem; display:block}
+.bfoot{display:flex; justify-content:space-between; gap:16px; flex-wrap:wrap;
+  margin-top:16px; padding-top:13px; border-top:1px solid var(--line-soft);
+  font-size:.78rem; color:var(--ink-2); font-family:"IBM Plex Mono",monospace}
+@media (max-width:620px){ .brow{grid-template-columns:1fr; gap:4px} .bval{text-align:left} }
+
+.pathline{font-family:"IBM Plex Mono",monospace; font-size:.76rem; color:var(--ink-2);
+  background:var(--sunk); padding:5px 9px; display:inline-block; margin-top:10px;
+  border-radius:2px; word-break:break-all}
+
+.callout{background:var(--amber-bg); border:1px solid var(--amber-mark); padding:16px 20px; margin-top:24px}
+.callout .eyebrow{color:var(--amber)}
+.callout p:last-child{margin-bottom:0}
+
+pre.code{background:var(--sunk); border:1px solid var(--line-soft); padding:14px 16px;
+  overflow-x:auto; font-family:"IBM Plex Mono",monospace; font-size:.78rem; line-height:1.6;
+  margin:20px 0 0; color:var(--ink)}
+
+footer{border-top:1px solid var(--line); padding-top:22px; color:var(--ink-2); font-size:.85rem}
+
+@media (max-width:640px){
+  .wrap{padding:0 18px 64px}
+  header.mast{padding-top:44px}
+  .rlab{flex-basis:70px; font-size:.62rem}
+  .raxis{padding-left:70px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+:focus-visible{outline:2px solid var(--petrol); outline-offset:2px}
+
+.backnav{padding:22px 0 0; font-family:Archivo,"PingFang SC",system-ui,sans-serif; font-size:.8rem}
+.backnav a{color:var(--ink-2); text-decoration:none; letter-spacing:.02em}
+.backnav a:hover{color:var(--amber)}
+</style>
+<style>
+/* ---------- MiniMax-M3 专用色带类 ---------- */
+.cell.moe{background:var(--moss-mark)}
+.cell.dense{background:var(--brick)}
+.cell.sparse{background:var(--petrol-mark)}
+.cell.full{background:var(--mute-mark)}
+.cell.idx{background:var(--amber-mark)}
+.cell.reuse{background:var(--amber-bg); border:1px solid var(--amber-mark)}
+.cell.none{background:transparent; border:1px dashed var(--line)}
+.sw.moe{background:var(--moss-mark)}
+.sw.sparse{background:var(--petrol-mark)}
+.sw.full{background:var(--mute-mark)}
+.sw.idx{background:var(--amber-mark)}
+.sw.reuse{background:var(--amber-bg); border:1px solid var(--amber-mark)}
+.bfill.m{background:var(--moss-mark)}
+</style>
+
+<div class="wrap">
+
+<nav class="backnav"><a href="../../index.html">← LLM 模型结构手册</a></nav>
+
+<header class="mast">
+  <div class="mast-id">
+    <span class="tag">MiniMaxM3SparseForConditionalGeneration</span>
+    <span class="tag">model_type · minimax_m3_vl</span>
+    <span class="tag hot">MSA 块级稀疏注意力</span>
+    <span class="tag">GQA 64 : 4</span>
+    <span class="tag">原生多模态</span>
+  </div>
+  <h1>MiniMax-M3 架构解剖</h1>
+  <p class="lede">
+    M3 是<strong>一个 VL 外壳套一个稀疏 MoE 文本骨架</strong>：<code>config.json</code> 顶层只有
+    <code>text_config</code> 与 <code>vision_config</code> 两段，权重也干净地分成
+    <code>language_model.*</code>（22893 个张量）与 <code>vision_tower.* / projector</code>（523 个）。
+    真正的新东西是文本侧的 <strong>MSA</strong>：注意力仍是普通 GQA（64 头 : 4 KV 头，head_dim 128），
+    但每个 query token 先由一个 4 头的轻量 indexer 给<strong>每 128 个 token 一块</strong>打分，
+    只取 16 块 = 2048 个 KV token 进真正的注意力。
+    索引的 K 只有<strong>一个头</strong>、单独存一份 page-128 cache，
+    整套东西在 ATOM 里落在 <code>atom/models/minimax_m3.py</code> 与
+    <code>atom/model_ops/minimax_m3/</code> 两处。
+  </p>
+  <div class="stats">
+    <div class="stat"><span class="stat-n">427.0 B</span><span class="stat-l">总参数（含视觉塔）</span></div>
+    <div class="stat"><span class="stat-n">24.7 B</span><span class="stat-l">单 token 激活</span></div>
+    <div class="stat"><span class="stat-n">3 + 57</span><span class="stat-l">稠密层 + MoE 层</span></div>
+    <div class="stat"><span class="stat-n">57 / 60</span><span class="stat-l">稀疏注意力层</span></div>
+    <div class="stat"><span class="stat-n">6144</span><span class="stat-l">hidden_size</span></div>
+    <div class="stat"><span class="stat-n">128 / 4</span><span class="stat-l">专家数 / 每 token</span></div>
+    <div class="stat"><span class="stat-n">16 × 128</span><span class="stat-l">top-k 块 → 2048 token</span></div>
+    <div class="stat"><span class="stat-n">524 288</span><span class="stat-l">max_position（对外 1 M）</span></div>
+  </div>
+</header>
+
+<section>
+  <p class="eyebrow">定位</p>
+  <h2>不是 MLA + DSA 那一路，是 GQA + 块级 top-k</h2>
+  <p>
+    把 M3 和 GLM-5.2 / 5.3 那一系放在一起最容易读懂它：两边都在做「先索引、再稀疏注意力」，
+    但三个关键选择完全不同。
+  </p>
+  <div class="grid2">
+    <div class="card key">
+      <p class="eyebrow">M3 的三个选择</p>
+      <ul class="tight">
+        <li><strong>注意力本体是 GQA，不是 MLA。</strong>q/k/v 三个独立投影，KV cache 存的就是
+            4 个头 × 128 维的真实 K 和 V，没有低秩压缩、没有解压 GEMM。</li>
+        <li><strong>top-k 的粒度是 128-token 块，不是单 token。</strong>
+            <code>sparse_block_size = 128</code> 被硬绑在 KV page size 上，
+            一个稀疏块正好是一个 page，选中的块号可以直接当块表用。</li>
+        <li><strong>索引器只打分，不带 value。</strong><code>sparse_disable_index_value</code>
+            对所有稀疏层置 1，indexer 没有 v 投影也没有 per-head 权重，
+            score 就是 <code>max</code> over 块内 128 个位置的 <code>q·kᵀ/√128</code>。</li>
+      </ul>
+    </div>
+    <div class="card">
+      <p class="eyebrow">落到 ATOM 的位置</p>
+      <ul class="tight">
+        <li><code>atom/models/minimax_m3.py</code> — 925 行，独立模型文件（不像 GLM 挂在
+            <code>deepseek_v2.py</code> 上）。</li>
+        <li><code>atom/model_ops/minimax_m3/index_topk.py</code> — 1155 行 Triton：打分 + bitonic top-k
+            + 顺手吐出 page-16 块表。</li>
+        <li><code>atom/model_ops/minimax_m3/sparse_attn.py</code> — 1423 行：block-sparse GQA 前向。</li>
+        <li><code>SparseMHAPagedAttentionImpl</code>（<code>attention_mha.py</code>）只覆写了
+            <code>rope_cache</code> 与 <code>dispatch_backend</code> 两个钩子，
+            KV cache 的分配 / 绑定完全走标准 MHA 路径。</li>
+      </ul>
+    </div>
+  </div>
+  <div class="callout">
+    <p class="eyebrow">视觉塔目前不在 ATOM 里</p>
+    <p>
+      文件末尾一行 <code>MiniMaxM3SparseForConditionalGeneration =
+      MiniMaxM3SparseForConditionalGenerationTextOnly</code>：架构名存在，但走的是文本视图，
+      <code>vision_tower. / multi_modal_projector. / patch_merge_mlp.</code> 三个前缀在
+      <code>skip_weight_prefixes</code> 里被直接跳过。所以 recipe 里的
+      <code>--language-model-only</code> 不是可选项。
+    </p>
+  </div>
+</section>
+
+<section>
+  <hr class="rule">
+  <p class="eyebrow">规模</p>
+  <h2>427.0 B 落盘，单 token 只碰 24.7 B</h2>
+  <p>
+    下面每一行都是从 59 个 safetensors 分片的头部读出来的真实形状累加，不是从 config 推的。
+    专家权重吃掉 96.74 %，剩下所有东西加起来不到 14 B。
+  </p>
+  <div class="bars">
+      <div class="brow"><div class="blab">routed_experts<i>57 层 × 128 × 3 × [3072, 6144]</i></div><div class="btrack"><div class="bfill " style="width:100.00%"></div></div><div class="bval">413.122 B<em>96.74 %</em></div></div>
+      <div class="brow"><div class="blab">attention<i>60 层 × (q 8192 + k/v 512 + o)</i></div><div class="btrack"><div class="bfill a" style="width:1.55%"></div></div><div class="bval">6.417 B<em>1.50 %</em></div></div>
+      <div class="brow"><div class="blab">shared_expert<i>57 层 × 3 × [3072, 6144]</i></div><div class="btrack"><div class="bfill m" style="width:0.78%"></div></div><div class="bval">3.228 B<em>0.76 %</em></div></div>
+      <div class="brow"><div class="blab">lm_head<i>[200064, 6144]</i></div><div class="btrack"><div class="bfill d" style="width:0.35%"></div></div><div class="bval">1.229 B<em>0.29 %</em></div></div>
+      <div class="brow"><div class="blab">embed_tokens<i>[200064, 6144]</i></div><div class="btrack"><div class="bfill d" style="width:0.35%"></div></div><div class="bval">1.229 B<em>0.29 %</em></div></div>
+      <div class="brow"><div class="blab">dense_mlp<i>3 层 × 3 × [12288, 6144]</i></div><div class="btrack"><div class="bfill d" style="width:0.35%"></div></div><div class="bval">0.679 B<em>0.16 %</em></div></div>
+      <div class="brow"><div class="blab">vision_tower<i>32 层 × 1280</i></div><div class="btrack"><div class="bfill d" style="width:0.35%"></div></div><div class="bval">0.631 B<em>0.15 %</em></div></div>
+      <div class="brow"><div class="blab">projector + merge<i>1280→6144, 24576→6144</i></div><div class="btrack"><div class="bfill d" style="width:0.35%"></div></div><div class="bval">0.234 B<em>0.05 %</em></div></div>
+      <div class="brow"><div class="blab">sparse_indexer<i>57 层 × (512 + 128) × 6144</i></div><div class="btrack"><div class="bfill a" style="width:0.35%"></div></div><div class="bval">0.224 B<em>0.05 %</em></div></div>
+      <div class="brow"><div class="blab">router + norms<i>gate [128,6144] fp32 等</i></div><div class="btrack"><div class="bfill d" style="width:0.35%"></div></div><div class="bval">0.046 B<em>0.01 %</em></div></div>
+    <div class="bfoot">
+      <span>合计 427.040 B</span>
+      <span>落盘 854.18 GB（bf16）</span>
+      <span>条长以 routed_experts 为满格</span>
+    </div>
+  </div>
+  <div class="grid2">
+    <div class="card good">
+      <p class="eyebrow">激活量是怎么凑出来的</p>
+      <ul class="tight">
+        <li>每个 MoE 层：注意力 106.95 M + indexer 3.93 M + 4 个专家 226.49 M
+            + shared 56.62 M + router 0.79 M ≈ <strong>394.8 M</strong>。</li>
+        <li>× 57 层 = 22.50 B；3 个稠密层 × (106.95 M + 226.49 M) = 1.00 B；
+            lm_head 1.229 B。</li>
+        <li>合计 <strong>24.73 B</strong>（不含 embedding 查表）。稀疏比 24.73 / 427.04 ≈ <strong>1 : 17.3</strong>。</li>
+      </ul>
+    </div>
+    <div class="card warn">
+      <p class="eyebrow">一个对不上的数</p>
+      <p>
+        <code>model.safetensors.index.json</code> 的 <code>metadata.total_size</code> 写的是
+        <strong>869.16 GB</strong>，而 59 个分片 <code>du --apparent-size</code> 求和是
+        <strong>854.18 GB</strong>，与把所有 header 里的形状按 dtype 累加得到的
+        854.17 GB 一致。多出来的 15 GB 不对应任何一个实际张量，算显存时不要用 metadata 那个数。
+      </p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <hr class="rule">
+  <p class="eyebrow">结构全图</p>
+  <h2>从 input_ids 到 logits，再放大其中一层</h2>
+  <p>
+    右侧展开的是 layer 3–59 中任意一层。值得单独看一眼的是那次
+    <strong>[6144 → 9856] 的打包 GEMM</strong>：q(8192) + k(512) + v(512) + index_q(512) + index_k(128)
+    五路一次算完，磁盘上它们是 5 个独立张量，靠
+    <code>packed_modules_mapping</code> 在加载时拼进 <code>qkv_proj</code>。
+    即使是复用上一层 top-k 的那 42 层，这次 GEMM 也照算不误——省掉的只是 indexer 的
+    norm / rope / 打分 / top-k。
+  </p>
+  <figure class="wide">
+    <p class="fignum">图 1 · 结构全图</p>
+    <svg viewBox="0 0 1120 950" role="img" aria-label="MiniMax-M3 完整结构图。左侧自上而下为 input_ids、embed_tokens 200064×6144、layers 0 到 2 的稠密全注意力层、layers 3 到 59 的 MoE 加稀疏注意力层、model.norm、lm_head、logits。右侧展开其中一层：input_layernorm 之后是 qkv_proj 的 6144 到 9856 单次 GEMM，输出按列拆成 q 8192、k 512、v 512、index_q 512、index_k 128 五段；主路做逐头 128 维的 q_norm 和 k_norm、rotary_dim 64 的部分 RoPE，K 和 V 写入 page-16 SHUFFLE 缓存；索引路做同样的 norm 和 RoPE，index_k 写入 page-128 的单头 index cache，然后打分取每 128 个 token 一块的最大值，再选 16 块，把块下标交给 block-sparse paged attention；之后是 o_proj 8192 到 6144、post_attention_layernorm，最后是 128 专家 top-4 加一个 shared expert 的 block_sparse_moe。">
+      <defs><marker id="g1" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z" fill="currentColor"/></marker><marker id="g1a" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z" fill="var(--amber-mark)"/></marker><marker id="g1p" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z" fill="var(--petrol-mark)"/></marker><marker id="g1m" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z" fill="var(--moss-mark)"/></marker><marker id="g1b" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z" fill="var(--brick)"/></marker></defs>
+      <rect x="24" y="44" width="250" height="32" rx="2" fill="var(--surface-2)" stroke="var(--line)"/>
+<text x="149.0" y="63.9" text-anchor="middle" font-size="11" font-weight="600">input_ids  [T]</text>
+      <rect x="24" y="96" width="250" height="40" rx="2" fill="var(--surface-2)" stroke="var(--line)"/>
+<text x="149.0" y="113.1" text-anchor="middle" font-size="11" font-weight="600">embed_tokens</text>
+<text x="149.0" y="126.6" text-anchor="middle" font-size="9.8" font-weight="400">[200064, 6144]</text>
+      <rect x="24" y="166" width="250" height="58" rx="2" fill="var(--brick-bg)" stroke="var(--brick)"/>
+<text x="149.0" y="185.3" text-anchor="middle" font-size="11" font-weight="600">layers 0 – 2 · 稠密</text>
+<text x="149.0" y="198.8" text-anchor="middle" font-size="9.8" font-weight="400">全注意力 + MLP 12288</text>
+<text x="149.0" y="212.3" text-anchor="middle" font-size="9.8" font-weight="400">无 indexer 权重</text>
+      <rect x="24" y="254" width="250" height="86" rx="2" fill="var(--moss-bg)" stroke="var(--moss-mark)"/>
+<text x="149.0" y="287.4" text-anchor="middle" font-size="11" font-weight="600">layers 3 – 59 · MoE + MSA</text>
+<text x="149.0" y="300.9" text-anchor="middle" font-size="9.8" font-weight="400">稀疏注意力 + 128 专家</text>
+<text x="149.0" y="314.4" text-anchor="middle" font-size="9.8" font-weight="400">57 层，结构逐层相同</text>
+      <rect x="24" y="380" width="250" height="34" rx="2" fill="var(--surface-2)" stroke="var(--line)"/>
+<text x="149.0" y="400.9" text-anchor="middle" font-size="11" font-weight="600">model.norm · GemmaRMSNorm</text>
+      <rect x="24" y="444" width="250" height="38" rx="2" fill="var(--surface-2)" stroke="var(--line)"/>
+<text x="149.0" y="460.1" text-anchor="middle" font-size="11" font-weight="600">lm_head</text>
+<text x="149.0" y="473.6" text-anchor="middle" font-size="9.8" font-weight="400">[200064, 6144]</text>
+      <rect x="24" y="512" width="250" height="32" rx="2" fill="var(--surface-2)" stroke="var(--line)"/>
+<text x="149.0" y="531.9" text-anchor="middle" font-size="11" font-weight="600">logits  [T, 200064]</text>
+      <path d="M149.0,76 L149.0,96" fill="none" stroke="currentColor" stroke-width="1.3" marker-end="url(#g1)"/>
+      <path d="M149.0,136 L149.0,166" fill="none" stroke="currentColor" stroke-width="1.3" marker-end="url(#g1)"/>
+      <path d="M149.0,224 L149.0,254" fill="none" stroke="currentColor" stroke-width="1.3" marker-end="url(#g1)"/>
+      <path d="M149.0,340 L149.0,380" fill="none" stroke="currentColor" stroke-width="1.3" marker-end="url(#g1)"/>
+      <path d="M149.0,414 L149.0,444" fill="none" stroke="currentColor" stroke-width="1.3" marker-end="url(#g1)"/>
+      <path d="M149.0,482 L149.0,512" fill="none" stroke="currentColor" stroke-width="1.3" marker-end="url(#g1)"/>
+      <text x="149.0" y="574" text-anchor="middle" font-size="10.5" font-weight="400" fill="var(--ink-2)">残差流全程 [T, 6144]</text>
+      <text x="149.0" y="592" text-anchor="middle" font-size="10" font-weight="400" fill="var(--ink-2)">tie_word_embeddings = false</text>
+      <text x="149.0" y="618" text-anchor="middle" font-size="10" font-weight="400" fill="var(--ink-2)">lm_head 与 embed 各占 1.229 B</text>
+      <rect x="300" y="24" width="796" height="910" rx="3" fill="none" stroke="var(--line)" stroke-dasharray="5 4"/>
+      <text x="316" y="42" text-anchor="start" font-size="10.5" font-weight="600" fill="var(--ink-2)">一层 MoE + MSA 解码层展开（layer 3 – 59）</text>
+      <path d="M274,297 L300,297" fill="none" stroke="var(--moss-mark)" stroke-width="1.3" stroke-dasharray="4 3" marker-end="url(#g1m)"/>
+      <rect x="490" y="64" width="420" height="30" rx="2" fill="var(--surface-2)" stroke="var(--line)"/>
+<text x="700.0" y="82.8" text-anchor="middle" font-size="11" font-weight="600">input_layernorm · GemmaRMSNorm(6144)</text>
+      <rect x="420" y="112" width="560" height="38" rx="2" fill="var(--amber-bg)" stroke="var(--amber-mark)"/>
+<text x="700.0" y="134.8" text-anchor="middle" font-size="11" font-weight="600">qkv_proj（打包，单次 GEMM）  [6144 → 9856]</text>
+      <path d="M700,94 L700,112" fill="none" stroke="currentColor" stroke-width="1.3" marker-end="url(#g1)"/>
+      <text x="700" y="168" text-anchor="middle" font-size="10" font-weight="400" fill="var(--ink-2)">按列切 5 段</text>
+      <rect x="340" y="176" width="250" height="44" rx="2" fill="var(--surface-2)" stroke="var(--line)"/>
+<text x="465.0" y="188.3" text-anchor="middle" font-size="11" font-weight="600">q</text>
+<text x="465.0" y="201.8" text-anchor="middle" font-size="9.8" font-weight="400">[T, 64, 128]</text>
+<text x="465.0" y="215.3" text-anchor="middle" font-size="9.8" font-weight="400">8192</text>
+      <path d="M465.0,150 L465.0,176" fill="none" stroke="currentColor" stroke-width="1.3" marker-end="url(#g1)"/>
+      <rect x="600" y="176" width="100" height="44" rx="2" fill="var(--surface-2)" stroke="var(--line)"/>
+<text x="650.0" y="188.3" text-anchor="middle" font-size="11" font-weight="600">k</text>
+<text x="650.0" y="201.8" text-anchor="middle" font-size="9.8" font-weight="400">[T, 4, 128]</text>
+<text x="650.0" y="215.3" text-anchor="middle" font-size="9.8" font-weight="400">512</text>
+      <path d="M650.0,150 L650.0,176" fill="none" stroke="currentColor" stroke-width="1.3" marker-end="url(#g1)"/>
+      <rect x="710" y="176" width="100" height="44" rx="2" fill="var(--surface-2)" stroke="var(--line)"/>
+<text x="760.0" y="188.3" text-anchor="middle" font-size="11" font-weight="600">v</text>
+<text x="760.0" y="201.8" text-anchor="middle" font-size="9.8" font-weight="400">[T, 4, 128]</text>
+<text x="760.0" y="215.3" text-anchor="middle" font-size="9.8" font-weight="400">512</text>
+      <path d="M760.0,150 L760.0,176" fill="none" stroke="currentColor" stroke-width="1.3" marker-end="url(#g1)"/>
+      <rect x="820" y="176" width="125" height="44" rx="2" fill="var(--amber-bg)" stroke="var(--amber-mark)"/>
+<text x="882.5" y="188.3" text-anchor="middle" font-size="11" font-weight="600">index_q</text>
+<text x="882.5" y="201.8" text-anchor="middle" font-size="9.8" font-weight="400">[T, 4, 128]</text>
+<text x="882.5" y="215.3" text-anchor="middle" font-size="9.8" font-weight="400">512</text>
+      <path d="M882.5,150 L882.5,176" fill="none" stroke="currentColor" stroke-width="1.3" marker-end="url(#g1a)"/>
+      <rect x="955" y="176" width="105" height="44" rx="2" fill="var(--amber-bg)" stroke="var(--amber-mark)"/>
+<text x="1007.5" y="188.3" text-anchor="middle" font-size="11" font-weight="600">index_k</text>
+<text x="1007.5" y="201.8" text-anchor="middle" font-size="9.8" font-weight="400">[T, 1, 128]</text>
+<text x="1007.5" y="215.3" text-anchor="middle" font-size="9.8" font-weight="400">128</text>
+      <path d="M1007.5,150 L1007.5,176" fill="none" stroke="currentColor" stroke-width="1.3" marker-end="url(#g1a)"/>
+      <rect x="340" y="242" width="470" height="46" rx="2" fill="var(--surface-2)" stroke="var(--line)"/>
+<text x="575.0" y="262.1" text-anchor="middle" font-size="11" font-weight="600">q_norm / k_norm · GemmaRMSNorm(128)  逐头</text>
+<text x="575.0" y="275.6" text-anchor="middle" font-size="9.8" font-weight="400">RoPE 部分旋转  rotary_dim = 64 / 128 · θ = 5e6</text>
+      <rect x="820" y="242" width="240" height="46" rx="2" fill="var(--amber-bg)" stroke="var(--amber-mark)"/>
+<text x="940.0" y="262.1" text-anchor="middle" font-size="11" font-weight="600">index_q_norm / index_k_norm(128)</text>
+<text x="940.0" y="275.6" text-anchor="middle" font-size="9.8" font-weight="400">与主路共享同一份 cos/sin</text>
+      <path d="M465,220 L465,242" fill="none" stroke="currentColor" stroke-width="1.3" marker-end="url(#g1)"/>
+      <path d="M650,220 L650,242" fill="none" stroke="currentColor" stroke-width="1.3" marker-end="url(#g1)"/>
+      <path d="M760,220 L760,242" fill="none" stroke="currentColor" stroke-width="1.3" marker-end="url(#g1)"/>
+      <path d="M882,220 L882,242" fill="none" stroke="var(--amber-mark)" stroke-width="1.3" marker-end="url(#g1a)"/>
+      <path d="M1007,220 L1007,242" fill="none" stroke="var(--amber-mark)" stroke-width="1.3" marker-end="url(#g1a)"/>
+      <rect x="560" y="312" width="250" height="46" rx="2" fill="var(--petrol-bg)" stroke="var(--petrol-mark)"/>
+<text x="685.0" y="332.1" text-anchor="middle" font-size="11" font-weight="600">写 KV cache · page-16 SHUFFLE</text>
+<text x="685.0" y="345.6" text-anchor="middle" font-size="9.8" font-weight="400">K [8N,4,hd/x,16,x] · V [8N,4,16/x,hd,x]</text>
+      <rect x="820" y="312" width="240" height="46" rx="2" fill="var(--amber-bg)" stroke="var(--amber-mark)"/>
+<text x="940.0" y="332.1" text-anchor="middle" font-size="11" font-weight="600">写 index cache · page-128</text>
+<text x="940.0" y="345.6" text-anchor="middle" font-size="9.8" font-weight="400">[N, 128, 128]  单头，4 个索引头共享</text>
+      <path d="M685,288 L685,312" fill="none" stroke="var(--petrol-mark)" stroke-width="1.3" marker-end="url(#g1p)"/>
+      <path d="M940,288 L940,312" fill="none" stroke="var(--amber-mark)" stroke-width="1.3" marker-end="url(#g1a)"/>
+      <rect x="820" y="378" width="240" height="54" rx="2" fill="var(--amber-bg)" stroke="var(--amber-mark)"/>
+<text x="940.0" y="395.4" text-anchor="middle" font-size="11" font-weight="600">打分  q·kᵀ / √128</text>
+<text x="940.0" y="408.9" text-anchor="middle" font-size="9.8" font-weight="400">每 128 token 一块取 max</text>
+<text x="940.0" y="422.4" text-anchor="middle" font-size="9.8" font-weight="400">score [4, T, ⌈S/128⌉]</text>
+      <path d="M940,358 L940,378" fill="none" stroke="var(--amber-mark)" stroke-width="1.3" marker-end="url(#g1a)"/>
+      <rect x="820" y="452" width="240" height="46" rx="2" fill="var(--amber-bg)" stroke="var(--amber-mark)"/>
+<text x="940.0" y="472.1" text-anchor="middle" font-size="11" font-weight="600">top-k = 16 块（bitonic）</text>
+<text x="940.0" y="485.6" text-anchor="middle" font-size="9.8" font-weight="400">topk_idx [4, T, 16] → 块表 [T, 128]</text>
+      <path d="M940,432 L940,452" fill="none" stroke="var(--amber-mark)" stroke-width="1.3" marker-end="url(#g1a)"/>
+      <rect x="340" y="524" width="480" height="52" rx="2" fill="var(--petrol-bg)" stroke="var(--petrol-mark)"/>
+<text x="580.0" y="540.4" text-anchor="middle" font-size="11" font-weight="600">block-sparse paged attention（AITER ASM / gluon）</text>
+<text x="580.0" y="553.9" text-anchor="middle" font-size="9.8" font-weight="400">每个 q 头只读 16 × 128 = 2048 个 KV token</text>
+<text x="580.0" y="567.4" text-anchor="middle" font-size="9.8" font-weight="400">out [T, 64, 128]</text>
+      <path d="M420,288 L420,524" fill="none" stroke="currentColor" stroke-width="1.3" marker-end="url(#g1)"/>
+      <text x="432" y="400" text-anchor="start" font-size="10" font-weight="400" fill="var(--ink-2)">q 不入 cache</text>
+      <path d="M685,358 L685,524" fill="none" stroke="var(--petrol-mark)" stroke-width="1.3" marker-end="url(#g1p)"/>
+      <text x="697" y="440" text-anchor="start" font-size="10" font-weight="400" fill="var(--ink-2)">KV 读回</text>
+      <path d="M940,498 L830,498 L830,545" fill="none" stroke="var(--amber-mark)" stroke-width="1.3" marker-end="url(#g1a)"/>
+      <text x="880" y="512" text-anchor="middle" font-size="10" font-weight="400" fill="var(--ink-2)">选中块下标</text>
+      <rect x="440" y="600" width="360" height="38" rx="2" fill="var(--surface-2)" stroke="var(--line)"/>
+<text x="620.0" y="622.9" text-anchor="middle" font-size="11" font-weight="600">o_proj  [8192 → 6144]  RowParallel</text>
+      <path d="M620,576 L620,600" fill="none" stroke="currentColor" stroke-width="1.3" marker-end="url(#g1)"/>
+      <rect x="440" y="658" width="360" height="32" rx="2" fill="var(--surface-2)" stroke="var(--line)"/>
+<text x="620.0" y="677.9" text-anchor="middle" font-size="11" font-weight="600">post_attention_layernorm(6144)</text>
+      <path d="M620,638 L620,658" fill="none" stroke="currentColor" stroke-width="1.3" marker-end="url(#g1)"/>
+      <rect x="340" y="706" width="720" height="176" rx="3" fill="var(--moss-bg)" stroke="var(--moss-mark)"/>
+      <text x="356" y="724" text-anchor="start" font-size="10.5" font-weight="600" fill="var(--ink)">block_sparse_moe</text>
+      <path d="M620,690 L620,706" fill="none" stroke="var(--moss-mark)" stroke-width="1.3" marker-end="url(#g1m)"/>
+      <rect x="360" y="736" width="170" height="48" rx="2" fill="var(--sunk)" stroke="var(--line-soft)"/>
+<text x="445.0" y="757.1" text-anchor="middle" font-size="11" font-weight="600">gate [6144 → 128]</text>
+<text x="445.0" y="770.6" text-anchor="middle" font-size="9.8" font-weight="400">fp32 权重 · sigmoid</text>
+      <rect x="352" y="800" width="196" height="44" rx="2" fill="var(--sunk)" stroke="var(--line-soft)"/>
+<text x="450.0" y="819.1" text-anchor="middle" font-size="11" font-weight="600">+ e_score_correction_bias</text>
+<text x="450.0" y="832.6" text-anchor="middle" font-size="9.8" font-weight="400">[128] fp32</text>
+      <rect x="556" y="736" width="160" height="48" rx="2" fill="var(--sunk)" stroke="var(--line-soft)"/>
+<text x="636.0" y="757.1" text-anchor="middle" font-size="11" font-weight="600">top-4 / 128</text>
+<text x="636.0" y="770.6" text-anchor="middle" font-size="9.8" font-weight="400">renormalize</text>
+      <rect x="556" y="800" width="160" height="44" rx="2" fill="var(--sunk)" stroke="var(--line-soft)"/>
+<text x="636.0" y="819.1" text-anchor="middle" font-size="11" font-weight="600">× routed_scaling</text>
+<text x="636.0" y="832.6" text-anchor="middle" font-size="9.8" font-weight="400">2.0</text>
+      <rect x="742" y="736" width="300" height="48" rx="2" fill="var(--sunk)" stroke="var(--line-soft)"/>
+<text x="892.0" y="757.1" text-anchor="middle" font-size="11" font-weight="600">选中的 4 个专家</text>
+<text x="892.0" y="770.6" text-anchor="middle" font-size="9.8" font-weight="400">w1, w3 [3072, 6144] · w2 [6144, 3072]</text>
+      <rect x="742" y="800" width="300" height="44" rx="2" fill="var(--sunk)" stroke="var(--line-soft)"/>
+<text x="892.0" y="819.1" text-anchor="middle" font-size="11" font-weight="600">shared_experts × 1  always-on</text>
+<text x="892.0" y="832.6" text-anchor="middle" font-size="9.8" font-weight="400">swiglu_oai  α=1.702 · limit=7.0</text>
+      <path d="M530,760 L556,760" fill="none" stroke="var(--moss-mark)" stroke-width="1.3" marker-end="url(#g1m)"/>
+      <path d="M445,784 L445,800" fill="none" stroke="var(--moss-mark)" stroke-width="1.3" marker-end="url(#g1m)"/>
+      <path d="M548,818 L552,818 L556,786" fill="none" stroke="var(--moss-mark)" stroke-width="1.3" marker-end="url(#g1m)"/>
+      <path d="M716,760 L742,760" fill="none" stroke="var(--moss-mark)" stroke-width="1.3" marker-end="url(#g1m)"/>
+      <rect x="440" y="900" width="360" height="30" rx="2" fill="var(--surface-2)" stroke="var(--line)"/>
+<text x="620.0" y="918.9" text-anchor="middle" font-size="11" font-weight="600">hidden [T, 6144] → 下一层残差</text>
+      <path d="M620,882 L620,900" fill="none" stroke="currentColor" stroke-width="1.3" marker-end="url(#g1)"/>
+    </svg>
+    <figcaption>
+      残差加法与 all-reduce 没有画出来：ATOM 把「上一层的残差 + all-reduce + GemmaRMSNorm（+ 可选 fp8 量化）」
+      融成一个算子 <code>fused_allreduce_gemma_rms_norm[_quant]</code>，
+      所以图中每个 layernorm 方框实际上都同时承担了 TP 归约与残差累加。
+    </figcaption>
+  </figure>
+</section>
+
+<section id="msa">
+  <hr class="rule">
+  <p class="eyebrow">核心机制 · MSA</p>
+  <h2>4 个索引头，一份共享的索引 K</h2>
+  <p>
+    索引器的形状很值得单独念一遍：<code>index_q_proj [512, 6144]</code> 是
+    <strong>4 个头 × 128 维</strong>，而 <code>index_k_proj [128, 6144]</code> 只有
+    <strong>1 个头</strong>。打分内核里 <code>pid_h</code> 遍历 4 个索引头，
+    但每次都从同一个 page 载入同一份 K——<strong>索引是 MQA，主注意力是 GQA</strong>。
+    4 个索引头正好对上 4 个 KV 头，于是每个 KV 头组（16 个 q 头）拿到属于自己的那 16 个块。
+  </p>
+  <figure class="wide">
+    <p class="fignum">图 2 · MSA 三步</p>
+    <svg viewBox="0 0 1060 424" role="img" aria-label="MSA 的三步。第一步打分：index_q 形状 T×4×128 与 index cache 形状 N×128×128 相乘除以根号 128，每 128 个 token 一块取最大值，得到 score 形状 4×T×上取整的 S 除以 128。第二步选块：bitonic top-k 取 16 块，其中 1 个强制的 local 块靠把 score 改写成 1e29 来保证入选，输出 topk_idx 形状 4×T×16。第三步取 KV：每个 128 块展开成 8 个物理 16-page，形成 T×128 的稀疏块表，每个 query 头只读 2048 个 token。下方是比例条，2048 个 token 在上下文 2048、8192、65536、262144、1048576 下分别占 100%、25%、3.125%、0.78%、0.195%。">
+      <defs><marker id="g2" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z" fill="currentColor"/></marker><marker id="g2a" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z" fill="var(--amber-mark)"/></marker><marker id="g2p" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z" fill="var(--petrol-mark)"/></marker><marker id="g2m" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z" fill="var(--moss-mark)"/></marker><marker id="g2b" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z" fill="var(--brick)"/></marker></defs>
+      <rect x="24" y="52" width="300" height="106" rx="2" fill="var(--amber-bg)" stroke="var(--amber-mark)"/>
+<text x="174.0" y="88.6" text-anchor="middle" font-size="11" font-weight="600">① 打分  index score</text>
+<text x="174.0" y="102.1" text-anchor="middle" font-size="9.8" font-weight="400">index_q [T,4,128] × index cache [N,128,128]</text>
+<text x="174.0" y="115.6" text-anchor="middle" font-size="9.8" font-weight="400">q·kᵀ / √128，每 128-token 块内取 max</text>
+<text x="174.0" y="129.1" text-anchor="middle" font-size="9.8" font-weight="400">→ score [4, T, ⌈S/128⌉]  fp32</text>
+      <rect x="378" y="52" width="300" height="106" rx="2" fill="var(--amber-bg)" stroke="var(--amber-mark)"/>
+<text x="528.0" y="88.6" text-anchor="middle" font-size="11" font-weight="600">② 选块  top-k</text>
+<text x="528.0" y="102.1" text-anchor="middle" font-size="9.8" font-weight="400">bitonic top-k，k = 16（含 1 个强制 local 块）</text>
+<text x="528.0" y="115.6" text-anchor="middle" font-size="9.8" font-weight="400">score 被改写为 1e29 以强制入选</text>
+<text x="528.0" y="129.1" text-anchor="middle" font-size="9.8" font-weight="400">→ topk_idx [4, T, 16]  int32</text>
+      <rect x="732" y="52" width="304" height="106" rx="2" fill="var(--petrol-bg)" stroke="var(--petrol-mark)"/>
+<text x="884.0" y="88.6" text-anchor="middle" font-size="11" font-weight="600">③ 取 KV  block-sparse PA</text>
+<text x="884.0" y="102.1" text-anchor="middle" font-size="9.8" font-weight="400">每个 128-块展开成 8 个物理 16-page</text>
+<text x="884.0" y="115.6" text-anchor="middle" font-size="9.8" font-weight="400">sparse block table [T, 16 × 8 = 128]</text>
+<text x="884.0" y="129.1" text-anchor="middle" font-size="9.8" font-weight="400">→ 每个 q 头只读 2048 个 token</text>
+      <path d="M324,105 L378,105" fill="none" stroke="var(--amber-mark)" stroke-width="1.3" marker-end="url(#g2a)"/>
+      <path d="M678,105 L732,105" fill="none" stroke="var(--petrol-mark)" stroke-width="1.3" marker-end="url(#g2p)"/>
+      <text x="351" y="96" text-anchor="middle" font-size="9.5" font-weight="400" fill="var(--ink-2)">4 个索引头</text>
+      <text x="705" y="96" text-anchor="middle" font-size="9.5" font-weight="400" fill="var(--ink-2)">块下标</text>
+      <text x="24" y="196" text-anchor="start" font-size="11" font-weight="600" fill="var(--ink)">同样的 2048 个 token，在不同上下文长度下是完全不同的一件事</text>
+      <text x="24" y="236" text-anchor="start" font-size="10.5" font-weight="400" fill="var(--ink)">S = 2048</text>
+      <rect x="200" y="224" width="640" height="17" rx="1" fill="var(--sunk)"/>
+      <rect x="200" y="224" width="640.00" height="17" rx="1" fill="var(--amber-mark)"/>
+      <text x="860" y="236" text-anchor="start" font-size="10.5" font-weight="400" fill="var(--ink-2)">100 %</text>
+      <text x="960" y="236" text-anchor="start" font-size="10.5" font-weight="400" fill="var(--ink-2)">16 块</text>
+      <text x="24" y="268" text-anchor="start" font-size="10.5" font-weight="400" fill="var(--ink)">S = 8 192</text>
+      <rect x="200" y="256" width="640" height="17" rx="1" fill="var(--sunk)"/>
+      <rect x="200" y="256" width="160.00" height="17" rx="1" fill="var(--amber-mark)"/>
+      <text x="860" y="268" text-anchor="start" font-size="10.5" font-weight="400" fill="var(--ink-2)">25 %</text>
+      <text x="960" y="268" text-anchor="start" font-size="10.5" font-weight="400" fill="var(--ink-2)">16 块</text>
+      <text x="24" y="300" text-anchor="start" font-size="10.5" font-weight="400" fill="var(--ink)">S = 65 536</text>
+      <rect x="200" y="288" width="640" height="17" rx="1" fill="var(--sunk)"/>
+      <rect x="200" y="288" width="20.00" height="17" rx="1" fill="var(--amber-mark)"/>
+      <text x="860" y="300" text-anchor="start" font-size="10.5" font-weight="400" fill="var(--ink-2)">3.125 %</text>
+      <text x="960" y="300" text-anchor="start" font-size="10.5" font-weight="400" fill="var(--ink-2)">16 块</text>
+      <text x="24" y="332" text-anchor="start" font-size="10.5" font-weight="400" fill="var(--ink)">S = 262 144</text>
+      <rect x="200" y="320" width="640" height="17" rx="1" fill="var(--sunk)"/>
+      <rect x="200" y="320" width="5.00" height="17" rx="1" fill="var(--amber-mark)"/>
+      <text x="860" y="332" text-anchor="start" font-size="10.5" font-weight="400" fill="var(--ink-2)">0.781 %</text>
+      <text x="960" y="332" text-anchor="start" font-size="10.5" font-weight="400" fill="var(--ink-2)">16 块</text>
+      <text x="24" y="364" text-anchor="start" font-size="10.5" font-weight="400" fill="var(--ink)">S = 1 048 576  (1M)</text>
+      <rect x="200" y="352" width="640" height="17" rx="1" fill="var(--sunk)"/>
+      <rect x="200" y="352" width="2.00" height="17" rx="1" fill="var(--amber-mark)"/>
+      <text x="860" y="364" text-anchor="start" font-size="10.5" font-weight="400" fill="var(--ink-2)">0.195 %</text>
+      <text x="960" y="364" text-anchor="start" font-size="10.5" font-weight="400" fill="var(--ink-2)">16 块</text>
+      <text x="24" y="398" text-anchor="start" font-size="10" font-weight="400" fill="var(--ink-2)">上下文不足 2048 时 top-k 覆盖全部块，MSA 退化为全注意力；真正省下来的算力只在长上下文出现。</text>
+    </svg>
+    <figcaption>
+      <code>sparse_init_block = 0</code>、<code>sparse_local_block = 1</code>：M3 <strong>不强制保留开头的块</strong>，
+      只强制保留当前 token 所在的那一块。强制的实现方式是在 top-k 之前把该块的 score 直接改写成
+      <code>1e29</code>（init 用 <code>1e30</code>），而不是单独留出名额——所以 16 是<strong>含</strong>强制块的总数。
+    </figcaption>
+  </figure>
+  <div class="grid2">
+    <div class="card">
+      <p class="eyebrow">打分内核的两个细节</p>
+      <ul class="tight">
+        <li>缩放用的是主注意力的 <code>sm_scale = 128<sup>-1/2</sup></code>，并且预乘了
+            <code>log2(e)</code>——整条链路是 base-2 softmax。</li>
+        <li>因果掩码只在「当前 q 块可能落进这个 K 块」时才施加，其余块整块跳过掩码计算。
+            块内被掩掉的位置取 <code>-inf</code>，不会污染 <code>max</code>。</li>
+      </ul>
+    </div>
+    <div class="card">
+      <p class="eyebrow">为什么 block-size 必须是 128</p>
+      <p>
+        index cache 布局是 <code>[num_blocks, 128, 128]</code>，第二维就是 page 内的 token 位置。
+        打分内核用 <code>block_table[blk]</code> 直接换算 page 号，
+        top-k 出来的块号也直接当块表用。<code>--block-size 128</code> 一改，这三处同时失配。
+      </p>
+    </div>
+  </div>
+</section>
+
+
+  <figure class="wide">
+    <p class="fignum">图 3 · 层调度</p>
+    <div class="ribbon-scroll"><div class="ribbon">
+      <div class="rrow"><div class="rlab">FFN</div><div class="rcells"><div class="cell dense" title="layer 0 · mlp 12288"></div><div class="cell dense" title="layer 1 · mlp 12288"></div><div class="cell dense" title="layer 2 · mlp 12288"></div><div class="cell moe" title="layer 3 · 128 专家 top-4"></div><div class="cell moe" title="layer 4 · 128 专家 top-4"></div><div class="cell moe" title="layer 5 · 128 专家 top-4"></div><div class="cell moe" title="layer 6 · 128 专家 top-4"></div><div class="cell moe" title="layer 7 · 128 专家 top-4"></div><div class="cell moe" title="layer 8 · 128 专家 top-4"></div><div class="cell moe" title="layer 9 · 128 专家 top-4"></div><div class="cell moe" title="layer 10 · 128 专家 top-4"></div><div class="cell moe" title="layer 11 · 128 专家 top-4"></div><div class="cell moe" title="layer 12 · 128 专家 top-4"></div><div class="cell moe" title="layer 13 · 128 专家 top-4"></div><div class="cell moe" title="layer 14 · 128 专家 top-4"></div><div class="cell moe" title="layer 15 · 128 专家 top-4"></div><div class="cell moe" title="layer 16 · 128 专家 top-4"></div><div class="cell moe" title="layer 17 · 128 专家 top-4"></div><div class="cell moe" title="layer 18 · 128 专家 top-4"></div><div class="cell moe" title="layer 19 · 128 专家 top-4"></div><div class="cell moe" title="layer 20 · 128 专家 top-4"></div><div class="cell moe" title="layer 21 · 128 专家 top-4"></div><div class="cell moe" title="layer 22 · 128 专家 top-4"></div><div class="cell moe" title="layer 23 · 128 专家 top-4"></div><div class="cell moe" title="layer 24 · 128 专家 top-4"></div><div class="cell moe" title="layer 25 · 128 专家 top-4"></div><div class="cell moe" title="layer 26 · 128 专家 top-4"></div><div class="cell moe" title="layer 27 · 128 专家 top-4"></div><div class="cell moe" title="layer 28 · 128 专家 top-4"></div><div class="cell moe" title="layer 29 · 128 专家 top-4"></div><div class="cell moe" title="layer 30 · 128 专家 top-4"></div><div class="cell moe" title="layer 31 · 128 专家 top-4"></div><div class="cell moe" title="layer 32 · 128 专家 top-4"></div><div class="cell moe" title="layer 33 · 128 专家 top-4"></div><div class="cell moe" title="layer 34 · 128 专家 top-4"></div><div class="cell moe" title="layer 35 · 128 专家 top-4"></div><div class="cell moe" title="layer 36 · 128 专家 top-4"></div><div class="cell moe" title="layer 37 · 128 专家 top-4"></div><div class="cell moe" title="layer 38 · 128 专家 top-4"></div><div class="cell moe" title="layer 39 · 128 专家 top-4"></div><div class="cell moe" title="layer 40 · 128 专家 top-4"></div><div class="cell moe" title="layer 41 · 128 专家 top-4"></div><div class="cell moe" title="layer 42 · 128 专家 top-4"></div><div class="cell moe" title="layer 43 · 128 专家 top-4"></div><div class="cell moe" title="layer 44 · 128 专家 top-4"></div><div class="cell moe" title="layer 45 · 128 专家 top-4"></div><div class="cell moe" title="layer 46 · 128 专家 top-4"></div><div class="cell moe" title="layer 47 · 128 专家 top-4"></div><div class="cell moe" title="layer 48 · 128 专家 top-4"></div><div class="cell moe" title="layer 49 · 128 专家 top-4"></div><div class="cell moe" title="layer 50 · 128 专家 top-4"></div><div class="cell moe" title="layer 51 · 128 专家 top-4"></div><div class="cell moe" title="layer 52 · 128 专家 top-4"></div><div class="cell moe" title="layer 53 · 128 专家 top-4"></div><div class="cell moe" title="layer 54 · 128 专家 top-4"></div><div class="cell moe" title="layer 55 · 128 专家 top-4"></div><div class="cell moe" title="layer 56 · 128 专家 top-4"></div><div class="cell moe" title="layer 57 · 128 专家 top-4"></div><div class="cell moe" title="layer 58 · 128 专家 top-4"></div><div class="cell moe" title="layer 59 · 128 专家 top-4"></div></div></div>
+      <div class="rrow"><div class="rlab">attention</div><div class="rcells"><div class="cell full" title="layer 0 · 全注意力"></div><div class="cell full" title="layer 1 · 全注意力"></div><div class="cell full" title="layer 2 · 全注意力"></div><div class="cell sparse" title="layer 3 · MSA 稀疏注意力"></div><div class="cell sparse" title="layer 4 · MSA 稀疏注意力"></div><div class="cell sparse" title="layer 5 · MSA 稀疏注意力"></div><div class="cell sparse" title="layer 6 · MSA 稀疏注意力"></div><div class="cell sparse" title="layer 7 · MSA 稀疏注意力"></div><div class="cell sparse" title="layer 8 · MSA 稀疏注意力"></div><div class="cell sparse" title="layer 9 · MSA 稀疏注意力"></div><div class="cell sparse" title="layer 10 · MSA 稀疏注意力"></div><div class="cell sparse" title="layer 11 · MSA 稀疏注意力"></div><div class="cell sparse" title="layer 12 · MSA 稀疏注意力"></div><div class="cell sparse" title="layer 13 · MSA 稀疏注意力"></div><div class="cell sparse" title="layer 14 · MSA 稀疏注意力"></div><div class="cell sparse" title="layer 15 · MSA 稀疏注意力"></div><div class="cell sparse" title="layer 16 · MSA 稀疏注意力"></div><div class="cell sparse" title="layer 17 · MSA 稀疏注意力"></div><div class="cell sparse" title="layer 18 · MSA 稀疏注意力"></div><div class="cell sparse" title="layer 19 · MSA 稀疏注意力"></div><div class="cell sparse" title="layer 20 · MSA 稀疏注意力"></div><div class="cell sparse" title="layer 21 · MSA 稀疏注意力"></div><div class="cell sparse" title="layer 22 · MSA 稀疏注意力"></div><div class="cell sparse" title="layer 23 · MSA 稀疏注意力"></div><div class="cell sparse" title="layer 24 · MSA 稀疏注意力"></div><div class="cell sparse" title="layer 25 · MSA 稀疏注意力"></div><div class="cell sparse" title="layer 26 · MSA 稀疏注意力"></div><div class="cell sparse" title="layer 27 · MSA 稀疏注意力"></div><div class="cell sparse" title="layer 28 · MSA 稀疏注意力"></div><div class="cell sparse" title="layer 29 · MSA 稀疏注意力"></div><div class="cell sparse" title="layer 30 · MSA 稀疏注意力"></div><div class="cell sparse" title="layer 31 · MSA 稀疏注意力"></div><div class="cell sparse" title="layer 32 · MSA 稀疏注意力"></div><div class="cell sparse" title="layer 33 · MSA 稀疏注意力"></div><div class="cell sparse" title="layer 34 · MSA 稀疏注意力"></div><div class="cell sparse" title="layer 35 · MSA 稀疏注意力"></div><div class="cell sparse" title="layer 36 · MSA 稀疏注意力"></div><div class="cell sparse" title="layer 37 · MSA 稀疏注意力"></div><div class="cell sparse" title="layer 38 · MSA 稀疏注意力"></div><div class="cell sparse" title="layer 39 · MSA 稀疏注意力"></div><div class="cell sparse" title="layer 40 · MSA 稀疏注意力"></div><div class="cell sparse" title="layer 41 · MSA 稀疏注意力"></div><div class="cell sparse" title="layer 42 · MSA 稀疏注意力"></div><div class="cell sparse" title="layer 43 · MSA 稀疏注意力"></div><div class="cell sparse" title="layer 44 · MSA 稀疏注意力"></div><div class="cell sparse" title="layer 45 · MSA 稀疏注意力"></div><div class="cell sparse" title="layer 46 · MSA 稀疏注意力"></div><div class="cell sparse" title="layer 47 · MSA 稀疏注意力"></div><div class="cell sparse" title="layer 48 · MSA 稀疏注意力"></div><div class="cell sparse" title="layer 49 · MSA 稀疏注意力"></div><div class="cell sparse" title="layer 50 · MSA 稀疏注意力"></div><div class="cell sparse" title="layer 51 · MSA 稀疏注意力"></div><div class="cell sparse" title="layer 52 · MSA 稀疏注意力"></div><div class="cell sparse" title="layer 53 · MSA 稀疏注意力"></div><div class="cell sparse" title="layer 54 · MSA 稀疏注意力"></div><div class="cell sparse" title="layer 55 · MSA 稀疏注意力"></div><div class="cell sparse" title="layer 56 · MSA 稀疏注意力"></div><div class="cell sparse" title="layer 57 · MSA 稀疏注意力"></div><div class="cell sparse" title="layer 58 · MSA 稀疏注意力"></div><div class="cell sparse" title="layer 59 · MSA 稀疏注意力"></div></div></div>
+      <div class="rrow"><div class="rlab">index top-k</div><div class="rcells"><div class="cell none" title="layer 0 · 无 indexer 权重"></div><div class="cell none" title="layer 1 · 无 indexer 权重"></div><div class="cell none" title="layer 2 · 无 indexer 权重"></div><div class="cell idx" title="layer 3 · sparse ordinal 0 · 计算 top-k"></div><div class="cell reuse" title="layer 4 · sparse ordinal 1 · 复用上一层 top-k"></div><div class="cell reuse" title="layer 5 · sparse ordinal 2 · 复用上一层 top-k"></div><div class="cell reuse" title="layer 6 · sparse ordinal 3 · 复用上一层 top-k"></div><div class="cell idx" title="layer 7 · sparse ordinal 4 · 计算 top-k"></div><div class="cell reuse" title="layer 8 · sparse ordinal 5 · 复用上一层 top-k"></div><div class="cell reuse" title="layer 9 · sparse ordinal 6 · 复用上一层 top-k"></div><div class="cell reuse" title="layer 10 · sparse ordinal 7 · 复用上一层 top-k"></div><div class="cell idx" title="layer 11 · sparse ordinal 8 · 计算 top-k"></div><div class="cell reuse" title="layer 12 · sparse ordinal 9 · 复用上一层 top-k"></div><div class="cell reuse" title="layer 13 · sparse ordinal 10 · 复用上一层 top-k"></div><div class="cell reuse" title="layer 14 · sparse ordinal 11 · 复用上一层 top-k"></div><div class="cell idx" title="layer 15 · sparse ordinal 12 · 计算 top-k"></div><div class="cell reuse" title="layer 16 · sparse ordinal 13 · 复用上一层 top-k"></div><div class="cell reuse" title="layer 17 · sparse ordinal 14 · 复用上一层 top-k"></div><div class="cell reuse" title="layer 18 · sparse ordinal 15 · 复用上一层 top-k"></div><div class="cell idx" title="layer 19 · sparse ordinal 16 · 计算 top-k"></div><div class="cell reuse" title="layer 20 · sparse ordinal 17 · 复用上一层 top-k"></div><div class="cell reuse" title="layer 21 · sparse ordinal 18 · 复用上一层 top-k"></div><div class="cell reuse" title="layer 22 · sparse ordinal 19 · 复用上一层 top-k"></div><div class="cell idx" title="layer 23 · sparse ordinal 20 · 计算 top-k"></div><div class="cell reuse" title="layer 24 · sparse ordinal 21 · 复用上一层 top-k"></div><div class="cell reuse" title="layer 25 · sparse ordinal 22 · 复用上一层 top-k"></div><div class="cell reuse" title="layer 26 · sparse ordinal 23 · 复用上一层 top-k"></div><div class="cell idx" title="layer 27 · sparse ordinal 24 · 计算 top-k"></div><div class="cell reuse" title="layer 28 · sparse ordinal 25 · 复用上一层 top-k"></div><div class="cell reuse" title="layer 29 · sparse ordinal 26 · 复用上一层 top-k"></div><div class="cell reuse" title="layer 30 · sparse ordinal 27 · 复用上一层 top-k"></div><div class="cell idx" title="layer 31 · sparse ordinal 28 · 计算 top-k"></div><div class="cell reuse" title="layer 32 · sparse ordinal 29 · 复用上一层 top-k"></div><div class="cell reuse" title="layer 33 · sparse ordinal 30 · 复用上一层 top-k"></div><div class="cell reuse" title="layer 34 · sparse ordinal 31 · 复用上一层 top-k"></div><div class="cell idx" title="layer 35 · sparse ordinal 32 · 计算 top-k"></div><div class="cell reuse" title="layer 36 · sparse ordinal 33 · 复用上一层 top-k"></div><div class="cell reuse" title="layer 37 · sparse ordinal 34 · 复用上一层 top-k"></div><div class="cell reuse" title="layer 38 · sparse ordinal 35 · 复用上一层 top-k"></div><div class="cell idx" title="layer 39 · sparse ordinal 36 · 计算 top-k"></div><div class="cell reuse" title="layer 40 · sparse ordinal 37 · 复用上一层 top-k"></div><div class="cell reuse" title="layer 41 · sparse ordinal 38 · 复用上一层 top-k"></div><div class="cell reuse" title="layer 42 · sparse ordinal 39 · 复用上一层 top-k"></div><div class="cell idx" title="layer 43 · sparse ordinal 40 · 计算 top-k"></div><div class="cell reuse" title="layer 44 · sparse ordinal 41 · 复用上一层 top-k"></div><div class="cell reuse" title="layer 45 · sparse ordinal 42 · 复用上一层 top-k"></div><div class="cell reuse" title="layer 46 · sparse ordinal 43 · 复用上一层 top-k"></div><div class="cell idx" title="layer 47 · sparse ordinal 44 · 计算 top-k"></div><div class="cell reuse" title="layer 48 · sparse ordinal 45 · 复用上一层 top-k"></div><div class="cell reuse" title="layer 49 · sparse ordinal 46 · 复用上一层 top-k"></div><div class="cell reuse" title="layer 50 · sparse ordinal 47 · 复用上一层 top-k"></div><div class="cell idx" title="layer 51 · sparse ordinal 48 · 计算 top-k"></div><div class="cell reuse" title="layer 52 · sparse ordinal 49 · 复用上一层 top-k"></div><div class="cell reuse" title="layer 53 · sparse ordinal 50 · 复用上一层 top-k"></div><div class="cell reuse" title="layer 54 · sparse ordinal 51 · 复用上一层 top-k"></div><div class="cell idx" title="layer 55 · sparse ordinal 52 · 计算 top-k"></div><div class="cell reuse" title="layer 56 · sparse ordinal 53 · 复用上一层 top-k"></div><div class="cell reuse" title="layer 57 · sparse ordinal 54 · 复用上一层 top-k"></div><div class="cell reuse" title="layer 58 · sparse ordinal 55 · 复用上一层 top-k"></div><div class="cell idx" title="layer 59 · sparse ordinal 56 · 计算 top-k"></div></div></div>
+      <div class="raxis"><div class="tick">0</div><div class="tick"></div><div class="tick"></div><div class="tick"></div><div class="tick"></div><div class="tick"></div><div class="tick"></div><div class="tick"></div><div class="tick"></div><div class="tick"></div><div class="tick">10</div><div class="tick"></div><div class="tick"></div><div class="tick"></div><div class="tick"></div><div class="tick"></div><div class="tick"></div><div class="tick"></div><div class="tick"></div><div class="tick"></div><div class="tick">20</div><div class="tick"></div><div class="tick"></div><div class="tick"></div><div class="tick"></div><div class="tick"></div><div class="tick"></div><div class="tick"></div><div class="tick"></div><div class="tick"></div><div class="tick">30</div><div class="tick"></div><div class="tick"></div><div class="tick"></div><div class="tick"></div><div class="tick"></div><div class="tick"></div><div class="tick"></div><div class="tick"></div><div class="tick"></div><div class="tick">40</div><div class="tick"></div><div class="tick"></div><div class="tick"></div><div class="tick"></div><div class="tick"></div><div class="tick"></div><div class="tick"></div><div class="tick"></div><div class="tick"></div><div class="tick">50</div><div class="tick"></div><div class="tick"></div><div class="tick"></div><div class="tick"></div><div class="tick"></div><div class="tick"></div><div class="tick"></div><div class="tick"></div><div class="tick">59</div></div>
+    </div></div>
+    <div class="legend">
+      <span class="lgd"><span class="sw dense"></span>稠密 MLP（12288）</span>
+      <span class="lgd"><span class="sw moe"></span>MoE（128 专家 / top-4）</span>
+      <span class="lgd"><span class="sw full"></span>全注意力</span>
+      <span class="lgd"><span class="sw sparse"></span>MSA 稀疏注意力</span>
+      <span class="lgd"><span class="sw idx"></span>真的算 top-k（15 层）</span>
+      <span class="lgd"><span class="sw reuse"></span>复用上一层的 top-k（42 层）</span>
+    </div>
+    <figcaption>
+      三条 <code>*_freq</code> 数组在 config 里是同一个形状：<code>moe_layer_freq</code>、
+      <code>sparse_attention_freq</code>、<code>sparse_disable_index_value</code> 都是
+      <code>[0,0,0,1,1,…,1]</code>——<strong>前 3 层稠密且全注意力，后 57 层既是 MoE 也是稀疏层</strong>，
+      三者边界完全重合。第三行不是 checkpoint 的性质而是 ATOM 的运行期调度：
+      <code>use_index_cache=true</code> 且 <code>index_topk_freq=4</code> 时，
+      按<strong>稀疏层序号</strong>（不是绝对层号）每 4 层只有第 1 层跑 indexer 的 norm/rope/打分/top-k，
+      其余 3 层直接复用缓存下来的块下标。57 个稀疏层因此只剩 15 层真正算 top-k。
+    </figcaption>
+  </figure>
+
+<section>
+  <hr class="rule">
+  <p class="eyebrow">MoE</p>
+  <h2>128 个专家里挑 4 个，外加一个永远在线的 shared</h2>
+  <p>
+    路由是 sigmoid 打分 + 修正偏置那一套：<code>gate</code> 权重在 checkpoint 里是
+    <strong>fp32</strong>（<code>[128, 6144]</code>），<code>e_score_correction_bias</code>
+    也是 fp32。选出 top-4 后 renormalize，再整体乘
+    <code>routed_scaling_factor = 2.0</code>，最后加上 shared expert 的输出。
+  </p>
+  <div class="tscroll">
+  <table>
+    <thead><tr><th>字段</th><th>值</th><th>形状 / 说明</th></tr></thead>
+    <tbody>
+      <tr><td class="k">num_local_experts</td><td class="num">128</td><td>w1 / w3 <span class="k">[3072, 6144]</span>，w2 <span class="k">[6144, 3072]</span></td></tr>
+      <tr><td class="k">num_experts_per_tok</td><td class="num hl">4</td><td>每 token 激活 4 × 56.62 M = 226.49 M</td></tr>
+      <tr><td class="k">n_shared_experts</td><td class="num">1</td><td>shared_intermediate_size 3072，与单个路由专家等宽</td></tr>
+      <tr><td class="k">intermediate_size</td><td class="num">3072</td><td>路由专家；<span class="k">dense_intermediate_size</span> 12288 只用于 layer 0–2</td></tr>
+      <tr><td class="k">scoring_func</td><td class="num">sigmoid</td><td>配 <span class="k">use_routing_bias = true</span></td></tr>
+      <tr><td class="k">routed_scaling_factor</td><td class="num">2.0</td><td>只乘路由输出，shared 不乘</td></tr>
+      <tr><td class="k">hidden_act</td><td class="num">swigluoai</td><td><code>gate·σ(1.702·gate)·(up+1)</code>，gate 与 up 各自 clamp 到 ±7.0</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="callout">
+    <p class="eyebrow">ATOM 里一处刻意的反优化</p>
+    <p>
+      <code>MiniMaxM3MoE.__init__</code> 把后端的 <code>intermediate_pad</code> 强行置 0，
+      注释写得很直白：专家权重在<strong>加载时</strong>已经补齐，运行期再走「跳过 pad」的快路径会掉精度，
+      所以宁可整块算完 padded intermediate。看 MoE 性能时这一行值得记住。
+    </p>
+  </div>
+</section>
+
+<section>
+  <hr class="rule">
+  <p class="eyebrow">归一化与位置编码</p>
+  <h2>Gemma 式 RMSNorm，逐头 QK-norm，一半维度做 RoPE</h2>
+  <div class="tscroll">
+  <table>
+    <thead><tr><th>项</th><th>配置</th><th>含义</th></tr></thead>
+    <tbody>
+      <tr><td>归一化</td><td class="k">use_gemma_norm = true</td><td>ATOM 用 <code>GemmaRMSNorm</code>：<code>x·(1+w)</code> 而不是 <code>x·w</code>，且乘完再回 bf16</td></tr>
+      <tr><td>QK-norm</td><td class="k">use_qk_norm · per_head</td><td><code>q_norm / k_norm</code> 权重只有 <span class="k">[128]</span>，对每个头独立归一化，60 层全有</td></tr>
+      <tr><td>RoPE</td><td class="k">partial_rotary_factor = 0.5</td><td><code>rotary_dim = 64</code>，head_dim 的后 64 维不旋转；<code>rope_theta = 5e6</code></td></tr>
+      <tr><td>索引路 RoPE</td><td class="k">共享主路</td><td><code>index_rotary_emb = rotary_emb</code>，连 cos/sin 缓存都是同一份拼好的张量</td></tr>
+      <tr><td>attention 门控</td><td class="k">attention_output_gate = false</td><td>M2 系有的输出门在 M3 上关掉了</td></tr>
+      <tr><td>max_position</td><td class="num">524 288</td><td>config 里是 512 K；对外宣称的 1 M 上下文靠推理侧外推</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p>
+    这一整套（qk-norm → 部分 RoPE → 写 KV → 写 index K）在 ATOM 里是<strong>一个 aiter 算子</strong>：
+    <code>aiter.fused_qknorm_idxrqknorm</code>，直接吃打包好的 qkv 张量，
+    一次写完 SHUFFLE KV cache、index cache 和 fp8 的 per-token dequant scale。
+    只有复用 top-k 的那 42 层会退回到 Triton 版 <code>triton_fused_norm_rope_cache</code>（不带索引路）。
+  </p>
+</section>
+
+<section>
+  <hr class="rule">
+  <p class="eyebrow">显存</p>
+  <h2>缓存账：主 KV 之外还要单独养一份索引 K</h2>
+  <figure class="wide">
+    <p class="fignum">图 4 · 两套 KV 布局</p>
+    <svg viewBox="0 0 1060 400" role="img" aria-label="两套 KV 布局。上方是按标准 MHA 路径分配的 page-128 SHUFFLE 缓存，K 形状 N×4×hd除以x×128×x，V 形状 N×4×128除以x×hd×x，fp8 时还有 N×4×128 的 scale。下方是 ASM 与 gluon 内核实际索引的 page-16 SHUFFLE 视图，K 形状 8N×4×hd除以x×16×x，V 形状 8N×4×16除以x×hd×x，scale 8N×4×16，因为 128 等于 8 乘 16，这是零拷贝的视图重解释。右侧是单头的 page-128 index cache，形状 N×128×128，block_size 必须等于 128。下方比例条显示每 token 主 KV 120 KiB、index K 14.25 KiB。">
+      <defs><marker id="g4" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z" fill="currentColor"/></marker><marker id="g4a" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z" fill="var(--amber-mark)"/></marker><marker id="g4p" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z" fill="var(--petrol-mark)"/></marker><marker id="g4m" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z" fill="var(--moss-mark)"/></marker><marker id="g4b" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z" fill="var(--brick)"/></marker></defs>
+      <text x="24" y="40" text-anchor="start" font-size="11" font-weight="600" fill="var(--ink)">主 KV cache（由标准 MHA 路径分配，与其它 MHA 模型完全相同）</text>
+      <rect x="24" y="54" width="620" height="62" rx="2" fill="var(--petrol-bg)" stroke="var(--petrol-mark)"/>
+<text x="334.0" y="75.3" text-anchor="middle" font-size="11" font-weight="600">page-128 SHUFFLE</text>
+<text x="334.0" y="88.8" text-anchor="middle" font-size="9.8" font-weight="400">K [N, 4, hd/x, 128, x]     V [N, 4, 128/x, hd, x]</text>
+<text x="334.0" y="102.3" text-anchor="middle" font-size="9.8" font-weight="400">k_scale / v_scale [N, 4, 128]（仅 fp8）</text>
+      <rect x="24" y="168" width="620" height="62" rx="2" fill="var(--petrol-bg)" stroke="var(--petrol-mark)"/>
+<text x="334.0" y="189.3" text-anchor="middle" font-size="11" font-weight="600">page-16 SHUFFLE（ASM / gluon 内核实际索引方式）</text>
+<text x="334.0" y="202.8" text-anchor="middle" font-size="9.8" font-weight="400">K [8N, 4, hd/x, 16, x]     V [8N, 4, 16/x, hd, x]</text>
+<text x="334.0" y="216.3" text-anchor="middle" font-size="9.8" font-weight="400">k_scale / v_scale [8N, 4, 16]</text>
+      <path d="M334,116 L334,168" fill="none" stroke="var(--petrol-mark)" stroke-width="1.3" marker-end="url(#g4p)"/>
+      <text x="346" y="146" text-anchor="start" font-size="10" font-weight="400" fill="var(--ink-2)">128 = 8 × 16 → 纯 view 重解释，零拷贝</text>
+      <rect x="690" y="54" width="346" height="62" rx="2" fill="var(--amber-bg)" stroke="var(--amber-mark)"/>
+<text x="863.0" y="75.3" text-anchor="middle" font-size="11" font-weight="600">index cache · page-128</text>
+<text x="863.0" y="88.8" text-anchor="middle" font-size="9.8" font-weight="400">[N, 128, 128]  单头</text>
+<text x="863.0" y="102.3" text-anchor="middle" font-size="9.8" font-weight="400">4 个索引头共读同一份 K</text>
+      <rect x="690" y="168" width="346" height="62" rx="2" fill="var(--amber-bg)" stroke="var(--amber-mark)"/>
+<text x="863.0" y="189.3" text-anchor="middle" font-size="11" font-weight="600">block_size 必须 = 128</text>
+<text x="863.0" y="202.8" text-anchor="middle" font-size="9.8" font-weight="400">一个稀疏块 ⇔ 一个逻辑 page</text>
+<text x="863.0" y="216.3" text-anchor="middle" font-size="9.8" font-weight="400">top-k 下标可直接当块表用</text>
+      <path d="M863,116 L863,168" fill="none" stroke="var(--amber-mark)" stroke-width="1.3" marker-end="url(#g4a)"/>
+      <text x="24" y="268" text-anchor="start" font-size="11" font-weight="600" fill="var(--ink)">每 token 的缓存账（bf16）</text>
+      <text x="24" y="296" text-anchor="start" font-size="10.5" font-weight="400" fill="var(--ink)">主 KV · 60 层 × 2048 B</text>
+      <rect x="270" y="284" width="640" height="17" rx="1" fill="var(--sunk)"/>
+      <rect x="270" y="284" width="572.1" height="17" rx="1" fill="var(--petrol-mark)"/>
+      <text x="922" y="296" text-anchor="start" font-size="10.5" font-weight="400" fill="var(--ink-2)">120.00 KiB</text>
+      <text x="24" y="324" text-anchor="start" font-size="10.5" font-weight="400" fill="var(--ink)">index K · 57 层 × 256 B</text>
+      <rect x="270" y="312" width="640" height="17" rx="1" fill="var(--sunk)"/>
+      <rect x="270" y="312" width="67.9" height="17" rx="1" fill="var(--amber-mark)"/>
+      <text x="922" y="324" text-anchor="start" font-size="10.5" font-weight="400" fill="var(--ink-2)">14.25 KiB</text>
+      <text x="24" y="356" text-anchor="start" font-size="10.5" font-weight="400" fill="var(--ink-2)">合计 134.25 KiB / token → 1 M 上下文单请求 134 GiB；kv-cache-dtype fp8 后主 KV 减半，合计 74.25 KiB / token → 74 GiB。</text>
+    </svg>
+    <figcaption>
+      两套布局是<strong>同一块显存</strong>。ATOM 让 metadata builder 按普通 MHA 分配 page-128 SHUFFLE，
+      到了注意力里再 <code>view</code> 成 page-16——这样绑定路径上没有任何 M3 专用代码，
+      代价是读代码时要记住同一个指针有两种形状。
+    </figcaption>
+  </figure>
+  <div class="tscroll">
+  <table>
+    <thead><tr><th>缓存</th><th>每 token 每层</th><th>层数</th><th>每 token</th><th>1 M 上下文</th></tr></thead>
+    <tbody>
+      <tr><td>主 KV（bf16）</td><td class="num">2 × 4 × 128 × 2 B = 2048 B</td><td class="num">60</td><td class="num">120.00 KiB</td><td class="num">120 GiB</td></tr>
+      <tr><td>index K（bf16）</td><td class="num">1 × 128 × 2 B = 256 B</td><td class="num">57</td><td class="num">14.25 KiB</td><td class="num">14 GiB</td></tr>
+      <tr><td><strong>合计</strong></td><td></td><td></td><td class="num hl">134.25 KiB</td><td class="num hl">134 GiB</td></tr>
+      <tr><td class="dim">主 KV 转 fp8 后</td><td class="num dim">1024 B</td><td class="num dim">60</td><td class="num dim">74.25 KiB</td><td class="num dim">74 GiB</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="note">
+    index cache 的 dtype 由 <code>atom_config.index_cache_dtype</code> 单独控制，默认跟随 KV；
+    打分内核里有 <code>k.dtype.is_fp8()</code> 分支，索引路可以独立降到 fp8。
+  </p>
+</section>
+
+<section>
+  <hr class="rule">
+  <p class="eyebrow">多模态</p>
+  <h2>ViT 出来的 token 先被砍掉 3/4 才进语言模型</h2>
+  <figure class="wide">
+    <p class="fignum">图 5 · 视觉前端</p>
+    <svg viewBox="0 0 1060 330" role="img" aria-label="视觉前端流程。336×336×3 的 tile 经过 Conv3d patch_embedding，卷积核 2×14×14，输出 1280 通道，得到 576 个 patch 的 1280 维表示；经过 32 层 vision_tower，隐藏 1280、16 个头每头 80 维、MLP 5120、gelu、3D RoPE；再经 multi_modal_projector 从 1280 投到 6144 再到 6144，得到 576×6144；然后 2×2 空间合并把 4 个 token 拼成 24576 维共 144 个；经 patch_merge_mlp 从 24576 降回 6144，得到 144×6144，插入文本序列，image_token_index 为 200025，video_token_index 为 200026。最大 2016×2016 输入产生 20736 个 patch，合并后 5184 个 token。">
+      <defs><marker id="g5" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z" fill="currentColor"/></marker><marker id="g5a" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z" fill="var(--amber-mark)"/></marker><marker id="g5p" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z" fill="var(--petrol-mark)"/></marker><marker id="g5m" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z" fill="var(--moss-mark)"/></marker><marker id="g5b" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z" fill="var(--brick)"/></marker></defs>
+      <rect x="24" y="60" width="150" height="56" rx="2" fill="var(--surface-2)" stroke="var(--line)"/>
+<text x="99.0" y="78.3" text-anchor="middle" font-size="11" font-weight="600">输入 tile</text>
+<text x="99.0" y="91.8" text-anchor="middle" font-size="9.8" font-weight="400">336 × 336 × 3</text>
+<text x="99.0" y="105.3" text-anchor="middle" font-size="9.8" font-weight="400">RGB, temporal 2</text>
+      <rect x="206" y="60" width="176" height="56" rx="2" fill="var(--petrol-bg)" stroke="var(--petrol-mark)"/>
+<text x="294.0" y="78.3" text-anchor="middle" font-size="11" font-weight="600">patch_embedding</text>
+<text x="294.0" y="91.8" text-anchor="middle" font-size="9.8" font-weight="400">Conv3d(3→1280)</text>
+<text x="294.0" y="105.3" text-anchor="middle" font-size="9.8" font-weight="400">kernel 2 × 14 × 14</text>
+      <rect x="414" y="60" width="176" height="56" rx="2" fill="var(--surface-2)" stroke="var(--line)"/>
+<text x="502.0" y="85.1" text-anchor="middle" font-size="11" font-weight="600">[576, 1280]</text>
+<text x="502.0" y="98.6" text-anchor="middle" font-size="9.8" font-weight="400">24 × 24 个 patch</text>
+      <rect x="622" y="60" width="200" height="56" rx="2" fill="var(--petrol-bg)" stroke="var(--petrol-mark)"/>
+<text x="722.0" y="78.3" text-anchor="middle" font-size="11" font-weight="600">vision_tower × 32 层</text>
+<text x="722.0" y="91.8" text-anchor="middle" font-size="9.8" font-weight="400">1280 · 16 头 × 80 · MLP 5120</text>
+<text x="722.0" y="105.3" text-anchor="middle" font-size="9.8" font-weight="400">gelu · 3D RoPE</text>
+      <rect x="854" y="60" width="182" height="56" rx="2" fill="var(--surface-2)" stroke="var(--line)"/>
+<text x="945.0" y="78.3" text-anchor="middle" font-size="11" font-weight="600">multi_modal_projector</text>
+<text x="945.0" y="91.8" text-anchor="middle" font-size="9.8" font-weight="400">1280 → 6144 → 6144</text>
+<text x="945.0" y="105.3" text-anchor="middle" font-size="9.8" font-weight="400">gelu, 带 bias</text>
+      <path d="M174,88 L206,88" fill="none" stroke="currentColor" stroke-width="1.3" marker-end="url(#g5)"/>
+      <path d="M382,88 L414,88" fill="none" stroke="currentColor" stroke-width="1.3" marker-end="url(#g5)"/>
+      <path d="M590,88 L622,88" fill="none" stroke="currentColor" stroke-width="1.3" marker-end="url(#g5)"/>
+      <path d="M822,88 L854,88" fill="none" stroke="currentColor" stroke-width="1.3" marker-end="url(#g5)"/>
+      <rect x="854" y="168" width="182" height="52" rx="2" fill="var(--surface-2)" stroke="var(--line)"/>
+<text x="945.0" y="191.1" text-anchor="middle" font-size="11" font-weight="600">[576, 6144]</text>
+<text x="945.0" y="204.6" text-anchor="middle" font-size="9.8" font-weight="400">每 patch 一个 token</text>
+      <rect x="622" y="168" width="200" height="52" rx="2" fill="var(--amber-bg)" stroke="var(--amber-mark)"/>
+<text x="722.0" y="191.1" text-anchor="middle" font-size="11" font-weight="600">2 × 2 空间合并</text>
+<text x="722.0" y="204.6" text-anchor="middle" font-size="9.8" font-weight="400">concat 4 → [144, 24576]</text>
+      <rect x="390" y="168" width="200" height="52" rx="2" fill="var(--amber-bg)" stroke="var(--amber-mark)"/>
+<text x="490.0" y="191.1" text-anchor="middle" font-size="11" font-weight="600">patch_merge_mlp</text>
+<text x="490.0" y="204.6" text-anchor="middle" font-size="9.8" font-weight="400">24576 → 6144 → 6144</text>
+      <rect x="158" y="168" width="200" height="52" rx="2" fill="var(--amber-bg)" stroke="var(--amber-mark)"/>
+<text x="258.0" y="191.1" text-anchor="middle" font-size="11" font-weight="600">[144, 6144]</text>
+<text x="258.0" y="204.6" text-anchor="middle" font-size="9.8" font-weight="400">每 tile 144 个视觉 token</text>
+      <path d="M945,116 L945,168" fill="none" stroke="currentColor" stroke-width="1.3" marker-end="url(#g5)"/>
+      <path d="M854,194 L822,194" fill="none" stroke="currentColor" stroke-width="1.3" marker-end="url(#g5)"/>
+      <path d="M622,194 L590,194" fill="none" stroke="currentColor" stroke-width="1.3" marker-end="url(#g5)"/>
+      <path d="M390,194 L358,194" fill="none" stroke="currentColor" stroke-width="1.3" marker-end="url(#g5)"/>
+      <rect x="24" y="262" width="500" height="50" rx="2" fill="var(--surface-2)" stroke="var(--line)"/>
+<text x="274.0" y="284.1" text-anchor="middle" font-size="11" font-weight="600">插入文本序列</text>
+<text x="274.0" y="297.6" text-anchor="middle" font-size="9.8" font-weight="400">image_token_index = 200025 · video_token_index = 200026</text>
+      <path d="M258,220 L258,262" fill="none" stroke="currentColor" stroke-width="1.3" marker-end="url(#g5)"/>
+      <rect x="560" y="262" width="476" height="50" rx="2" fill="var(--sunk)" stroke="var(--line-soft)"/>
+<text x="798.0" y="284.1" text-anchor="middle" font-size="11" font-weight="600">dynamic_res：最大 2016 × 2016 → 20736 patch → 5184 token</text>
+<text x="798.0" y="297.6" text-anchor="middle" font-size="9.8" font-weight="400">image_grid_pinpoints 共 36 档，每档都是 336 的整数倍</text>
+    </svg>
+    <figcaption>
+      顺序容易记反：<strong>先投影到 6144，再做 2×2 合并</strong>。
+      证据在形状里——<code>patch_merge_mlp.linear_1.weight</code> 是
+      <span class="k">[6144, 24576]</span>，而 24576 = 4 × 6144，不是 4 × 1280。
+      patch_embedding 是 <span class="k">Conv3d [1280, 3, 2, 14, 14]</span>，
+      那个 2 是 <code>temporal_patch_size</code>：静态图按重复两帧处理，视频天然按 2 帧一组。
+    </figcaption>
+  </figure>
+</section>
+
+<section>
+  <hr class="rule">
+  <p class="eyebrow">ATOM 后端</p>
+  <h2>跑起来要注意的几件事</h2>
+  <div class="grid2">
+    <div class="card warn">
+      <p class="eyebrow">不能改的参数</p>
+      <ul class="tight">
+        <li><code>--block-size 128</code>：一个稀疏块 ⇔ 一个 page，改了直接失配。</li>
+        <li><code>--language-model-only</code>：视觉塔未移植。</li>
+        <li><code>--no-trust-remote-code</code>：ATOM 自己注册模型类，
+            用 HF 的 <code>auto_map</code> 反而会走错实现。</li>
+        <li>head_dim 固定 128：sparse 路径写死走 AITER 融合算子，没有 Triton 兜底
+            （<code>use_triton_attn = False</code>）。</li>
+      </ul>
+    </div>
+    <div class="card good">
+      <p class="eyebrow">可以调的开关</p>
+      <ul class="tight">
+        <li><code>--hf-overrides '{"use_index_cache": true, "index_topk_freq": 4}'</code>：
+            top-k 复用的开关与步长，见图 3。</li>
+        <li><code>index_topk_pattern</code>：给一串 <code>"S"</code> / 非 S 逐层指定，
+            优先级高于 <code>index_topk_freq</code>。</li>
+        <li><code>--kv-cache-dtype fp8</code>：主 KV 减半，见缓存账。</li>
+        <li><code>--compilation-config '{"cudagraph_mode": "FULL_AND_PIECEWISE"}'</code>。</li>
+      </ul>
+    </div>
+  </div>
+  <div class="tscroll">
+  <table>
+    <thead><tr><th>checkpoint 变体</th><th>量化</th><th>要点</th></tr></thead>
+    <tbody>
+      <tr><td class="k">MiniMax-M3</td><td>bf16</td><td>854.18 GB，59 分片</td></tr>
+      <tr><td class="k">MiniMax-M3-MXFP4</td><td>fp4 per_group 32 · e8m0 scale</td><td>权重与激活都 MXFP4，观测器 PerBlockMXObserver</td></tr>
+      <tr><td class="k">MiniMax-M3-MXFP8</td><td>mxfp8 · weight_block [1, 32]</td><td>动态激活量化；<code>ignored_layers</code> 里排除了 lm_head、embed、视觉塔与部分层的 <code>block_sparse_moe.gate</code></td></tr>
+      <tr><td class="k">MiniMax-M3-MXFP4-AttnFP8</td><td>MXFP4 + 注意力 fp8</td><td>MXFP4 基础上把注意力线性层单独提到 fp8</td></tr>
+      <tr><td class="k">MiniMax-M3-EAGLE3</td><td>bf16</td><td>草稿模型，见下节</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="note">
+    MXFP8 走的是运行期在线量化：recipe 里那串
+    <code>--additional-config '{"online_quant_config": {"global_quant_config": "ptpc_fp8", …}}'</code>，
+    排除表和 checkpoint 里的 <code>ignored_layers</code> 是同一批名字。
+  </p>
+  <div class="tscroll">
+  <table>
+    <thead><tr><th>配置</th><th>GSM8K flexible-extract</th><th>strict-match</th></tr></thead>
+    <tbody>
+      <tr><td>MXFP8</td><td class="num">0.9503</td><td class="num">0.9510</td></tr>
+      <tr><td>MXFP4</td><td class="num">0.9399</td><td class="num">0.9407</td></tr>
+      <tr><td>MXFP8 + kv fp8</td><td class="num">0.9480</td><td class="num">0.9487</td></tr>
+      <tr><td>MXFP4 + kv fp8</td><td class="num">0.9439</td><td class="num">0.9445</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="note">5-shot、5 次本地取平均，来自 <code>recipes/atom_vllm/MiniMax-M3.md</code>。</p>
+</section>
+
+<section>
+  <hr class="rule">
+  <p class="eyebrow">投机解码</p>
+  <h2>config 写了 MTP，盘上没有 MTP</h2>
+  <p>
+    <code>text_config</code> 里明明白白有 <code>num_mtp_modules = 7</code> 与
+    <code>num_nextn_predict_layers = 1</code>，但 23416 个张量里<strong>没有一个</strong>属于 MTP——
+    ATOM 的模型文件里也没有 MTP 分支。M3 在 ATOM 上的投机解码走的是 <strong>Eagle3</strong>：
+  </p>
+  <div class="grid2">
+    <div class="card">
+      <p class="eyebrow">aux hidden state 的取法</p>
+      <p>
+        <code>get_eagle3_aux_hidden_state_layers()</code> 返回
+        <code>(2, 30, 57)</code>（early / mid / late）。取的是<strong>进入该层、过完 input_layernorm 之后的
+        residual</strong>，不是常见的 <code>hidden_states + residual</code>——
+        因为 M3 的融合 all-reduce RMSNorm 会让那个和在 CUDA graph 下处于 TP 部分和状态甚至出 NaN。
+      </p>
+    </div>
+    <div class="card">
+      <p class="eyebrow">草稿模型</p>
+      <ul class="tight">
+        <li><code>LlamaForCausalLMEagle3</code>，<strong>1 层</strong>。</li>
+        <li>hidden 6144 · intermediate 18432 · 64 头 / 64 KV 头（纯 MHA，不做 GQA）。</li>
+        <li>vocab 200064 与主模型一致，<code>rope_theta</code> 同为 5e6，
+            <code>max_position_embeddings</code> 直接写 1 048 576。</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section>
+  <hr class="rule">
+  <p class="eyebrow">读码路线</p>
+  <h2>按这个顺序看</h2>
+  <div class="tscroll">
+  <table>
+    <thead><tr><th>#</th><th>文件</th><th>看什么</th></tr></thead>
+    <tbody>
+      <tr><td class="num">1</td><td class="k">config.json</td><td>三条 <code>*_freq</code> 数组的边界是否重合（M3 是重合的）</td></tr>
+      <tr><td class="num">2</td><td class="k">atom/models/minimax_m3.py</td><td><code>_sparse_attention_layer_ordinals</code> 与 <code>_should_skip_minimax_m3_index_topk</code>：调度按稀疏层序号而非绝对层号</td></tr>
+      <tr><td class="num">3</td><td class="k">atom/models/minimax_m3.py</td><td><code>MiniMaxM3SparseAttention.forward</code>：5 路 split 的宽度就是那次打包 GEMM 的全部内容</td></tr>
+      <tr><td class="num">4</td><td class="k">atom/model_ops/attention_mha.py</td><td><code>SparseMHAPagedAttentionImpl.rope_cache</code> / <code>_to_page16_shuffle</code>：两套布局在这里对上</td></tr>
+      <tr><td class="num">5</td><td class="k">minimax_m3/index_topk.py</td><td><code>_index_block_score_kernel</code>：4 个索引头共读一份 K；<code>_topk_index_kernel</code>：强制块靠改写 score 实现</td></tr>
+      <tr><td class="num">6</td><td class="k">minimax_m3/sparse_attn.py</td><td>page-16 块表如何喂给 gluon PA</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <pre class="code">recipes/atom_vllm/MiniMax-M3.md      # 起服务的完整命令 + GSM8K 基线
+recipes/atom_sglang/MiniMax-M3.md    # SGLang 后端
+recipes/mesh/MiniMax-M3.md           # mesh 部署
+/shared/data/amd_int/models/MiniMax-M3*   # bf16 与 4 个量化变体</pre>
+</section>
+
+<footer>
+  <p>
+    所有形状与参数量来自 <code>/shared/data/amd_int/models/MiniMax-M3</code> 的
+    59 个 safetensors 分片头部实测；实现细节来自 ATOM
+    <code>atom/models/minimax_m3.py</code> 与 <code>atom/model_ops/minimax_m3/</code>。
+  </p>
+</footer>
+
+</div>

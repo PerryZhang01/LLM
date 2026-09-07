@@ -253,9 +253,9 @@ a.mcard:hover .go{text-decoration:underline}
     面向的是<strong>要动这段代码的人</strong>——不是模型卡，也不是论文摘要。
   </p>
   <div class="stats">
-    <div class="stat"><span class="stat-n">3</span><span class="stat-l">已收录模型</span></div>
-    <div class="stat"><span class="stat-n">1</span><span class="stat-l">模型家族</span></div>
-    <div class="stat"><span class="stat-n">11</span><span class="stat-l">结构图</span></div>
+    <div class="stat"><span class="stat-n">4</span><span class="stat-l">已收录模型</span></div>
+    <div class="stat"><span class="stat-n">2</span><span class="stat-l">模型家族</span></div>
+    <div class="stat"><span class="stat-n">16</span><span class="stat-l">结构图</span></div>
     <div class="stat"><span class="stat-n">ATOM</span><span class="stat-l">推理后端</span></div>
   </div>
 </header>
@@ -264,7 +264,7 @@ a.mcard:hover .go{text-decoration:underline}
   <p class="eyebrow">GLM 家族</p>
   <h2>点开任意一张卡片进入该模型的解剖页</h2>
   <p>
-    三者中<strong>只有两种结构</strong>：GLM-5.2 与旗舰 GLM-5.3 的 config 逐字段相同，
+    这三者中<strong>只有两种结构</strong>：GLM-5.2 与旗舰 GLM-5.3 的 config 逐字段相同，
     共用 <code>deepseek_v2.py</code>；GLM-5.3-Flash 是另一套完全不同的东西。
   </p>
 
@@ -334,32 +334,67 @@ a.mcard:hover .go{text-decoration:underline}
 
 <section>
   <hr class="rule">
+  <p class="eyebrow">MiniMax 家族</p>
+  <h2>另一条稀疏路线：GQA + 块级 top-k</h2>
+  <p>
+    和 GLM 那一系的 MLA + DSA 走的是完全不同的取舍：注意力本体仍是普通 GQA，
+    索引器只打分不带 value，top-k 的粒度是 <strong>128 个 token 一块</strong>而不是单 token。
+  </p>
+
+  <div class="mgrid">
+
+    <a class="mcard f-a" href="models/MiniMax/m3_anatomy.html">
+      <div class="strip"></div>
+      <div class="body">
+        <h3>MiniMax-M3</h3>
+        <span class="arch">MiniMaxM3SparseForConditionalGeneration · minimax_m3_vl</span>
+        <p class="blurb">
+          60 层里 57 层带 MSA 块级稀疏注意力，128 专家 top-4。
+          4 个索引头共读一份单头 index K，选中 16 个 128-token 块 = 2048 个 KV token。
+          原生多模态（ATOM 目前只 serve 文本），ATOM 里有独立模型文件。
+        </p>
+        <div class="mspecs">
+          <div><b>427.0 B</b><span>总参数</span></div>
+          <div><b>24.73 B</b><span>单 token 激活</span></div>
+          <div><b>57 / 60</b><span>稀疏注意力层</span></div>
+          <div><b>6144</b><span>hidden_size</span></div>
+        </div>
+        <div class="mfoot"><span>atom/models/minimax_m3.py</span><span class="go">5 张图 →</span></div>
+      </div>
+    </a>
+
+  </div>
+</section>
+
+<section>
+  <hr class="rule">
   <p class="eyebrow">横向对照</p>
   <h2>三个模型的骨架放在一起看</h2>
   <div class="tscroll">
   <table>
-    <thead><tr><th></th><th>GLM-5.2</th><th>GLM-5.3</th><th>GLM-5.3-Flash</th></tr></thead>
+    <thead><tr><th></th><th>GLM-5.2</th><th>GLM-5.3</th><th>GLM-5.3-Flash</th><th>MiniMax-M3</th></tr></thead>
     <tbody>
-      <tr><td>architectures</td><td class="k">GlmMoeDsa<wbr>ForCausalLM</td><td class="k">GlmMoeDsa<wbr>ForCausalLM</td><td class="k">Glm5Next<wbr>ForConditionalGeneration</td></tr>
-      <tr><td>model_type</td><td class="k">glm_moe_dsa</td><td class="k">glm_moe_dsa</td><td class="k">glm5_next</td></tr>
-      <tr><td>总参数</td><td class="num">753.3 B</td><td class="num">753.3 B</td><td class="num">321.3 B</td></tr>
-      <tr><td>单 token 激活</td><td class="num">41.25 B</td><td class="num">41.25 B</td><td class="num">17.38 B</td></tr>
-      <tr><td>层数</td><td class="num">78 + 1 MTP</td><td class="num">78 + 1 MTP</td><td class="num">45 + 1 MTP</td></tr>
-      <tr><td>hidden_size</td><td class="num">6144</td><td class="num">6144</td><td class="num">4096</td></tr>
-      <tr><td>注意力</td><td>MLA + DSA</td><td>MLA + DSA</td><td class="hl">34 KDA + 11 MLA</td></tr>
-      <tr><td>位置编码</td><td>RoPE θ=8e6</td><td>RoPE θ=8e6</td><td class="hl">NoPE（无）</td></tr>
-      <tr><td>残差</td><td>单路</td><td>单路</td><td class="hl">mHC 四路</td></tr>
-      <tr><td>专家</td><td class="num">256 top-8 + 1</td><td class="num">256 top-8 + 1</td><td class="num">288 top-8 + 1</td></tr>
-      <tr><td>稀疏索引</td><td>IndexShare 21/78</td><td>IndexShare 21/78</td><td class="hl">k-pool 4 token/行</td></tr>
-      <tr><td>KV cache</td><td class="num">87.8 KiB/token</td><td class="num">87.8 KiB/token</td><td class="num">12.4 KiB/token</td></tr>
-      <tr><td>ATOM 实现</td><td class="k">deepseek_v2.py</td><td class="k">deepseek_v2.py</td><td class="k">glm5_next.py</td></tr>
-      <tr><td>多模态</td><td>—</td><td>—</td><td>原生（ATOM 只 serve 文本）</td></tr>
+      <tr><td>architectures</td><td class="k">GlmMoeDsa<wbr>ForCausalLM</td><td class="k">GlmMoeDsa<wbr>ForCausalLM</td><td class="k">Glm5Next<wbr>ForConditionalGeneration</td><td class="k">MiniMaxM3Sparse<wbr>ForConditionalGeneration</td></tr>
+      <tr><td>model_type</td><td class="k">glm_moe_dsa</td><td class="k">glm_moe_dsa</td><td class="k">glm5_next</td><td class="k">minimax_m3_vl</td></tr>
+      <tr><td>总参数</td><td class="num">753.3 B</td><td class="num">753.3 B</td><td class="num">321.3 B</td><td class="num">427.0 B</td></tr>
+      <tr><td>单 token 激活</td><td class="num">41.25 B</td><td class="num">41.25 B</td><td class="num">17.38 B</td><td class="num">24.73 B</td></tr>
+      <tr><td>层数</td><td class="num">78 + 1 MTP</td><td class="num">78 + 1 MTP</td><td class="num">45 + 1 MTP</td><td class="num">60（无 MTP）</td></tr>
+      <tr><td>hidden_size</td><td class="num">6144</td><td class="num">6144</td><td class="num">4096</td><td class="num">6144</td></tr>
+      <tr><td>注意力</td><td>MLA + DSA</td><td>MLA + DSA</td><td class="hl">34 KDA + 11 MLA</td><td class="hl">GQA 64:4 + MSA</td></tr>
+      <tr><td>位置编码</td><td>RoPE θ=8e6</td><td>RoPE θ=8e6</td><td class="hl">NoPE（无）</td><td class="hl">部分 RoPE θ=5e6</td></tr>
+      <tr><td>残差</td><td>单路</td><td>单路</td><td class="hl">mHC 四路</td><td>单路</td></tr>
+      <tr><td>专家</td><td class="num">256 top-8 + 1</td><td class="num">256 top-8 + 1</td><td class="num">288 top-8 + 1</td><td class="num">128 top-4 + 1</td></tr>
+      <tr><td>稀疏索引</td><td>IndexShare 21/78</td><td>IndexShare 21/78</td><td class="hl">k-pool 4 token/行</td><td class="hl">128-token 块 top-16</td></tr>
+      <tr><td>KV cache</td><td class="num">87.8 KiB/token</td><td class="num">87.8 KiB/token</td><td class="num">12.4 KiB/token</td><td class="num">134.25 KiB/token</td></tr>
+      <tr><td>ATOM 实现</td><td class="k">deepseek_v2.py</td><td class="k">deepseek_v2.py</td><td class="k">glm5_next.py</td><td class="k">minimax_m3.py</td></tr>
+      <tr><td>多模态</td><td>—</td><td>—</td><td>原生（ATOM 只 serve 文本）</td><td>原生（ATOM 只 serve 文本）</td></tr>
     </tbody>
   </table>
   </div>
   <p class="note" style="margin-top:14px">
     KV cache 一列按 BF16 计：GLM-5.2/5.3 是 78 层 × 576；
-    GLM-5.3-Flash 只有 11 个 MLA 层承担，代价是 34 个 KDA 层各持一份每请求的递推状态。
+    GLM-5.3-Flash 只有 11 个 MLA 层承担，代价是 34 个 KDA 层各持一份每请求的递推状态；
+    MiniMax-M3 是 60 层 × 2×4×128 的主 KV（120 KiB）再加 57 层单头 index K（14.25 KiB）。
   </p>
 </section>
 

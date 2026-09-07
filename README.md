@@ -39,6 +39,7 @@ GitHub 的文件浏览器不渲染 HTML（只显示源码），所以文档通�
 
 | 模型 | 架构 | 总参数 / 激活 | 结构要点 | 后端实现 |
 |---|---|---|---|---|
+| **[MiniMax-M3](https://perryzhang01.github.io/LLM/models/MiniMax/m3_anatomy.html)** | `minimax_m3_vl` | 427.0 B / 24.73 B | 60 层里 57 层带 MSA 块级稀疏注意力（GQA 64:4 + 128-token 块 top-16），128 专家 top-4，原生多模态 | `atom/models/minimax_m3.py` |
 | **[GLM-5.3-Flash](https://perryzhang01.github.io/LLM/models/GLM/glm53_flash_anatomy.html)** | `glm5_next` | 320.8 B / 17.38 B | 34 层 KDA + 11 层稀疏 MLA 混合，mHC 四路残差，全模型 NoPE，k-pool 稀疏索引 | `atom/models/glm5_next.py` |
 | **[GLM-5.3](https://perryzhang01.github.io/LLM/models/GLM/glm53_anatomy.html)** | `glm_moe_dsa` | 753.3 B / 41.25 B | 78 层 MLA + DSA，256 专家，IndexShare；结构与 5.2 逐字段相同，只多一个 `moe_router_dtype` | `atom/models/deepseek_v2.py` |
 | **[GLM-5.2](https://perryzhang01.github.io/LLM/models/glm52_anatomy.html)** | `glm_moe_dsa` | 753.3 B / 41.25 B | 引入 IndexShare：78 层里只有 21 层真的算 top-k | `atom/models/deepseek_v2.py` |
@@ -66,10 +67,12 @@ GLM-5.2 另有一份 Markdown 版，GitHub 可直接阅读：[`models/GLM/model.
 ├── index.html                          # 模型总览页（GitHub Pages 入口）
 ├── models/
 │   ├── glm52_anatomy.html              # GLM-5.2
-│   └── GLM/
-│       ├── glm53_anatomy.html          # GLM-5.3（旗舰）
-│       ├── glm53_flash_anatomy.html    # GLM-5.3-Flash
-│       └── model.md                    # GLM-5.2 的 Markdown 版
+│   ├── GLM/
+│   │   ├── glm53_anatomy.html          # GLM-5.3（旗舰）
+│   │   ├── glm53_flash_anatomy.html    # GLM-5.3-Flash
+│   │   └── model.md                    # GLM-5.2 的 Markdown 版
+│   └── MiniMax/
+│       └── m3_anatomy.html             # MiniMax-M3
 └── skills/                             # 驱动这些文档生成的 skill
     ├── models.md                       # 模型结构解剖
     ├── accuracy.md                     # 精度调查
@@ -85,13 +88,13 @@ GLM-5.2 另有一份 Markdown 版，GitHub 可直接阅读：[`models/GLM/model.
 
 ```markdown
 # 模型
--glm5.3
+-Minimax M3
 
 # 框架后端
 -atom
 
 # 输出路径
--LLM/models/GLM
+-LLM/models/MiniMax
 ```
 
 产物是一份不依赖构建步骤的 HTML（深浅色自适应、响应式、图全部是内联 SVG）。

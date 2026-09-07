@@ -5,7 +5,7 @@ name: model structure
 
 # 模型
 
--glm5.3
+-Minimax M3
 
 # 框架后端
 
@@ -13,4 +13,4 @@ name: model structure
 
 # 输出路径
 
--LLM/models/GLM
+-LLM/models/MiniMax
