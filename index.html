@@ -382,7 +382,8 @@ a.mcard:hover .go{text-decoration:underline}
         <span class="arch">DeepseekV41ForCausalLM · deepseek_v41</span>
         <p class="blurb">
           40 层 CSA2：2 层滑窗、18 层 2:1 压缩、20 层 1:1 压缩。
-          只有 4 层写下压缩 KV，8 层负责 top-512。残差是 4 路 mHC，
+          只有 4 层写下压缩 KV，8 层负责 top-512，30 层既不压缩也不打分。
+          WINDOW / FULL / REINDEX / REUSE 四种注意力层各一张图；残差是 4 路 mHC，
           层 1 与层 14 各有一张 Engram 表，末尾 3 层 DSpark 起草。
         </p>
         <div class="mspecs">
@@ -391,7 +392,7 @@ a.mcard:hover .go{text-decoration:underline}
           <div><b>40 + 3</b><span>骨干 / DSpark</span></div>
           <div><b>5120</b><span>hidden_size</span></div>
         </div>
-        <div class="mfoot"><span>atom/models/deepseek_v41/</span><span class="go">7 张图 →</span></div>
+        <div class="mfoot"><span>atom/models/deepseek_v41/</span><span class="go">12 张图 →</span></div>
       </div>
     </a>
   </div>
