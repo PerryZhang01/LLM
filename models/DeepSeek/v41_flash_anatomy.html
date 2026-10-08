@@ -170,6 +170,8 @@ footer{border-top:1px solid var(--line); padding-top:22px; color:var(--ink-2); f
     40 层文本骨干，隐藏维 5120，单层一条 512 维的 MQA latent。压缩比只有 0、1、2：
     2 层纯滑窗，18 层把 2 个 token 收成 1 行，20 层一行对一个 token。
     残差是 4 路宽的，层 1 和层 14 各插一张宿主机上的 Engram 表，末尾 3 层 DSpark 用同一份 checkpoint 起草。
+    注意力按 WINDOW / FULL / REINDEX / REUSE 分成四种，Q 和输出投影四种一模一样，
+    差别只在「写哪几份缓存」和「top-512 从哪来」。
   </p>
   <div class="stats">
     <div class="stat"><span class="stat-n">763.21 B</span><span class="stat-l">逻辑参数，含 Engram 表</span></div>
@@ -178,6 +180,7 @@ footer{border-top:1px solid var(--line); padding-top:22px; color:var(--ink-2); f
     <div class="stat"><span class="stat-n">5120</span><span class="stat-l">hidden_size</span></div>
     <div class="stat"><span class="stat-n">384 / 6</span><span class="stat-l">专家数 / 每 token</span></div>
     <div class="stat"><span class="stat-n">512</span><span class="stat-l">index_topk</span></div>
+    <div class="stat"><span class="stat-n">30 / 40</span><span class="stat-l">层既不压缩也不打分</span></div>
     <div class="stat"><span class="stat-n">2.82 KiB</span><span class="stat-l">BF16 池每 token</span></div>
     <div class="stat"><span class="stat-n">1 M</span><span class="stat-l">max_position</span></div>
   </div>
@@ -449,11 +452,17 @@ footer{border-top:1px solid var(--line); padding-top:22px; color:var(--ink-2); f
 <section>
   <hr class="rule">
   <p class="eyebrow">图 2 · 一层</p>
-  <h2>FULL 层把压缩、打分和本层注意力拆到三条流上</h2>
+  <h2>FULL 层把压缩、打分和本层注意力分成三支</h2>
   <p>
     下面按层 2 画：ratio 2，既写压缩 KV，也算 top-512。
-    REUSE 层删掉左右两条支路，只留中间的 QKV 和滑窗。
+    REUSE 层删掉左右两条支路，只留中间的 QKV 和滑窗；
     REINDEX 层保留右边的打分，删掉左边的 compressor 和 <code>indexer.wk</code>。
+    下一节把四种模式各画一张。
+  </p>
+  <p class="note">
+    「三支」说的是依赖关系，不是三条 GPU 流：<code>ATOM_DSV41_SIDE_STREAMS</code> 默认是 <strong>0</strong>，
+    三支顺序跑在主流上；1 让 compressor 借 MoE 的 <code>alt_stream</code>，2 再给 indexer 一条自己的。
+    无论开到哪一级，依赖边都是同两条：投影不能早于 <code>qk_norm</code>，打分不能早于 compressor 写下的那一行。
   </p>
   <figure>
     <p class="fignum">图 2 · 层 2 的张量</p>
@@ -549,6 +558,227 @@ footer{border-top:1px solid var(--line); padding-top:22px; color:var(--ink-2); f
     </div>
   </div>
 </section>
+<section>
+  <hr class="rule">
+  <p class="eyebrow">图 2a–2d · 四种注意力层</p>
+  <h2>同一套 Q/O，四种「写什么、读什么、谁打分」</h2>
+  <p>
+    四种模式的<strong>投影路径完全相同</strong>：<code>wqkv_a</code> 一次 GEMM 出 <code>q_lora [T, 1280]</code> 与 <code>kv [T, 512]</code>，
+    <code>DualRMSNormMXFP8</code> 一次归一化并顺手把 <code>qr</code> 量化成 FP8，<code>wq_b</code> 展开成 <code>Q [T, 64, 512]</code>，
+    输出端一律是「逆 RoPE 融合分组量化 → <code>wo_a</code> 8 组 → <code>wo_b</code>」。
+    <code>build_attention_topology</code> 给每层贴的标签只决定三件事：这一层<strong>额外带哪些权重</strong>、
+    <strong>往哪几份缓存写</strong>、<strong>top-512 从哪来</strong>。
+    40 层里有 30 层既不压缩也不打分。
+  </p>
+
+  <figure>
+    <p class="fignum">图 2a · WINDOW · 层 0–1，以及 3 层 DSpark 草稿 · <code>ratio = 0</code></p>
+    <svg viewBox="0 0 1060 300" role="img" aria-label="WINDOW 层的额外模块、写入与读取">
+      <defs>
+        <marker id="war" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z" fill="var(--mute-mark)"/></marker>
+        <linearGradient id="wgn" x1="0" y1="0" x2=".4" y2="1"><stop offset="0%" stop-color="var(--surface)"/><stop offset="100%" stop-color="var(--surface-2)"/></linearGradient>
+        <linearGradient id="wga" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--amber-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+        <filter id="wsh" x="-8%" y="-12%" width="116%" height="140%"><feDropShadow dx="0" dy="1.4" stdDeviation="2.2" flood-opacity=".14"/></filter>
+      </defs>
+      <rect x="28" y="22" width="1016" height="44" rx="7" fill="var(--sunk)" stroke="var(--line-soft)"/>
+      <text x="44" y="42" font-size="10.5" fill="var(--ink-2)">共用前段：wqkv_a [1792, 5120] FP8 → q_lora [T, 1280] + kv [T, 512] → DualRMSNorm → wq_b [32768, 1280] → Q [T, 64, 512]，RoPE 只转尾 64 维</text>
+      <text x="44" y="58" font-size="10.5" fill="var(--ink-2)">共用后段：attn_sink [64] FP32 加在 logit 上 → 输出 [T, 64, 512] → 逆 RoPE + 每 32 维一组量化 → wo_a 8 × [1024, 4096] → wo_b [5120, 8192] → [T, 5120]</text>
+
+      <rect x="28" y="88" width="320" height="150" rx="8" fill="url(#wgn)" stroke="var(--line)" filter="url(#wsh)"/>
+      <text x="44" y="114" font-weight="600">额外模块</text>
+      <text x="44" y="140" fill="var(--ink-2)">没有 compressor</text>
+      <text x="44" y="162" fill="var(--ink-2)">没有 indexer</text>
+      <text x="44" y="190" fill="var(--ink-3)" opacity=".9">磁盘上这些张量根本不存在</text>
+      <text x="44" y="216" fill="var(--moss)">额外权重 0</text>
+
+      <rect x="370" y="88" width="320" height="150" rx="8" fill="url(#wga)" stroke="var(--amber-mark)" filter="url(#wsh)"/>
+      <text x="386" y="114" font-weight="600">写入</text>
+      <text x="386" y="140" fill="var(--amber)">只写本层滑窗 ring</text>
+      <text x="386" y="162" fill="var(--ink-2)">[512] BF16 / token</text>
+      <text x="386" y="190" fill="var(--ink-2)">ring 深 128（开 DSpark 时 133）</text>
+      <text x="386" y="216" fill="var(--ink-2)">在 STATE 里，完全不碰 PAGE</text>
+
+      <rect x="712" y="88" width="332" height="150" rx="8" fill="url(#wgn)" stroke="var(--line)" filter="url(#wsh)"/>
+      <text x="728" y="114" font-weight="600">读取</text>
+      <text x="728" y="140" fill="var(--ink-2)">本层滑窗，最多 128 行</text>
+      <text x="728" y="162" fill="var(--petrol)">prefix = min(pos + 1, 128)</text>
+      <text x="728" y="190" fill="var(--ink-2)">没有 top-k 那一项</text>
+      <text x="728" y="216" fill="var(--ink-2)">rope = window_rope，θ = 10000</text>
+
+      <path d="M348 163 H370" stroke="var(--mute-mark)" stroke-width="1.3" marker-end="url(#war)"/>
+      <path d="M690 163 H712" stroke="var(--mute-mark)" stroke-width="1.3" marker-end="url(#war)"/>
+
+      <text x="28" y="268" fill="var(--ink-2)">这是全模型最便宜的一层：权重集合就是共用前后段，KV 只有一条 128 行的环，长度不随上下文增长。</text>
+      <text x="28" y="290" fill="var(--ink-2)">草稿层被配置强制钉在这里 —— <tspan font-family="IBM Plex Mono, monospace">compress_ratios</tspan> 的末 3 位必须为 0，否则 build_attention_topology 直接报错。</text>
+    </svg>
+  </figure>
+
+  <figure>
+    <p class="fignum">图 2b · FULL · 层 2 / 8 / 14（ratio 2）与层 20（ratio 1）· 唯一会写 PAGE 的层</p>
+    <svg viewBox="0 0 1060 320" role="img" aria-label="FULL 层的额外模块、写入与读取">
+      <defs>
+        <marker id="far" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z" fill="var(--mute-mark)"/></marker>
+        <linearGradient id="fgn" x1="0" y1="0" x2=".4" y2="1"><stop offset="0%" stop-color="var(--surface)"/><stop offset="100%" stop-color="var(--surface-2)"/></linearGradient>
+        <linearGradient id="fga" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--amber-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+        <linearGradient id="fgp" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--petrol-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+        <filter id="fsh" x="-8%" y="-12%" width="116%" height="140%"><feDropShadow dx="0" dy="1.4" stdDeviation="2.2" flood-opacity=".14"/></filter>
+      </defs>
+      <rect x="28" y="22" width="1016" height="30" rx="7" fill="var(--sunk)" stroke="var(--line-soft)"/>
+      <text x="44" y="42" font-size="10.5" fill="var(--ink-2)">共用前后段同图 2a。下面三栏是 FULL 独有的部分。</text>
+
+      <rect x="28" y="72" width="320" height="186" rx="8" fill="url(#fgp)" stroke="var(--petrol-mark)" filter="url(#fsh)"/>
+      <text x="44" y="98" font-weight="600">额外模块</text>
+      <text x="44" y="124" fill="var(--petrol)">compressor.wkv_gate</text>
+      <text x="44" y="144" fill="var(--ink-2)">[1024, 5120] BF16（ratio 2）</text>
+      <text x="44" y="164" fill="var(--ink-2)">层 20 只有 [512, 5120]，无 gate</text>
+      <text x="44" y="192" fill="var(--petrol)">indexer 全套</text>
+      <text x="44" y="212" fill="var(--ink-2)">wk [128, 512] + k_norm</text>
+      <text x="44" y="232" fill="var(--ink-2)">wq_b [4096, 1280]、weights_proj [32, 5120]</text>
+      <text x="44" y="252" fill="var(--moss)">额外权重 10.71 M（层 20 为 8.09 M）</text>
+
+      <rect x="370" y="72" width="320" height="186" rx="8" fill="url(#fga)" stroke="var(--amber-mark)" filter="url(#fsh)"/>
+      <text x="386" y="98" font-weight="600">写入（三处）</text>
+      <text x="386" y="124" fill="var(--amber)">① 本层滑窗 [512] BF16</text>
+      <text x="386" y="152" fill="var(--amber)">② owner 主平面</text>
+      <text x="386" y="172" fill="var(--ink-2)">每 ratio 个 token 汇成一行 [512]，1024 B</text>
+      <text x="386" y="200" fill="var(--amber)">③ owner index 平面</text>
+      <text x="386" y="220" fill="var(--ink-2)">index key [128]，FP8 下 132 B / 行</text>
+      <text x="386" y="248" fill="var(--ink-2)">层 20 另写候选块 [rows, 2048]</text>
+
+      <rect x="712" y="72" width="332" height="186" rx="8" fill="url(#fgn)" stroke="var(--line)" filter="url(#fsh)"/>
+      <text x="728" y="98" font-weight="600">读取</text>
+      <text x="728" y="124" fill="var(--ink-2)">本层滑窗 ≤ 128 行</text>
+      <text x="728" y="152" fill="var(--ink-2)">加上自己刚写的平面上 top-512</text>
+      <text x="728" y="180" fill="var(--petrol)">prefix = 滑窗 + min((pos+1)/ratio, 512)</text>
+      <text x="728" y="208" fill="var(--ink-2)">rope = global_rope（YaRN，θ = 160000）</text>
+      <text x="728" y="236" fill="var(--ink-2)">打分范围 = 本请求整条上下文</text>
+
+      <path d="M348 150 H370" stroke="var(--mute-mark)" stroke-width="1.3" marker-end="url(#far)"/>
+      <path d="M690 150 H712" stroke="var(--mute-mark)" stroke-width="1.3" marker-end="url(#far)"/>
+
+      <text x="28" y="288" fill="var(--ink-2)">这是唯一一种「本层刚写的行，本层这一步就要读」的层：compressor 写进 index 平面的那一行，indexer 的打分必须等它落地，两者之间是一条实打实的依赖边。</text>
+      <text x="28" y="310" fill="var(--ink-2)">ratio 2 的池化在 FP32 里做：wkv / wgate 两半，组内 softmax 加权求和，再 RMSNorm；未满的一组留在每请求的 FP32 ring 里，不写 PAGE。</text>
+    </svg>
+  </figure>
+
+  <figure>
+    <p class="fignum">图 2c · REINDEX · 层 24 / 28 / 32 / 36 · 借层 20 的 KV，自己重算 top-512</p>
+    <svg viewBox="0 0 1060 300" role="img" aria-label="REINDEX 层的额外模块、写入与读取">
+      <defs>
+        <marker id="rar" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z" fill="var(--mute-mark)"/></marker>
+        <linearGradient id="rgn" x1="0" y1="0" x2=".4" y2="1"><stop offset="0%" stop-color="var(--surface)"/><stop offset="100%" stop-color="var(--surface-2)"/></linearGradient>
+        <linearGradient id="rgp" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--petrol-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+        <linearGradient id="rgb" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--brick-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+        <filter id="rsh" x="-8%" y="-12%" width="116%" height="140%"><feDropShadow dx="0" dy="1.4" stdDeviation="2.2" flood-opacity=".14"/></filter>
+      </defs>
+      <rect x="28" y="22" width="1016" height="30" rx="7" fill="var(--sunk)" stroke="var(--line-soft)"/>
+      <text x="44" y="42" font-size="10.5" fill="var(--ink-2)">共用前后段同图 2a。ratio = 1，KV owner 固定是层 20。</text>
+
+      <rect x="28" y="72" width="320" height="166" rx="8" fill="url(#rgp)" stroke="var(--petrol-mark)" filter="url(#rsh)"/>
+      <text x="44" y="98" font-weight="600">额外模块</text>
+      <text x="44" y="124" fill="var(--ink-2)">没有 compressor</text>
+      <text x="44" y="146" fill="var(--brick)">没有 wk / k_norm</text>
+      <text x="44" y="168" fill="var(--ink-3)" opacity=".9">它不造 key，只造 query</text>
+      <text x="44" y="196" fill="var(--petrol)">indexer.wq_b [4096, 1280]</text>
+      <text x="44" y="216" fill="var(--petrol)">weights_proj [32, 5120]</text>
+      <text x="44" y="234" fill="var(--moss)">额外权重 5.41 M</text>
+
+      <rect x="370" y="72" width="320" height="166" rx="8" fill="url(#rgn)" stroke="var(--line)" filter="url(#rsh)"/>
+      <text x="386" y="98" font-weight="600">写入</text>
+      <text x="386" y="124" fill="var(--ink-2)">只写本层滑窗</text>
+      <text x="386" y="152" fill="var(--ink-3)" opacity=".9">主平面和 index 平面都是层 20 的，</text>
+      <text x="386" y="172" fill="var(--ink-3)" opacity=".9">这一层一个字节都不往里写</text>
+      <text x="386" y="206" fill="var(--ink-2)">本层的 selected 会被后面 3 层 REUSE</text>
+
+      <rect x="712" y="72" width="332" height="166" rx="8" fill="url(#rgb)" stroke="var(--brick)" filter="url(#rsh)"/>
+      <text x="728" y="98" font-weight="600">读取 · 被候选块夹住</text>
+      <text x="728" y="124" fill="var(--ink-2)">KV：层 20 平面上自己选的 512 行</text>
+      <text x="728" y="152" fill="var(--brick)">打分范围不是整条上下文</text>
+      <text x="728" y="172" fill="var(--ink-2)">= 层 20 留下的 2048 块 × 8 行</text>
+      <text x="728" y="192" fill="var(--brick)">= 最多 16 384 行</text>
+      <text x="728" y="220" fill="var(--ink-2)">在这 16 384 行里重算 top-512</text>
+
+      <path d="M348 150 H370" stroke="var(--mute-mark)" stroke-width="1.3" marker-end="url(#rar)"/>
+      <path d="M690 150 H712" stroke="var(--mute-mark)" stroke-width="1.3" marker-end="url(#rar)"/>
+
+      <text x="28" y="268" fill="var(--ink-2)">重打分不是冗余：候选块是层 20 按<tspan font-weight="700">它自己的</tspan>分数挑的，这一层排名很高的行完全可能落在层 20 没留的块里，丢掉它正是这套机制要的效果。</text>
+      <text x="28" y="290" fill="var(--ink-2)">约束写在配置校验里：<tspan font-family="IBM Plex Mono, monospace">candidate_topk_blocks × candidate_block_size ≥ index_topk</tspan>，候选块装不下一整个 top-k 就拒绝启动。</text>
+    </svg>
+  </figure>
+
+  <figure>
+    <p class="fignum">图 2d · REUSE · 30 层 · 不打分，直接取本段第一层的选择</p>
+    <svg viewBox="0 0 1060 300" role="img" aria-label="REUSE 层的额外模块、写入与读取">
+      <defs>
+        <marker id="uar" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z" fill="var(--mute-mark)"/></marker>
+        <linearGradient id="ugn" x1="0" y1="0" x2=".4" y2="1"><stop offset="0%" stop-color="var(--surface)"/><stop offset="100%" stop-color="var(--surface-2)"/></linearGradient>
+        <linearGradient id="ugm" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--moss-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+        <filter id="ush" x="-8%" y="-12%" width="116%" height="140%"><feDropShadow dx="0" dy="1.4" stdDeviation="2.2" flood-opacity=".14"/></filter>
+      </defs>
+      <rect x="28" y="22" width="1016" height="30" rx="7" fill="var(--sunk)" stroke="var(--line-soft)"/>
+      <text x="44" y="42" font-size="10.5" fill="var(--ink-2)">共用前后段同图 2a。层 3–7 / 9–13 / 15–19 / 21–23 / 25–27 / 29–31 / 33–35 / 37–39。</text>
+
+      <rect x="28" y="72" width="320" height="166" rx="8" fill="url(#ugm)" stroke="var(--moss-mark)" filter="url(#ush)"/>
+      <text x="44" y="98" font-weight="600">额外模块</text>
+      <text x="44" y="124" fill="var(--moss)">一个都没有</text>
+      <text x="44" y="152" fill="var(--ink-2)">权重集合与 WINDOW 层完全相同</text>
+      <text x="44" y="180" fill="var(--ink-2)">区别只在它还看 owner 的压缩行</text>
+      <text x="44" y="214" fill="var(--moss)">额外权重 0 · 这样的层有 30 个</text>
+
+      <rect x="370" y="72" width="320" height="166" rx="8" fill="url(#ugn)" stroke="var(--line)" filter="url(#ush)"/>
+      <text x="386" y="98" font-weight="600">写入</text>
+      <text x="386" y="124" fill="var(--ink-2)">只写本层滑窗</text>
+      <text x="386" y="156" fill="var(--ink-3)" opacity=".9">既不写主平面，也不写 index 平面</text>
+      <text x="386" y="188" fill="var(--ink-2)">也不往 step 里写新的 selected</text>
+
+      <rect x="712" y="72" width="332" height="166" rx="8" fill="url(#ugn)" stroke="var(--line)" filter="url(#ush)"/>
+      <text x="728" y="98" font-weight="600">读取</text>
+      <text x="728" y="124" fill="var(--ink-2)">本层滑窗 ≤ 128 行</text>
+      <text x="728" y="152" fill="var(--petrol)">selected 取自 index_group_start 那一层</text>
+      <text x="728" y="172" fill="var(--ink-2)">[rows, 512] 升序，-1 填充</text>
+      <text x="728" y="200" fill="var(--moss)">本层不发任何打分 kernel</text>
+      <text x="728" y="228" fill="var(--ink-2)">prefix 公式与本段 owner 的 ratio 一致</text>
+
+      <path d="M348 150 H370" stroke="var(--mute-mark)" stroke-width="1.3" marker-end="url(#uar)"/>
+      <path d="M690 150 H712" stroke="var(--mute-mark)" stroke-width="1.3" marker-end="url(#uar)"/>
+
+      <text x="28" y="268" fill="var(--ink-2)">一段 = <tspan font-family="IBM Plex Mono, monospace">(ratio, kv_owner, topk_owner)</tspan> 三元组相同的一串连续层，<tspan font-family="IBM Plex Mono, monospace">_tag_index_groups</tspan> 给它们打上同一个 index_group_start。</text>
+      <text x="28" y="290" fill="var(--ink-2)">decode 时整段的下标一次建完 —— 这就是「一次打分、最多 5 层共用」能省下来的那部分。</text>
+    </svg>
+  </figure>
+
+  <div class="tscroll">
+  <table>
+    <thead><tr><th>模式</th><th>层数</th><th>额外权重 / 层</th><th>写主平面</th><th>写 index 平面</th><th>发打分 kernel</th><th>打分宽度</th></tr></thead>
+    <tbody>
+      <tr><td class="k">WINDOW</td><td class="num">2</td><td class="num">0</td><td>否</td><td>否</td><td>否</td><td>—</td></tr>
+      <tr><td class="k">FULL</td><td class="num">4</td><td class="num">10.71 M / 8.09 M</td><td><strong>是</strong></td><td><strong>是</strong></td><td><strong>是</strong></td><td>整条上下文</td></tr>
+      <tr><td class="k">REINDEX</td><td class="num">4</td><td class="num">5.41 M</td><td>否</td><td>否</td><td><strong>是</strong></td><td>2048 × 8 = 16 384 行</td></tr>
+      <tr><td class="k">REUSE</td><td class="num">30</td><td class="num">0</td><td>否</td><td>否</td><td>否</td><td>沿用本段</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="grid2">
+    <div class="card key">
+      <p class="eyebrow">这四个标签是算出来的，不是配置里写死的</p>
+      <p>
+        配置只给三样东西：<code>compress_ratios</code>、<code>kv_source_layer_ids</code>、<code>index_source_layer_ids</code>。
+        <code>build_attention_topology</code> 从前往后扫：ratio 为 0 判 WINDOW；否则沿用最近一个 KV owner，
+        <code>layer_id == kv_owner</code> 判 FULL，<code>layer_id == topk_owner</code> 判 REINDEX，剩下的是 REUSE。
+        校验也在这里：每个 KV source 必须同时是 index source，window-only 的层不能当 owner，候选块要能装下一整个 top-k。
+      </p>
+    </div>
+    <div class="card">
+      <p class="eyebrow">所以「稀疏」省在哪</p>
+      <p>
+        省的不是注意力本身的行数 —— 四种模式读的都是「≤128 滑窗 + ≤512 压缩行」这个固定预算。
+        省的是<strong>造 KV 的次数</strong>（40 层只有 4 层写）和<strong>打分的次数</strong>（40 层只有 8 层算，其中 4 层还被夹在 16 384 行里）。
+        1 M 上下文下，注意力每层读的行数是常数，这是 CSA2 的整个要点。
+      </p>
+    </div>
+  </div>
+</section>
+
 
 <section>
   <hr class="rule">
@@ -625,6 +855,98 @@ footer{border-top:1px solid var(--line); padding-top:22px; color:var(--ink-2); f
     </figcaption>
   </figure>
 </section>
+<section>
+  <hr class="rule">
+  <p class="eyebrow">图 3b · 打分链路</p>
+  <h2>top-512 是怎么从一个分页平面里选出来的</h2>
+  <p>
+    打分从来不把 key 重新物化出来：query 量化之后直接交给分页 MQA logits kernel，
+    平面本身就是 PAGE 里那块 index 区域。每一个 query 行都是自己的一个「批次项」，
+    带自己的可见长度和自己的块表 —— 所以 prefill 的 token、decode 的 token、草稿的 token 在打分器眼里是同一种行，
+    ragged 批次对它不构成特殊情况。
+  </p>
+  <figure>
+    <p class="fignum">图 3b · 从 hidden 到 selected [rows, 512]</p>
+    <svg viewBox="0 0 1060 520" role="img" aria-label="索引打分的 query 侧、key 侧与两级 top-k">
+      <defs>
+        <marker id="qar" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z" fill="var(--petrol-mark)"/></marker>
+        <marker id="qab" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z" fill="var(--brick)"/></marker>
+        <linearGradient id="qgn" x1="0" y1="0" x2=".4" y2="1"><stop offset="0%" stop-color="var(--surface)"/><stop offset="100%" stop-color="var(--surface-2)"/></linearGradient>
+        <linearGradient id="qgp" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--petrol-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+        <linearGradient id="qga" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--amber-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+        <linearGradient id="qgb" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--brick-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+        <filter id="qsh" x="-8%" y="-12%" width="116%" height="140%"><feDropShadow dx="0" dy="1.4" stdDeviation="2.2" flood-opacity=".14"/></filter>
+      </defs>
+
+      <text x="28" y="26" font-family="Archivo, sans-serif" font-size="13" font-weight="600">query 侧 · 每层自己算</text>
+      <rect x="28" y="40" width="300" height="206" rx="8" fill="url(#qgp)" stroke="var(--petrol-mark)" filter="url(#qsh)"/>
+      <text x="44" y="66" fill="var(--ink-2)">hidden [T, 5120]</text>
+      <text x="44" y="88" fill="var(--petrol)">weights_proj [32, 5120] → w [T, 32]</text>
+      <text x="44" y="116" fill="var(--ink-2)">qr [T, 1280] FP8（qk_norm 顺手量化）</text>
+      <text x="44" y="138" fill="var(--petrol)">indexer.wq_b [4096, 1280]</text>
+      <text x="44" y="158" fill="var(--petrol)">→ q [T, 32, 128]</text>
+      <text x="44" y="186" fill="var(--ink-2)">RoPE 只转尾 64 维（global_rope）</text>
+      <text x="44" y="210" fill="var(--ink-2)">FP8 平面：按 (token, head) 行量化</text>
+      <text x="44" y="230" fill="var(--ink-2)">那个 FP32 scale 折进 w，不单独传</text>
+
+      <text x="380" y="26" font-family="Archivo, sans-serif" font-size="13" font-weight="600">key 侧 · FULL 层早就写好了</text>
+      <rect x="380" y="40" width="300" height="206" rx="8" fill="url(#qga)" stroke="var(--amber-mark)" filter="url(#qsh)"/>
+      <text x="396" y="66" fill="var(--ink-2)">压缩后、RoPE 前的 latent [512] BF16</text>
+      <text x="396" y="88" fill="var(--amber)">indexer.wk [128, 512] → k_norm → RoPE</text>
+      <text x="396" y="116" fill="var(--ink-2)">写进 owner 的 index 平面：</text>
+      <text x="396" y="140" fill="var(--amber)">FP8：132 B / 行，8 行一块</text>
+      <text x="396" y="160" fill="var(--ink-2)">（值在块内交错，scale 放块尾）</text>
+      <text x="396" y="188" fill="var(--amber)">FP4：68 B / 行（64 B 值 + 4 B scale）</text>
+      <text x="396" y="208" fill="var(--ink-2)">两张平面，页高 8 行</text>
+      <text x="396" y="232" fill="var(--ink-3)" opacity=".9">主 KV 池与这张平面互不影响</text>
+
+      <text x="732" y="26" font-family="Archivo, sans-serif" font-size="13" font-weight="600">第一级 · 行 top-k</text>
+      <rect x="732" y="40" width="312" height="206" rx="8" fill="url(#qgn)" stroke="var(--line)" filter="url(#qsh)"/>
+      <text x="748" y="66" fill="var(--ink-2)">deepgemm_fp8_paged_mqa_logits</text>
+      <text x="748" y="86" fill="var(--ink-3)" opacity=".9">FP4 走 flydsl_pa_mqa_logits_fp4</text>
+      <text x="748" y="114" fill="var(--petrol)">logits [rows, width]</text>
+      <text x="748" y="136" fill="var(--ink-2)">width = 本请求整条上下文</text>
+      <text x="748" y="156" fill="var(--ink-2)">或 = 候选 2048 块 × 8 行</text>
+      <text x="748" y="184" fill="var(--ink-2)">每行只算到自己的 visible 为止</text>
+      <text x="748" y="212" fill="var(--petrol)">top_k_per_row_decode → k = 512</text>
+      <text x="748" y="232" fill="var(--petrol)">selected [rows, 512] 升序，-1 填充</text>
+
+      <path d="M328 140 H380" stroke="var(--petrol-mark)" stroke-width="1.4" marker-end="url(#qar)"/>
+      <path d="M680 140 H732" stroke="var(--petrol-mark)" stroke-width="1.4" marker-end="url(#qar)"/>
+
+      <rect x="28" y="276" width="1016" height="112" rx="8" fill="url(#qgb)" stroke="var(--brick)" filter="url(#qsh)"/>
+      <text x="44" y="302" font-weight="600">第二级 · 只有层 20 跑：把 16 384 行的「窗口」挑出来给后面 4 个 REINDEX 层用</text>
+      <text x="44" y="328" fill="var(--ink-2)">_block_maxima_kernel：同一个 logits，每 8 行一块取块内最大值（NaN 当 -inf，其余截到最大有限值）→ maxima [rows, blocks]</text>
+      <text x="44" y="350" fill="var(--brick)">最新的那一块钉成 +inf：它装的是最近的 token，只填了一部分，不能让它被别的块比下去</text>
+      <text x="44" y="372" fill="var(--ink-2)">top_k_per_row_decode(k = 2048) → candidates [rows, 2048] 升序、-1 填充；这张表随后<tspan font-weight="700">当块表用</tspan>，所以候选块高度必须正好等于 index 平面的分页高度 8</text>
+
+      <text x="28" y="424" font-family="Archivo, sans-serif" font-size="13" font-weight="600">打分用的那个数</text>
+      <text x="28" y="450" fill="var(--ink-2)">logits[r, c] = Σ(h &lt; 32) w[r, h] · ⟨ q[r, h], k[c] ⟩ ÷ (√128 · √32)</text>
+      <text x="28" y="474" fill="var(--ink-2)">w 没有激活函数，就是 weights_proj 的原始输出；两个 1/√· 合起来就是代码里的 weights_scale = head_dim^-0.5 · heads^-0.5。</text>
+      <text x="28" y="498" fill="var(--ink-2)">注意这和注意力自己的 1/√512 是两套温度：indexer 是 32 头 128 维的 MQA 打分器，注意力是 64 头 512 维。</text>
+    </svg>
+  </figure>
+  <div class="grid2">
+    <div class="card key">
+      <p class="eyebrow">visible 是每行自己的前缀长度</p>
+      <p>
+        打分器要求可见性是「一个前缀」，不是一张掩码。一行看不到的列压根不被读，也不被写 —— 所以 <code>selected</code> 里的 -1 不是「选了个空」，
+        而是「这一行的历史还不够 512 行」。下游的 <code>_indptr_scan</code> 据此用闭式公式 <code>min((pos+1)/ratio, 512)</code> 直接算出每行占多少格，不用真去数一遍。
+      </p>
+    </div>
+    <div class="card good">
+      <p class="eyebrow">FP8 与 FP4 平面的区别只在字节</p>
+      <p>
+        <code>--index_cache_dtype</code> 选 <code>fp8</code>（默认）或 <code>fp4</code>，选哪个都不改变上面这条链路的形状，
+        只改变 key 的落盘格式、query 的量化方式，以及一件实质的事：<strong>平面精度不同，选出来的行就不同</strong>。
+        值得记一笔：<code>V41PoolGeometry.layout_id</code> —— 前缀复用和 <code>lmcache_mp</code> 状态键都按它匹配 ——
+        里那一段目前是写死的 <code>index-fp8</code>，注释也还停留在「FP8 是唯一平面」的年代，
+        所以换成 fp4 平面并不会改变这个串。
+      </p>
+    </div>
+  </div>
+</section>
+
 
 <section>
   <hr class="rule">
@@ -836,15 +1158,18 @@ footer{border-top:1px solid var(--line); padding-top:22px; color:var(--ink-2); f
       <p class="eyebrow">换成 packed FP4 主池</p>
       <p>
         <code>nvfp4</code> 把主平面改成每行 288 B（512 维 E2M1 加 group-16 的 E4M3 scale），滑窗行变成 528 B（512 个 FP8 加 16 个 E8M0）。
-        index 仍是 132 B/行。按同样的 4 个 owner 摊下来是 <strong>1050 B/token</strong>，一页 268 800 B。
-        插件路径没有单独的 FP8 KV 池，传入 fp8 会直接报错。
+        index 平面不受这个开关影响。按同样的 4 个 owner 摊下来是 <strong>1050 B/token</strong>，一页 268 800 B。
+        主池只认 <code>bf16</code> 和 <code>fp4</code> 两种，没有单独的 FP8 KV 池。
+        index 平面是另一个开关 <code>--index_cache_dtype</code>：<code>fp8</code>（默认，132 B/行）或 <code>fp4</code>（68 B/行），
+        后者把 BF16 池压到 <strong>2730 B/token</strong>，把 packed 池压到 <strong>890 B/token</strong>。
       </p>
     </div>
     <div class="card warn">
       <p class="eyebrow">DSpark 要求 BF16 KV</p>
       <p>
         投机配置一旦打开，<code>kv_cache_dtype</code> 必须是 bf16，草稿宽度必须是 5，方法名必须是 <code>dspark</code>，而且草稿模型和目标模型是同一份 checkpoint。
-        插件路径目前不接 DSpark，也不接视觉塔和跨请求的压缩前缀复用。
+        另外：main 上的 <code>validate_runtime_config</code> <strong>直接拒绝 plugin mode</strong> ——
+        V4.1 目前只有 ATOM 原生这一条执行路径，vLLM 插件桥接（页大小固定 256、STATE 另占 proxy block）还在未合入的分支上。
       </p>
     </div>
   </div>
@@ -954,6 +1279,69 @@ footer{border-top:1px solid var(--line); padding-top:22px; color:var(--ink-2); f
 
 <section>
   <hr class="rule">
+  <p class="eyebrow">执行模式</p>
+  <h2>同一份权重，四种跑法；不支持的组合在读权重之前就被拒绝</h2>
+  <p>
+    <code>validate_runtime_config</code> 在加载权重和开池子<strong>之前</strong>跑一遍，把没实现的执行模式整条拒掉，
+    而不是降级成某个「能跑但不对」的路径。下面这张表是目前允许的四种跑法，右边那张是会直接抛错的清单。
+  </p>
+  <div class="tscroll">
+  <table>
+    <thead><tr><th>跑法</th><th>怎么开</th><th>注意力在图里吗</th><th>用途</th></tr></thead>
+    <tbody>
+      <tr><td class="k">eager</td><td class="num">--enforce-eager</td><td>不捕获</td><td>定位故障时的基准；数值上的参照系</td></tr>
+      <tr><td class="k">level 0 + FULL</td><td class="num">level=0, cudagraph=FULL</td><td>decode 整个前向进图</td><td>当前验收用的配置</td></tr>
+      <tr><td class="k">level 0 + PIECEWISE</td><td class="num">level=0, cudagraph=PIECEWISE</td><td>分段</td><td>允许，但 level 3 下不接受</td></tr>
+      <tr><td class="k">level 3 + FULL</td><td class="num">level=3, cudagraph=FULL</td><td>decode 整个前向进图</td><td>编译器路径；level 3 只认 FULL 或 eager</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="grid2">
+    <div class="card warn">
+      <p class="eyebrow">会被直接拒绝的</p>
+      <ul class="tight">
+        <li>pipeline / context / data parallel，TBO，EPLB，RapidServe。V4.1 只跑 TP（专家可整块 EP，也可切 TP）。</li>
+        <li><strong>vLLM 插件模式</strong>、在线量化。</li>
+        <li><code>kv_cache_dtype</code> 不是 <code>bf16</code> 或 <code>fp4</code>；<code>index_cache_dtype</code> 不是 <code>fp8</code> 或 <code>fp4</code>。</li>
+        <li>PAGE 的 token 数是奇数（ratio 2 要能整除）。</li>
+        <li>KV 传输不是 <code>lmcache_mp</code>：只有它会把 STATE 一起过一遍 PAGE 备份；只搬 PAGE 的 connector 拿不到压缩 ring 和游标。</li>
+        <li>投机不是 <code>dspark</code> / 不是 5 个 token / KV 不是 bf16 / 开了宽松 MTP 验证。</li>
+      </ul>
+    </div>
+    <div class="card">
+      <p class="eyebrow">旁路流是可选的，默认一条都不开</p>
+      <p>
+        <code>ATOM_DSV41_SIDE_STREAMS</code> 取 0 / 1 / 2，<strong>默认 0</strong>：compressor 和 indexer 都排在主流上，图 2 那三支是顺序执行的。
+        1 让 compressor 借 MoE 那条 <code>alt_stream</code>（它的生命期在打分处就结束，早于共享专家发出，不额外占队列）；
+        2 再给 indexer 一条自己的流 —— 只有它会和别的分支同时在飞，所以只有它值一个硬件队列。
+        把 indexer 挪开本身不赚钱，赚的是另一边：query 投影和那次融合的 rope/window 不再堵在它前面。
+      </p>
+    </div>
+  </div>
+  <div class="grid2">
+    <div class="card good">
+      <p class="eyebrow">mono：把一层压成两个 kernel</p>
+      <p>
+        <code>ATOM_MONO_ENABLE</code> 默认是 1，针对 ≤ 12 行的 decode（DSpark 的验证步和草稿骨干）：
+        K1 从 mHC 的缝一路做到旋转好的 query 和滑窗行；K2 把打分、稀疏 decode、输出投影、它的 all-reduce、FFN 的缝和 MoE 全放进一次发射
+        （<code>ATOM_MONO_CHECK</code> 可以把 K2a/K2b 拆开逐段对比）。compressor 和 Engram 仍由原模块在两个 kernel 之间跑。
+        注意：它目前<strong>会被拒绝</strong> —— 里面的 MoE kernel 还在跑 MXFP4 激活，而 V4.1 的路由专家要的是 MXFP8。
+      </p>
+    </div>
+    <div class="card key">
+      <p class="eyebrow">为什么路由专家必须喂 MXFP8</p>
+      <p>
+        专家权重是 FP4，但激活不是。aiter 在 gfx950 上对这种专家的默认是 MXFP4 激活，
+        那样算出来的路由输出比参考实现偏 ~12%，GSM8K 掉约 1.4 pp。
+        <code>moe.py</code> 因此显式把 <code>moe_fp8_activations</code> 钉成 True。
+        这也是上面 mono 被拒的同一个原因。
+      </p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <hr class="rule">
   <p class="eyebrow">在 ATOM 里的位置</p>
   <h2>按这个顺序读，拓扑和字节不会先分叉</h2>
   <div class="tscroll">
@@ -970,7 +1358,8 @@ footer{border-top:1px solid var(--line); padding-top:22px; color:var(--ink-2); f
       <tr><td class="num">8</td><td class="k">atom/models/deepseek_v41/moe.py</td><td><code>bias_vl</code> 只换图像 token 的路由偏置，专家计算仍走 V4 的 MoE</td></tr>
       <tr><td class="num">9</td><td class="k">atom/model_ops/engram/device/layer.py</td><td>wkv 的 5 段切分，以及 host 表不在这个模块里</td></tr>
       <tr><td class="num">10</td><td class="k">atom/models/deepseek_v41/dspark.py · vision.py</td><td>草稿层复用同一套 Block；视觉是另一套 ViT + aligner</td></tr>
-      <tr><td class="num">11</td><td class="k">atom/plugin/vllm/deepseek_v41_bridge.py</td><td>插件侧页大小 256，以及 STATE 要用额外的 proxy block 留出来</td></tr>
+      <tr><td class="num">11</td><td class="k">atom/model_ops/deepseek_v41/paged_scoring.py · indexer.py</td><td>两级 top-k：行打分走分页 MQA logits，块打分把最新一块钉成 +inf</td></tr>
+      <tr><td class="num">12</td><td class="k">atom/models/deepseek_v41/mono/runner.py</td><td>≤ 12 行 decode 的 K1 / K2a / K2b 融合，以及它为什么现在被拒</td></tr>
     </tbody>
   </table>
   </div>
@@ -1002,6 +1391,9 @@ footer{border-top:1px solid var(--line); padding-top:22px; color:var(--ink-2); f
     层模式、KV 字节和前向顺序来自 <code>atom/models/deepseek_v41/</code> 与
     <code>atom/model_ops/attentions/pool_layout/v41_pool_geometry.py</code>。
     scale 不计入参数量；FP4 按解开后的逻辑元素计数。
+    代码侧的结论对照的是 ATOM main 的 <code>a526f0d55</code>（2026-10-07）；PAGE/STATE 的字节是直接实例化
+    <code>V41PoolGeometry</code> 算出来的，不是抄的注释。
+    ATOM 里的 <code>deepseek_v41</code> 就是 DeepSeek-V4.1 这套架构的实现，目前唯一有权重的实例是 Flash。
   </p>
 </footer>
 </div>
