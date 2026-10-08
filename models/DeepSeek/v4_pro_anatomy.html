@@ -1,0 +1,1090 @@
+
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DeepSeek-V4-Pro 架构解剖</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
+<style>
+:root{
+  --bg:#E8EBEA; --surface:#F6F8F7; --surface-2:#DDE3E2; --sunk:#D3DAD9;
+  --ink:#141A1C; --ink-2:#4B5A5C; --ink-3:#75858880;
+  --line:#C3CDCC; --line-soft:#D4DCDB;
+  --amber:#8A5D0C; --amber-mark:#C79433; --amber-bg:#EFE2C2;
+  --petrol:#1D5A74; --petrol-mark:#3D87A6; --petrol-bg:#D3E3EA;
+  --brick:#8E3629; --brick-bg:#F0DAD5;
+  --moss:#3F6034; --moss-mark:#6E9A5C; --moss-bg:#DDE8D6;
+  --mute-mark:#9FADAF;
+  --shadow:0 1px 2px rgba(20,26,28,.06), 0 8px 24px -14px rgba(20,26,28,.24);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0D1315; --surface:#141C1E; --surface-2:#1C2629; --sunk:#101819;
+    --ink:#E3EAE9; --ink-2:#94A4A6; --ink-3:#6E7E8080;
+    --line:#283437; --line-soft:#1F2B2E;
+    --amber:#E0AB53; --amber-mark:#D69B36; --amber-bg:#3B2E13;
+    --petrol:#6FB6D5; --petrol-mark:#4C93B4; --petrol-bg:#12303D;
+    --brick:#E58472; --brick-bg:#3A1D18;
+    --moss:#A8CE96; --moss-mark:#7FAE6B; --moss-bg:#22301B;
+    --mute-mark:#3C4A4D;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 30px -18px rgba(0,0,0,.8);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0D1315; --surface:#141C1E; --surface-2:#1C2629; --sunk:#101819;
+  --ink:#E3EAE9; --ink-2:#94A4A6; --ink-3:#6E7E8080;
+  --line:#283437; --line-soft:#1F2B2E;
+  --amber:#E0AB53; --amber-mark:#D69B36; --amber-bg:#3B2E13;
+  --petrol:#6FB6D5; --petrol-mark:#4C93B4; --petrol-bg:#12303D;
+  --brick:#E58472; --brick-bg:#3A1D18;
+  --moss:#A8CE96; --moss-mark:#7FAE6B; --moss-bg:#22301B;
+  --mute-mark:#3C4A4D;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 30px -18px rgba(0,0,0,.8);
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:"Source Serif 4", "Songti SC", "Noto Serif CJK SC", "Source Han Serif SC", Georgia, serif;
+  font-size:16.5px; line-height:1.72;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1140px; margin:0 auto; padding:0 28px 96px}
+h1,h2,h3,.eyebrow,.stat-n,.lgd,.tag,th{
+  font-family:Archivo, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+}
+h1{font-size:clamp(2.4rem,5.6vw,3.9rem); line-height:1.02; letter-spacing:-.028em; font-weight:700; margin:0; text-wrap:balance}
+h2{font-size:clamp(1.35rem,2.6vw,1.72rem); line-height:1.2; letter-spacing:-.014em; font-weight:600; margin:0 0 .2em; text-wrap:balance}
+h3{font-size:1.0rem; letter-spacing:.005em; font-weight:600; margin:0 0 .35em}
+p{margin:0 0 1em; max-width:74ch}
+a{color:var(--petrol)}
+code,.mono{font-family:"IBM Plex Mono", ui-monospace, monospace; font-size:.855em; font-variant-ligatures:none}
+:not(pre) > code{background:var(--surface-2); padding:.1em .38em; border-radius:3px; color:var(--ink)}
+.eyebrow{font-size:.66rem; font-weight:600; letter-spacing:.16em; text-transform:uppercase; color:var(--ink-2); margin:0 0 .55em}
+.lede{font-size:1.12rem; color:var(--ink-2); max-width:68ch}
+.note{font-size:.9rem; color:var(--ink-2)}
+header.mast{border-bottom:1px solid var(--line); margin-bottom:52px; padding:28px 0 34px}
+.mast-id{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:22px}
+.tag{font-size:.68rem; font-weight:600; letter-spacing:.09em; text-transform:uppercase; padding:.32em .7em; border:1px solid var(--line); border-radius:2px; color:var(--ink-2); background:var(--surface)}
+.tag.hot{border-color:var(--amber); color:var(--amber); background:var(--amber-bg)}
+.mast p.lede{margin-top:18px}
+.stats{display:grid; grid-template-columns:repeat(auto-fit,minmax(128px,1fr)); gap:1px; background:var(--line-soft); border:1px solid var(--line-soft); margin-top:34px}
+.stat{background:var(--surface); padding:14px 16px 16px}
+.stat-n{display:block; font-size:1.5rem; font-weight:700; letter-spacing:-.02em; font-variant-numeric:tabular-nums; line-height:1.15}
+.stat-l{display:block; font-size:.74rem; color:var(--ink-2); letter-spacing:.02em; margin-top:3px; font-family:"IBM Plex Mono", monospace}
+section{margin:0 0 68px; scroll-margin-top:20px}
+.rule{border:0; border-top:1px solid var(--line); margin:0 0 34px}
+.ribbon-frame{background:var(--surface); border:1px solid var(--line); box-shadow:var(--shadow); padding:22px 24px 18px; margin-top:26px}
+.ribbon-scroll{overflow-x:auto; padding-bottom:6px}
+.ribbon{min-width:920px}
+.rrow{display:flex; align-items:stretch; gap:0; margin-bottom:3px}
+.rlab{flex:0 0 92px; font-family:"IBM Plex Mono",monospace; font-size:.7rem; color:var(--ink-2); display:flex; align-items:center}
+.rcells{display:flex; gap:1.5px; flex:1}
+.cell{flex:1 1 0; height:26px; background:var(--mute-mark); border-radius:1px; position:relative}
+.cell:hover{transform:scaleY(1.14); z-index:2}
+.cell.dsa{background:var(--amber-mark)}
+.cell.kda{background:var(--petrol-mark)}
+.cell.sparse{background:var(--moss-mark)}
+.cell.dense{background:var(--brick)}
+.cell.ghost{background:var(--sunk)}
+.cell.mtp{background:transparent; border:1.5px dashed var(--amber-mark); flex:1 1 0}
+.gapcell{flex:0 0 14px}
+.raxis{display:flex; gap:1.5px; margin-top:5px; padding-left:92px}
+.tick{flex:1 1 0; font-family:"IBM Plex Mono",monospace; font-size:.62rem; color:var(--ink-2); text-align:center; font-variant-numeric:tabular-nums}
+.legend{display:flex; flex-wrap:wrap; gap:8px 20px; margin-top:18px; padding-top:14px; border-top:1px solid var(--line-soft)}
+.lgd{display:flex; align-items:center; gap:7px; font-size:.76rem; color:var(--ink-2); font-weight:500}
+.sw{width:13px; height:13px; border-radius:1px; flex:none}
+.sw.dsa{background:var(--amber-mark)} .sw.kda{background:var(--petrol-mark)}
+.sw.sparse{background:var(--moss-mark)} .sw.dense{background:var(--brick)}
+.sw.win{background:var(--mute-mark)}
+.sw.mtp{border:1.5px dashed var(--amber-mark)}
+figure{margin:26px 0 0; background:var(--surface); border:1px solid var(--line); padding:24px 22px 16px; box-shadow:var(--shadow); overflow-x:auto}
+figure svg{max-width:100%; height:auto; display:block; margin:0 auto; color:var(--ink-2); font-family:"IBM Plex Mono", ui-monospace, monospace; font-size:10.5px}
+figure svg text{fill:var(--ink)}
+figure .fignum{font-family:Archivo,sans-serif; font-size:.66rem; font-weight:600; letter-spacing:.16em; text-transform:uppercase; color:var(--ink-2); margin:0 0 14px}
+figcaption{font-size:.86rem; color:var(--ink-2); margin-top:16px; padding-top:12px; border-top:1px solid var(--line-soft); max-width:78ch}
+figcaption strong{color:var(--ink)}
+.tscroll{overflow-x:auto; margin-top:22px; border:1px solid var(--line); background:var(--surface); box-shadow:var(--shadow)}
+table{border-collapse:collapse; width:100%; min-width:640px; font-size:.9rem}
+th{text-align:left; font-size:.68rem; letter-spacing:.11em; text-transform:uppercase; font-weight:600; color:var(--ink-2); padding:11px 16px; background:var(--surface-2); border-bottom:1px solid var(--line); white-space:nowrap}
+td{padding:10px 16px; border-bottom:1px solid var(--line-soft); vertical-align:top; line-height:1.55}
+tbody tr:last-child td{border-bottom:0}
+td.num{font-family:"IBM Plex Mono",monospace; font-variant-numeric:tabular-nums; white-space:nowrap}
+td.k{font-family:"IBM Plex Mono",monospace; font-size:.82rem}
+.hl{color:var(--amber); font-weight:600}
+.dim{color:var(--ink-2)}
+.grid2{display:grid; grid-template-columns:repeat(auto-fit,minmax(310px,1fr)); gap:18px; margin-top:24px}
+.card{background:var(--surface); border:1px solid var(--line); padding:18px 20px 16px; box-shadow:var(--shadow)}
+.card h3{color:var(--ink)}
+.card p:last-child{margin-bottom:0}
+.card.warn{border-left:3px solid var(--brick)}
+.card.good{border-left:3px solid var(--petrol)}
+.card.key{border-left:3px solid var(--amber-mark)}
+.card .eyebrow{margin-bottom:.4em}
+ul.tight{margin:0; padding-left:1.15em}
+ul.tight li{margin-bottom:.42em}
+ul.tight li:last-child{margin-bottom:0}
+.bars{display:flex; flex-direction:column; gap:9px; margin-top:22px; background:var(--surface); border:1px solid var(--line); box-shadow:var(--shadow); padding:20px 22px 18px}
+.brow{display:grid; grid-template-columns:minmax(168px,250px) 1fr minmax(118px,148px); gap:14px; align-items:center}
+.blab{font-family:"IBM Plex Mono",monospace; font-size:.78rem; color:var(--ink); line-height:1.35}
+.blab i{display:block; font-style:normal; font-size:.7rem; color:var(--ink-2)}
+.btrack{height:17px; background:var(--sunk); border-radius:1px; overflow:hidden}
+.bfill{height:100%; background:var(--petrol-mark); border-radius:1px}
+.bfill.a{background:var(--amber-mark)}
+.bfill.m{background:var(--moss-mark)}
+.bfill.d{background:var(--mute-mark)}
+.bval{font-family:"IBM Plex Mono",monospace; font-size:.78rem; text-align:right; font-variant-numeric:tabular-nums}
+.bval em{font-style:normal; color:var(--ink-2); font-size:.72rem; display:block}
+.bfoot{display:flex; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-top:16px; padding-top:13px; border-top:1px solid var(--line-soft); font-size:.78rem; color:var(--ink-2); font-family:"IBM Plex Mono",monospace}
+@media (max-width:620px){ .brow{grid-template-columns:1fr; gap:4px} .bval{text-align:left} }
+.pathline{font-family:"IBM Plex Mono",monospace; font-size:.76rem; color:var(--ink-2); background:var(--sunk); padding:5px 9px; display:inline-block; margin-top:10px; border-radius:2px; word-break:break-all}
+.callout{background:var(--amber-bg); border:1px solid var(--amber-mark); padding:16px 20px; margin-top:24px}
+.callout .eyebrow{color:var(--amber)}
+.callout p:last-child{margin-bottom:0}
+pre.code{background:var(--sunk); border:1px solid var(--line-soft); padding:14px 16px; overflow-x:auto; font-family:"IBM Plex Mono",monospace; font-size:.78rem; line-height:1.6; margin:20px 0 0; color:var(--ink)}
+footer{border-top:1px solid var(--line); padding-top:22px; color:var(--ink-2); font-size:.85rem}
+.backnav{padding:22px 0 0; font-family:Archivo,"PingFang SC",system-ui,sans-serif; font-size:.8rem}
+.backnav a{color:var(--ink-2); text-decoration:none}
+.backnav a:hover{color:var(--amber)}
+@media (max-width:640px){
+  .wrap{padding:0 18px 64px}
+  .rlab{flex-basis:70px; font-size:.62rem}
+  .raxis{padding-left:70px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+:focus-visible{outline:2px solid var(--petrol); outline-offset:2px}
+</style>
+<div class="wrap">
+<nav class="backnav"><a href="../../index.html">← LLM 模型结构手册</a></nav>
+<header class="mast">
+  <div class="mast-id">
+    <span class="tag">DeepseekV4ForCausalLM</span>
+    <span class="tag">model_type · deepseek_v4</span>
+    <span class="tag hot">HCA 31 层</span>
+    <span class="tag hot">CSA 30 层</span>
+    <span class="tag">hash 路由 × 3</span>
+    <span class="tag">mHC × 4</span>
+    <span class="tag">MTP × 1</span>
+  </div>
+  <h1>DeepSeek-V4-Pro 架构解剖</h1>
+  <p class="lede">
+    61 层文本骨干，隐藏维 7168，每层一条 512 维的 MQA latent。
+    注意力按 <code>compress_ratios</code> 分成两种并严格交替：<strong>31 层 HCA</strong>（128 个 token 压一行，全看）
+    与 <strong>30 层 CSA</strong>（4 个 token 压一行，indexer 选 top-1024）。
+    残差是 4 路宽的 mHC，前 3 层的专家不由门控选而是查哈希表，末尾挂 1 层 MTP。
+  </p>
+  <div class="stats">
+    <div class="stat"><span class="stat-n">1598.8 B</span><span class="stat-l">逻辑参数</span></div>
+    <div class="stat"><span class="stat-n">49.78 B</span><span class="stat-l">骨干单 token 激活</span></div>
+    <div class="stat"><span class="stat-n">61 + 1</span><span class="stat-l">骨干层 + MTP</span></div>
+    <div class="stat"><span class="stat-n">7168</span><span class="stat-l">hidden_size</span></div>
+    <div class="stat"><span class="stat-n">384 / 6</span><span class="stat-l">专家数 / 每 token</span></div>
+    <div class="stat"><span class="stat-n">1024</span><span class="stat-l">index_topk</span></div>
+    <div class="stat"><span class="stat-n">5.34 KiB</span><span class="stat-l">KV / token</span></div>
+    <div class="stat"><span class="stat-n">1 M</span><span class="stat-l">max_position</span></div>
+  </div>
+</header>
+
+<section>
+  <p class="eyebrow">先分清对象</p>
+  <h2>一份 config 里只有两个开关，但它们决定了全部</h2>
+  <p>
+    架构名是 <code>DeepseekV4ForCausalLM</code>，<code>model_type</code> 为 <code>deepseek_v4</code>，纯文本、无视觉塔。
+    真正决定这个模型长什么样的是 <code>compress_ratios</code> 和 <code>num_hash_layers</code> 两个字段：
+    前者逐层给出「多少个连续 token 压成一行 KV」，后者说前几层的专家不按门控选。
+    下面的形状与字节来自 <strong>64 个 safetensors 分片的头部</strong>（共 145 116 个张量）：
+    逻辑参数按权重元素计，FP4 的一个 <code>I8</code> 字节算 2 个参数，<code>.scale</code> 不进参数量。
+  </p>
+  <div class="grid2">
+    <div class="card key">
+      <p class="eyebrow">compress_ratios：0 / 4 / 128</p>
+      <ul class="tight">
+        <li><strong>128 = HCA</strong>（31 层）：128 个 token 压成一行，不做 top-k，<strong>把所有压缩行全看一遍</strong>。</li>
+        <li><strong>4 = CSA</strong>（30 层）：4 个 token 压成一行，再由 indexer 从中选 <code>index_topk = 1024</code> 行。</li>
+        <li><strong>0 = Dense</strong>：只有滑窗。骨干里一层都没有，只有 MTP / 草稿层是这一档。</li>
+        <li>排布是严格交替的：层 0、1 是 HCA，之后 CSA 与 HCA 一层隔一层，直到层 60（CSA）。</li>
+      </ul>
+    </div>
+    <div class="card">
+      <p class="eyebrow">其余三件事</p>
+      <ul class="tight">
+        <li>每一层都另有自己的 <strong>128 token 滑窗</strong>，与压缩行是两份不同的 KV。</li>
+        <li>残差从 embedding 起就是 <strong>[T, 4, 7168]</strong>；每个子层用 FP32 的 <code>hc_*_fn [24, 28672]</code> 预测 pre / post / 4×4 混合，Sinkhorn 20 步。</li>
+        <li>MoE 固定 384 选 6 加 1 个共享专家；<strong>层 0 / 1 / 2 的选择来自 <code>tid2eid[input_ids]</code></strong>，而不是门控 logits。</li>
+      </ul>
+    </div>
+  </div>
+  <div class="grid2">
+    <div class="card good">
+      <p class="eyebrow">和 V4.1-Flash 是同一套字段，不同取值</p>
+      <p>
+        <a href="v41_flash_anatomy.html">V4.1-Flash</a> 的 <code>compress_ratios</code> 只允许 0/1/2，并引入了 KV owner：
+        40 层里只有 4 层写压缩 KV，其余层借用。V4-Pro 没有 owner 这一层间接 ——
+        <strong>每个 HCA/CSA 层都自己压、自己写、自己读</strong>，CSA 层还各自跑一次 top-1024。
+        两代共有的是：MQA 单 KV 头、512 维 latent、尾 64 维 RoPE、分组输出 LoRA、attn_sink、4 路 mHC、sqrtsoftplus 路由。
+      </p>
+    </div>
+    <div class="card warn">
+      <p class="eyebrow">V4-Pro 与 V4-Pro-0813</p>
+      <p>
+        两份 checkpoint 的骨干完全相同。差别只在尾巴：<code>DeepSeek-V4-Pro</code> 是 <strong>1 层 MTP</strong>
+        （<code>num_nextn_predict_layers = 1</code>），<code>-0813</code> 把它换成 <strong>3 层 DSpark</strong>
+        （<code>dspark_block_size = 5</code>，<code>dspark_markov_rank = 512</code>，输入取层 58/59/60），
+        <code>compress_ratios</code> 也相应多出两个 0。
+      </p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <hr class="rule">
+  <p class="eyebrow">规模</p>
+  <h2>1598.8 B 逻辑参数，单 token 碰 49.78 B</h2>
+  <p>
+    参数几乎全在一个地方：61 层 × 384 个 FP4 路由专家，占 96.78%。
+    单 token 激活按「这一步真正参与乘加的权重」计：6 个路由专家加 1 个共享专家、全部注意力（含 compressor 与 indexer）、embed 与 lm_head。
+    MTP 是另一个前向，不计入。
+  </p>
+  <div class="bars">
+    <div class="brow"><div class="blab">路由专家<i>384 × 61 层 × 66.06 M · FP4</i></div>
+      <div class="btrack"><div class="bfill" style="width:100%"></div></div>
+      <div class="bval">1547.40 B<em>96.78%</em></div></div>
+    <div class="brow"><div class="blab">MTP 一层<i>含它自己的 384 专家</i></div>
+      <div class="btrack"><div class="bfill d" style="width:1.67%"></div></div>
+      <div class="bval">25.84 B<em>1.62%</em></div></div>
+    <div class="brow"><div class="blab">注意力主干<i>61 层 × 299.9 M · FP8</i></div>
+      <div class="btrack"><div class="bfill a" style="width:1.18%"></div></div>
+      <div class="bval">18.29 B<em>1.14%</em></div></div>
+    <div class="brow"><div class="blab">共享专家<i>1 × 61 层 · FP8 128×128</i></div>
+      <div class="btrack"><div class="bfill" style="width:0.26%"></div></div>
+      <div class="bval">4.03 B<em>0.25%</em></div></div>
+    <div class="brow"><div class="blab">embed + lm_head<i>129280 × 7168 · BF16 × 2</i></div>
+      <div class="btrack"><div class="bfill m" style="width:0.12%"></div></div>
+      <div class="bval">1.85 B<em>0.12%</em></div></div>
+    <div class="brow"><div class="blab">compressor<i>HCA 7.34 M / CSA 14.68 M · BF16</i></div>
+      <div class="btrack"><div class="bfill a" style="width:0.04%"></div></div>
+      <div class="bval">0.67 B<em>0.04%</em></div></div>
+    <div class="brow"><div class="blab">indexer<i>只有 30 个 CSA 层有</i></div>
+      <div class="btrack"><div class="bfill a" style="width:0.03%"></div></div>
+      <div class="bval">0.50 B<em>0.03%</em></div></div>
+    <div class="brow"><div class="blab">路由门<i>gate [384, 7168] × 61</i></div>
+      <div class="btrack"><div class="bfill m" style="width:0.01%"></div></div>
+      <div class="bval">0.17 B<em>0.01%</em></div></div>
+    <div class="brow"><div class="blab">mHC 系数<i>hc_*_fn [24, 28672] FP32</i></div>
+      <div class="btrack"><div class="bfill d" style="width:0.01%"></div></div>
+      <div class="bval">0.08 B<em>0.01%</em></div></div>
+    <div class="bfoot">
+      <span>逻辑参数 1598.84 B</span>
+      <span>落盘 805.32 GiB（含 scale，64 个分片）</span>
+      <span>骨干单 token 激活 49.78 B</span>
+    </div>
+  </div>
+  <div class="grid2">
+    <div class="card">
+      <p class="eyebrow">49.78 B 是怎么凑出来的</p>
+      <ul class="tight">
+        <li>路由专家 <span class="hl">24.18 B</span> — 61 层 × 6 × 66.06 M</li>
+        <li>注意力 <span class="hl">19.47 B</span> — HCA 层 307.31 M，CSA 层 331.30 M（差的 24.0 M 就是 indexer 加更宽的 compressor）</li>
+        <li>共享专家 <span class="hl">4.03 B</span> — 每层 1 个，和路由专家同形但 FP8</li>
+        <li>embed + lm_head + 最终 norm <span class="hl">1.85 B</span></li>
+        <li>路由门 <span class="hl">0.17 B</span> + mHC <span class="hl">0.08 B</span></li>
+      </ul>
+    </div>
+    <div class="card good">
+      <p class="eyebrow">落盘 805.32 GiB 怎么分</p>
+      <ul class="tight">
+        <li><strong>路由专家 765.60 GiB</strong> —— 95.1% 的磁盘。逻辑上占 96.8%，因为 FP4 两个参数共用一个字节。</li>
+        <li>注意力 17.04 GiB、MTP 13.00 GiB、共享专家 3.75 GiB、embed/head 3.45 GiB。</li>
+        <li>compressor 1.25 GiB、indexer 0.58 GiB、mHC 0.31 GiB、门控 0.31 GiB、哈希表 0.02 GiB。</li>
+        <li>哈希表 <code>tid2eid</code> 是 <code>[129280, 6]</code> 的 int64，3 层各一张 —— 它是查表不是乘加，不进激活量。</li>
+      </ul>
+    </div>
+  </div>
+  <div class="tscroll">
+  <table>
+    <thead><tr><th>张量</th><th>形状</th><th>dtype</th><th>出现位置</th></tr></thead>
+    <tbody>
+      <tr><td class="k">embed.weight / head.weight</td><td class="num">[129280, 7168]</td><td>BF16</td><td>各一份，不共享</td></tr>
+      <tr><td class="k">attn.wq_a / attn.wkv</td><td class="num">[1536, 7168] / [512, 7168]</td><td>FP8 128×128</td><td>运行时合成一次 GEMM，输出 [T, 2048]</td></tr>
+      <tr><td class="k">attn.wq_b</td><td class="num">[65536, 1536]</td><td>FP8 128×128</td><td>128 头 × 512，列并行</td></tr>
+      <tr><td class="k">attn.wo_a / attn.wo_b</td><td class="num">[16384, 4096] / [7168, 16384]</td><td>FP8 128×128</td><td>16 组，每组 [1024, 4096]</td></tr>
+      <tr><td class="k">attn.attn_sink</td><td class="num">[128]</td><td>FP32</td><td>每头一个 logit，只进 softmax 分母</td></tr>
+      <tr><td class="k">compressor.wkv / wgate</td><td class="num">[512, 7168]</td><td>BF16</td><td><strong>HCA 层</strong>（ratio 128，不重叠）；<code>ape [128, 512]</code></td></tr>
+      <tr><td class="k">compressor.wkv / wgate</td><td class="num">[1024, 7168]</td><td>BF16</td><td><strong>CSA 层</strong>（ratio 4，重叠窗口，宽度翻倍）；<code>ape [4, 1024]</code></td></tr>
+      <tr><td class="k">indexer.wq_b</td><td class="num">[8192, 1536]</td><td>FP8 128×128</td><td>只有 30 个 CSA 层。64 头 × 128，<strong>不切 TP</strong></td></tr>
+      <tr><td class="k">indexer.weights_proj</td><td class="num">[64, 7168]</td><td>BF16</td><td>每头一个打分权重</td></tr>
+      <tr><td class="k">indexer.compressor.wkv / wgate</td><td class="num">[256, 7168]</td><td>BF16</td><td>indexer <strong>自己的</strong> 压缩器，head_dim 128，带 Hadamard 旋转</td></tr>
+      <tr><td class="k">ffn.gate.weight</td><td class="num">[384, 7168]</td><td>BF16</td><td>层 3–60 另有 <code>gate.bias [384]</code> FP32</td></tr>
+      <tr><td class="k">ffn.gate.tid2eid</td><td class="num">[129280, 6]</td><td>INT64</td><td><strong>只有层 0 / 1 / 2</strong>，与 <code>gate.bias</code> 互斥</td></tr>
+      <tr><td class="k">ffn.experts.e.w1 / w3</td><td class="num">[3072, 3584]</td><td>I8 打包 FP4</td><td>逻辑列数 7168。<code>scale [3072, 224]</code> E8M0，块 1×32</td></tr>
+      <tr><td class="k">ffn.experts.e.w2</td><td class="num">[7168, 1536]</td><td>I8 打包 FP4</td><td>逻辑列数 3072</td></tr>
+      <tr><td class="k">ffn.shared_experts.w1 / w3</td><td class="num">[3072, 7168]</td><td>FP8 128×128</td><td>与路由专家同形、不同 dtype</td></tr>
+      <tr><td class="k">hc_attn_fn / hc_ffn_fn</td><td class="num">[24, 28672]</td><td>FP32</td><td>每层各一份；<code>base [24]</code>、<code>scale [3]</code></td></tr>
+      <tr><td class="k">hc_head_fn</td><td class="num">[4, 28672]</td><td>FP32</td><td>只有一份，收尾时把 4 路残差收成 1 路</td></tr>
+      <tr><td class="k">mtp.0.e_proj / h_proj</td><td class="num">[7168, 7168]</td><td>FP8 128×128</td><td>MTP 的两路输入投影，各配 <code>enorm</code> / <code>hnorm</code></td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section>
+  <hr class="rule">
+  <p class="eyebrow">层调度</p>
+  <h2>HCA 和 CSA 一层隔一层，61 层里没有一层是稠密的</h2>
+  <p>
+    <code>compress_ratios</code> 一共 62 项：前 61 项给骨干，最后一项给 MTP 层。
+    骨干的排布是 <code>[128, 128, 4, 128, 4, …, 128, 4]</code> —— 层 0 和层 1 连着两个 HCA，
+    从层 2 起 CSA 与 HCA 严格交替，层 60 以 CSA 收尾。
+    数下来是 <strong>31 个 HCA</strong> 和 <strong>30 个 CSA</strong>，一个 Dense 都没有。
+  </p>
+  <div class="ribbon-frame">
+    <div class="ribbon-scroll">
+      <div class="ribbon">
+        <div class="rrow"><div class="rlab">attention</div><div class="rcells">
+          <div class="cell dsa" title="层 0 · HCA · 128:1"></div>
+          <div class="cell dsa" title="层 1 · HCA · 128:1"></div>
+          <div class="cell sparse" title="层 2 · CSA · 4:1 + top-1024"></div>
+          <div class="cell dsa" title="层 3 · HCA · 128:1"></div>
+          <div class="cell sparse" title="层 4 · CSA · 4:1 + top-1024"></div>
+          <div class="cell dsa" title="层 5 · HCA · 128:1"></div>
+          <div class="cell sparse" title="层 6 · CSA · 4:1 + top-1024"></div>
+          <div class="cell dsa" title="层 7 · HCA · 128:1"></div>
+          <div class="cell sparse" title="层 8 · CSA · 4:1 + top-1024"></div>
+          <div class="cell dsa" title="层 9 · HCA · 128:1"></div>
+          <div class="cell sparse" title="层 10 · CSA · 4:1 + top-1024"></div>
+          <div class="cell dsa" title="层 11 · HCA · 128:1"></div>
+          <div class="cell sparse" title="层 12 · CSA · 4:1 + top-1024"></div>
+          <div class="cell dsa" title="层 13 · HCA · 128:1"></div>
+          <div class="cell sparse" title="层 14 · CSA · 4:1 + top-1024"></div>
+          <div class="cell dsa" title="层 15 · HCA · 128:1"></div>
+          <div class="cell sparse" title="层 16 · CSA · 4:1 + top-1024"></div>
+          <div class="cell dsa" title="层 17 · HCA · 128:1"></div>
+          <div class="cell sparse" title="层 18 · CSA · 4:1 + top-1024"></div>
+          <div class="cell dsa" title="层 19 · HCA · 128:1"></div>
+          <div class="cell sparse" title="层 20 · CSA · 4:1 + top-1024"></div>
+          <div class="cell dsa" title="层 21 · HCA · 128:1"></div>
+          <div class="cell sparse" title="层 22 · CSA · 4:1 + top-1024"></div>
+          <div class="cell dsa" title="层 23 · HCA · 128:1"></div>
+          <div class="cell sparse" title="层 24 · CSA · 4:1 + top-1024"></div>
+          <div class="cell dsa" title="层 25 · HCA · 128:1"></div>
+          <div class="cell sparse" title="层 26 · CSA · 4:1 + top-1024"></div>
+          <div class="cell dsa" title="层 27 · HCA · 128:1"></div>
+          <div class="cell sparse" title="层 28 · CSA · 4:1 + top-1024"></div>
+          <div class="cell dsa" title="层 29 · HCA · 128:1"></div>
+          <div class="cell sparse" title="层 30 · CSA · 4:1 + top-1024"></div>
+          <div class="cell dsa" title="层 31 · HCA · 128:1"></div>
+          <div class="cell sparse" title="层 32 · CSA · 4:1 + top-1024"></div>
+          <div class="cell dsa" title="层 33 · HCA · 128:1"></div>
+          <div class="cell sparse" title="层 34 · CSA · 4:1 + top-1024"></div>
+          <div class="cell dsa" title="层 35 · HCA · 128:1"></div>
+          <div class="cell sparse" title="层 36 · CSA · 4:1 + top-1024"></div>
+          <div class="cell dsa" title="层 37 · HCA · 128:1"></div>
+          <div class="cell sparse" title="层 38 · CSA · 4:1 + top-1024"></div>
+          <div class="cell dsa" title="层 39 · HCA · 128:1"></div>
+          <div class="cell sparse" title="层 40 · CSA · 4:1 + top-1024"></div>
+          <div class="cell dsa" title="层 41 · HCA · 128:1"></div>
+          <div class="cell sparse" title="层 42 · CSA · 4:1 + top-1024"></div>
+          <div class="cell dsa" title="层 43 · HCA · 128:1"></div>
+          <div class="cell sparse" title="层 44 · CSA · 4:1 + top-1024"></div>
+          <div class="cell dsa" title="层 45 · HCA · 128:1"></div>
+          <div class="cell sparse" title="层 46 · CSA · 4:1 + top-1024"></div>
+          <div class="cell dsa" title="层 47 · HCA · 128:1"></div>
+          <div class="cell sparse" title="层 48 · CSA · 4:1 + top-1024"></div>
+          <div class="cell dsa" title="层 49 · HCA · 128:1"></div>
+          <div class="cell sparse" title="层 50 · CSA · 4:1 + top-1024"></div>
+          <div class="cell dsa" title="层 51 · HCA · 128:1"></div>
+          <div class="cell sparse" title="层 52 · CSA · 4:1 + top-1024"></div>
+          <div class="cell dsa" title="层 53 · HCA · 128:1"></div>
+          <div class="cell sparse" title="层 54 · CSA · 4:1 + top-1024"></div>
+          <div class="cell dsa" title="层 55 · HCA · 128:1"></div>
+          <div class="cell sparse" title="层 56 · CSA · 4:1 + top-1024"></div>
+          <div class="cell dsa" title="层 57 · HCA · 128:1"></div>
+          <div class="cell sparse" title="层 58 · CSA · 4:1 + top-1024"></div>
+          <div class="cell dsa" title="层 59 · HCA · 128:1"></div>
+          <div class="cell sparse" title="层 60 · CSA · 4:1 + top-1024"></div>
+          <div class="gapcell"></div>
+          <div class="cell mtp" title="MTP · ratio 0 · 只有滑窗"></div>
+        </div></div>
+        <div class="rrow"><div class="rlab">routing</div><div class="rcells">
+          <div class="cell dense" title="层 0 · hash · tid2eid[input_ids]"></div>
+          <div class="cell dense" title="层 1 · hash · tid2eid[input_ids]"></div>
+          <div class="cell dense" title="层 2 · hash · tid2eid[input_ids]"></div>
+          <div class="cell ghost" title="层 3 · sqrtsoftplus + bias"></div>
+          <div class="cell ghost" title="层 4 · sqrtsoftplus + bias"></div>
+          <div class="cell ghost" title="层 5 · sqrtsoftplus + bias"></div>
+          <div class="cell ghost" title="层 6 · sqrtsoftplus + bias"></div>
+          <div class="cell ghost" title="层 7 · sqrtsoftplus + bias"></div>
+          <div class="cell ghost" title="层 8 · sqrtsoftplus + bias"></div>
+          <div class="cell ghost" title="层 9 · sqrtsoftplus + bias"></div>
+          <div class="cell ghost" title="层 10 · sqrtsoftplus + bias"></div>
+          <div class="cell ghost" title="层 11 · sqrtsoftplus + bias"></div>
+          <div class="cell ghost" title="层 12 · sqrtsoftplus + bias"></div>
+          <div class="cell ghost" title="层 13 · sqrtsoftplus + bias"></div>
+          <div class="cell ghost" title="层 14 · sqrtsoftplus + bias"></div>
+          <div class="cell ghost" title="层 15 · sqrtsoftplus + bias"></div>
+          <div class="cell ghost" title="层 16 · sqrtsoftplus + bias"></div>
+          <div class="cell ghost" title="层 17 · sqrtsoftplus + bias"></div>
+          <div class="cell ghost" title="层 18 · sqrtsoftplus + bias"></div>
+          <div class="cell ghost" title="层 19 · sqrtsoftplus + bias"></div>
+          <div class="cell ghost" title="层 20 · sqrtsoftplus + bias"></div>
+          <div class="cell ghost" title="层 21 · sqrtsoftplus + bias"></div>
+          <div class="cell ghost" title="层 22 · sqrtsoftplus + bias"></div>
+          <div class="cell ghost" title="层 23 · sqrtsoftplus + bias"></div>
+          <div class="cell ghost" title="层 24 · sqrtsoftplus + bias"></div>
+          <div class="cell ghost" title="层 25 · sqrtsoftplus + bias"></div>
+          <div class="cell ghost" title="层 26 · sqrtsoftplus + bias"></div>
+          <div class="cell ghost" title="层 27 · sqrtsoftplus + bias"></div>
+          <div class="cell ghost" title="层 28 · sqrtsoftplus + bias"></div>
+          <div class="cell ghost" title="层 29 · sqrtsoftplus + bias"></div>
+          <div class="cell ghost" title="层 30 · sqrtsoftplus + bias"></div>
+          <div class="cell ghost" title="层 31 · sqrtsoftplus + bias"></div>
+          <div class="cell ghost" title="层 32 · sqrtsoftplus + bias"></div>
+          <div class="cell ghost" title="层 33 · sqrtsoftplus + bias"></div>
+          <div class="cell ghost" title="层 34 · sqrtsoftplus + bias"></div>
+          <div class="cell ghost" title="层 35 · sqrtsoftplus + bias"></div>
+          <div class="cell ghost" title="层 36 · sqrtsoftplus + bias"></div>
+          <div class="cell ghost" title="层 37 · sqrtsoftplus + bias"></div>
+          <div class="cell ghost" title="层 38 · sqrtsoftplus + bias"></div>
+          <div class="cell ghost" title="层 39 · sqrtsoftplus + bias"></div>
+          <div class="cell ghost" title="层 40 · sqrtsoftplus + bias"></div>
+          <div class="cell ghost" title="层 41 · sqrtsoftplus + bias"></div>
+          <div class="cell ghost" title="层 42 · sqrtsoftplus + bias"></div>
+          <div class="cell ghost" title="层 43 · sqrtsoftplus + bias"></div>
+          <div class="cell ghost" title="层 44 · sqrtsoftplus + bias"></div>
+          <div class="cell ghost" title="层 45 · sqrtsoftplus + bias"></div>
+          <div class="cell ghost" title="层 46 · sqrtsoftplus + bias"></div>
+          <div class="cell ghost" title="层 47 · sqrtsoftplus + bias"></div>
+          <div class="cell ghost" title="层 48 · sqrtsoftplus + bias"></div>
+          <div class="cell ghost" title="层 49 · sqrtsoftplus + bias"></div>
+          <div class="cell ghost" title="层 50 · sqrtsoftplus + bias"></div>
+          <div class="cell ghost" title="层 51 · sqrtsoftplus + bias"></div>
+          <div class="cell ghost" title="层 52 · sqrtsoftplus + bias"></div>
+          <div class="cell ghost" title="层 53 · sqrtsoftplus + bias"></div>
+          <div class="cell ghost" title="层 54 · sqrtsoftplus + bias"></div>
+          <div class="cell ghost" title="层 55 · sqrtsoftplus + bias"></div>
+          <div class="cell ghost" title="层 56 · sqrtsoftplus + bias"></div>
+          <div class="cell ghost" title="层 57 · sqrtsoftplus + bias"></div>
+          <div class="cell ghost" title="层 58 · sqrtsoftplus + bias"></div>
+          <div class="cell ghost" title="层 59 · sqrtsoftplus + bias"></div>
+          <div class="cell ghost" title="层 60 · sqrtsoftplus + bias"></div>
+          <div class="gapcell"></div>
+          <div class="cell ghost" title="MTP · sqrtsoftplus + bias"></div>
+        </div></div>
+        <div class="raxis"><span class="tick">0</span><span class="tick">2</span><span class="tick">10</span><span class="tick">20</span><span class="tick">30</span><span class="tick">40</span><span class="tick">50</span><span class="tick">60</span><span class="tick">MTP</span></div>
+      </div>
+    </div>
+    <div class="legend">
+      <span class="lgd"><span class="sw dsa"></span>HCA · ratio 128 · 31 层 · 不选，全看</span>
+      <span class="lgd"><span class="sw sparse"></span>CSA · ratio 4 · 30 层 · indexer 选 top-1024</span>
+      <span class="lgd"><span class="sw dense"></span>hash 路由 · 层 0–2</span>
+      <span class="lgd"><span class="sw mtp"></span>MTP · ratio 0 · 只有滑窗</span>
+    </div>
+  </div>
+  <div class="tscroll">
+  <table>
+    <thead><tr><th>层</th><th>ratio</th><th>类型</th><th>压缩行</th><th>这一层读什么</th><th>路由</th></tr></thead>
+    <tbody>
+      <tr><td class="num">0, 1</td><td class="num">128</td><td>HCA</td><td>128 token → 1 行</td><td>128 滑窗 + 全部 <code>(pos+1)/128</code> 行</td><td><strong>hash</strong></td></tr>
+      <tr><td class="num">2</td><td class="num">4</td><td>CSA</td><td>4 token → 1 行（重叠）</td><td>128 滑窗 + top-1024</td><td><strong>hash</strong></td></tr>
+      <tr><td class="num">3, 5, 7 … 59</td><td class="num">128</td><td>HCA</td><td>128 token → 1 行</td><td>128 滑窗 + 全部 <code>(pos+1)/128</code> 行</td><td>sqrtsoftplus + bias</td></tr>
+      <tr><td class="num">4, 6, 8 … 60</td><td class="num">4</td><td>CSA</td><td>4 token → 1 行（重叠）</td><td>128 滑窗 + top-1024</td><td>sqrtsoftplus + bias</td></tr>
+      <tr><td class="num">mtp.0</td><td class="num">0</td><td>Dense</td><td>不压缩</td><td>只有 128 滑窗</td><td>sqrtsoftplus + bias</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="grid2">
+    <div class="card key">
+      <p class="eyebrow">1 M 上下文下，两种层看到的行数天差地别</p>
+      <p>
+        同样是 1 048 576 个 token 的历史：HCA 层把它压成 <strong>8192 行</strong>，然后<strong>一行不落全读</strong>；
+        CSA 层把它压成 <strong>262 144 行</strong>，然后只读 indexer 选中的 <strong>1024 行</strong>。
+        两者读的行数是 8192 对 1024，但前者的每一行代表 128 个 token、后者代表 4 个。
+        粗看全局和细看局部，这就是交替排布要买的东西。
+      </p>
+    </div>
+    <div class="card">
+      <p class="eyebrow">滑窗是第三份，和上面两份都不一样</p>
+      <p>
+        不管哪种层，都另有一条 <code>sliding_window = 128</code> 的环，存的是<strong>没压过的</strong>原始 latent。
+        所以一个 CSA 层的 query 实际看到的是「最近 128 个原始 token」加「从历史里挑出来的 1024 行压缩块」，
+        两份 KV 物理上在同一个池子里，但一个按 slot 寻址、一个按 block 寻址。
+      </p>
+    </div>
+  </div>
+</section>
+
+
+<section>
+  <hr class="rule">
+  <p class="eyebrow">图 1 · 整网</p>
+  <h2>从 token 到 logits，残差一路是四路宽的</h2>
+  <figure>
+    <p class="fignum">图 1 · 文本前向的形状</p>
+    <svg viewBox="0 0 1060 560" role="img" aria-label="DeepSeek-V4-Pro 前向的逐步形状">
+      <defs>
+        <marker id="oar" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z" fill="var(--petrol-mark)"/></marker>
+        <linearGradient id="ogn" x1="0" y1="0" x2=".4" y2="1"><stop offset="0%" stop-color="var(--surface)"/><stop offset="100%" stop-color="var(--surface-2)"/></linearGradient>
+        <linearGradient id="ogp" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--petrol-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+        <linearGradient id="oga" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--amber-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+        <linearGradient id="ogm" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--moss-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+        <filter id="osh" x="-8%" y="-12%" width="116%" height="140%"><feDropShadow dx="0" dy="1.4" stdDeviation="2.2" flood-opacity=".14"/></filter>
+      </defs>
+
+      <rect x="28" y="24" width="300" height="64" rx="7" fill="url(#ogn)" stroke="var(--line)" filter="url(#osh)"/>
+      <text x="44" y="48" font-weight="600">token_ids [T]</text>
+      <text x="44" y="72" fill="var(--ink-2)">embed.weight [129280, 7168] BF16</text>
+
+      <rect x="378" y="24" width="300" height="64" rx="7" fill="url(#ogp)" stroke="var(--petrol-mark)" filter="url(#osh)"/>
+      <text x="394" y="48" font-weight="600">hidden [T, 7168]</text>
+      <text x="394" y="72" fill="var(--petrol)">展成 4 路残差 [T, 4, 7168]</text>
+
+      <rect x="728" y="24" width="316" height="64" rx="7" fill="url(#ogn)" stroke="var(--line)" filter="url(#osh)"/>
+      <text x="744" y="48" font-weight="600">pre_mix [T, 4] FP32</text>
+      <text x="744" y="72" fill="var(--ink-2)">初值 (1, 0, 0, 0)</text>
+
+      <path d="M328 56 H378" stroke="var(--petrol-mark)" stroke-width="1.4" marker-end="url(#oar)"/>
+      <path d="M678 56 H728" stroke="var(--petrol-mark)" stroke-width="1.4" marker-end="url(#oar)"/>
+
+      <rect x="28" y="112" width="1016" height="264" rx="9" fill="url(#oga)" stroke="var(--amber-mark)" filter="url(#osh)"/>
+      <text x="44" y="138" font-weight="600">61 层，每层两个子层缝</text>
+
+      <rect x="48" y="156" width="470" height="92" rx="7" fill="var(--surface)" stroke="var(--line)"/>
+      <text x="64" y="180" font-weight="600">注意力子层</text>
+      <text x="64" y="202" fill="var(--ink-2)">hc_pre → [T, 7168] → attn_norm</text>
+      <text x="64" y="222" fill="var(--amber)">HCA 或 CSA（见图 2a / 2b）→ [T, 7168]</text>
+      <text x="64" y="240" fill="var(--ink-2)">hc_post → 回到 [T, 4, 7168]</text>
+
+      <rect x="554" y="156" width="470" height="92" rx="7" fill="var(--surface)" stroke="var(--line)"/>
+      <text x="570" y="180" font-weight="600">FFN 子层</text>
+      <text x="570" y="202" fill="var(--ink-2)">hc_pre → [T, 7168] → ffn_norm</text>
+      <text x="570" y="222" fill="var(--moss)">384 选 6 + 1 共享 → [T, 7168]</text>
+      <text x="570" y="240" fill="var(--ink-2)">hc_post → 回到 [T, 4, 7168]</text>
+
+      <text x="48" y="282" fill="var(--ink-2)">层内三份 KV：本层 128 行滑窗（未压缩）· 本层自己的压缩行（HCA 1/128 或 CSA 1/4）· CSA 另有一份只用来打分的 index KV</text>
+      <text x="48" y="306" fill="var(--ink-2)">层 0 / 1 / 2 的 FFN 用哈希表选专家；层 0 的两个 mHC 缝不能融合，其余层的 post + pre 合成一次发射</text>
+      <text x="48" y="332" fill="var(--ink-2)">层类型按 compress_ratios 交替：0,1 是 HCA，之后 CSA 与 HCA 一层隔一层，层 60 是 CSA</text>
+      <text x="48" y="358" fill="var(--ink-3)" opacity=".9">残差四路宽度自始至终不变，中间没有任何一步把它收掉再展开</text>
+
+      <rect x="28" y="400" width="300" height="86" rx="7" fill="url(#ogp)" stroke="var(--petrol-mark)" filter="url(#osh)"/>
+      <text x="44" y="424" font-weight="600">收尾</text>
+      <text x="44" y="448" fill="var(--petrol)">hc_head_fn [4, 28672] FP32</text>
+      <text x="44" y="470" fill="var(--ink-2)">[T, 4, 7168] → [T, 7168]</text>
+
+      <rect x="378" y="400" width="300" height="86" rx="7" fill="url(#ogn)" stroke="var(--line)" filter="url(#osh)"/>
+      <text x="394" y="424" font-weight="600">norm.weight [7168]</text>
+      <text x="394" y="448" fill="var(--ink-2)">最后一次 RMSNorm</text>
+
+      <rect x="728" y="400" width="316" height="86" rx="7" fill="url(#ogm)" stroke="var(--moss-mark)" filter="url(#osh)"/>
+      <text x="744" y="424" font-weight="600">head.weight [129280, 7168]</text>
+      <text x="744" y="448" fill="var(--moss)">logits [T, 129280]</text>
+      <text x="744" y="470" fill="var(--ink-2)">与 embed 不共享权重</text>
+
+      <path d="M328 440 H378" stroke="var(--petrol-mark)" stroke-width="1.4" marker-end="url(#oar)"/>
+      <path d="M678 440 H728" stroke="var(--petrol-mark)" stroke-width="1.4" marker-end="url(#oar)"/>
+
+      <text x="28" y="524" fill="var(--ink-2)">MTP 层不在这条链里：它接的是「这一步的隐藏态」和「下一个 token 的 embedding」，自己再跑一遍注意力和 MoE，共用这里的 embed 与 head。</text>
+      <text x="28" y="548" fill="var(--ink-2)">单个 token 在这条链上碰到的权重合计 49.78 B —— 其中 24.18 B 是那 6 个路由专家，19.47 B 是 61 层注意力。</text>
+    </svg>
+  </figure>
+</section>
+<section>
+  <hr class="rule">
+  <p class="eyebrow">图 2a–2c · 三种注意力层</p>
+  <h2>Q 和输出投影三种一模一样，差别全在中间那段 KV</h2>
+  <p>
+    三种层的前后段完全相同：<code>wqkv_a</code> 一次 GEMM 出 <code>q_lora [T, 1536]</code> 与 <code>kv [T, 512]</code>，
+    一个融合 kernel 同时做<strong>逐头无权重的 Q RMSNorm</strong>、<strong>带权重的 KV RMSNorm</strong>
+    和尾 64 维的 GPT-J 交错 RoPE（decode 时连滑窗写入也折进这一次发射）；
+    输出端一律是 <code>wo_a</code> 16 组分组 LoRA 加 <code>wo_b</code>。
+    不同的只有三件事：<strong>有没有 compressor</strong>、<strong>有没有 indexer</strong>、<strong>读哪些行</strong>。
+  </p>
+
+  <figure>
+    <p class="fignum">图 2a · HCA · 31 层 · <code>ratio = 128</code> · 压得狠，但一行不落</p>
+    <svg viewBox="0 0 1060 320" role="img" aria-label="HCA 层的模块、写入与读取">
+      <defs>
+        <marker id="har" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z" fill="var(--mute-mark)"/></marker>
+        <linearGradient id="hgn" x1="0" y1="0" x2=".4" y2="1"><stop offset="0%" stop-color="var(--surface)"/><stop offset="100%" stop-color="var(--surface-2)"/></linearGradient>
+        <linearGradient id="hga" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--amber-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+        <filter id="hsh" x="-8%" y="-12%" width="116%" height="140%"><feDropShadow dx="0" dy="1.4" stdDeviation="2.2" flood-opacity=".14"/></filter>
+      </defs>
+      <rect x="28" y="22" width="1016" height="44" rx="7" fill="var(--sunk)" stroke="var(--line-soft)"/>
+      <text x="44" y="42" font-size="10.5" fill="var(--ink-2)">共用前段：wqkv_a [2048, 7168] FP8 → q_lora [T, 1536] + kv [T, 512] → q_norm(融合量化) → wq_b [65536, 1536] → Q [T, 128, 512] → 逐头 RMSNorm（无权重）+ 尾 64 维 RoPE</text>
+      <text x="44" y="58" font-size="10.5" fill="var(--ink-2)">共用后段：attn_sink [128] FP32 只加在 softmax 分母 → 输出 [T, 128, 512] → 逆 RoPE → wo_a 16 × [1024, 4096] → wo_b [7168, 16384] → [T, 7168]</text>
+
+      <rect x="28" y="88" width="320" height="166" rx="8" fill="url(#hga)" stroke="var(--amber-mark)" filter="url(#hsh)"/>
+      <text x="44" y="114" font-weight="600">额外模块：一个 compressor</text>
+      <text x="44" y="140" fill="var(--amber)">wkv / wgate 各 [512, 7168] BF16</text>
+      <text x="44" y="162" fill="var(--ink-2)">overlap = False，组与组不重叠</text>
+      <text x="44" y="184" fill="var(--ink-2)">ape [128, 512] FP32 位置编码加在门上</text>
+      <text x="44" y="208" fill="var(--ink-2)">128 个 token 一组做 FP32 softmax 加权</text>
+      <text x="44" y="232" fill="var(--moss)">没有 indexer · 额外权重 7.41 M</text>
+
+      <rect x="370" y="88" width="320" height="166" rx="8" fill="url(#hgn)" stroke="var(--line)" filter="url(#hsh)"/>
+      <text x="386" y="114" font-weight="600">写入</text>
+      <text x="386" y="140" fill="var(--ink-2)">① 本层 128 行滑窗（未压缩 latent）</text>
+      <text x="386" y="168" fill="var(--amber)">② 每 128 个 token 一行压缩 KV</text>
+      <text x="386" y="190" fill="var(--ink-2)">写进 HCA 信封区，一行 [512]</text>
+      <text x="386" y="218" fill="var(--ink-2)">未满的一组留在 FP32 ring（128 槽）</text>
+      <text x="386" y="242" fill="var(--ink-3)" opacity=".9">YaRN RoPE，θ = 160000，factor 16</text>
+
+      <rect x="712" y="88" width="332" height="166" rx="8" fill="url(#hgn)" stroke="var(--line)" filter="url(#hsh)"/>
+      <text x="728" y="114" font-weight="600">读取 · 不做任何选择</text>
+      <text x="728" y="140" fill="var(--ink-2)">滑窗 ≤ 128 行</text>
+      <text x="728" y="168" fill="var(--amber)">加上全部可见压缩行 (pos+1)/128</text>
+      <text x="728" y="192" fill="var(--ink-2)">1 M 上下文 = 8192 行，全读</text>
+      <text x="728" y="220" fill="var(--ink-2)">kv_indices_hca / kv_indptr_hca</text>
+      <text x="728" y="244" fill="var(--moss)">没有 top-k，也就没有打分 kernel</text>
+
+      <path d="M348 170 H370" stroke="var(--mute-mark)" stroke-width="1.3" marker-end="url(#har)"/>
+      <path d="M690 170 H712" stroke="var(--mute-mark)" stroke-width="1.3" marker-end="url(#har)"/>
+
+      <text x="28" y="284" fill="var(--ink-2)">HCA 是「全局低分辨率」那一路：它不需要知道哪一段历史重要，因为它把每一段都看了，只是每一行代表 128 个 token。</text>
+      <text x="28" y="306" fill="var(--ink-2)">代价是读的行数随上下文线性增长 —— 只是斜率被 128 除过，1 M 上下文也才 8192 行。</text>
+    </svg>
+  </figure>
+
+  <figure>
+    <p class="fignum">图 2b · CSA · 30 层 · <code>ratio = 4</code> · 压得细，但只挑 1024 行</p>
+    <svg viewBox="0 0 1060 340" role="img" aria-label="CSA 层的模块、写入与读取">
+      <defs>
+        <marker id="car2" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z" fill="var(--mute-mark)"/></marker>
+        <linearGradient id="cgn2" x1="0" y1="0" x2=".4" y2="1"><stop offset="0%" stop-color="var(--surface)"/><stop offset="100%" stop-color="var(--surface-2)"/></linearGradient>
+        <linearGradient id="cga2" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--amber-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+        <linearGradient id="cgp2" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--petrol-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+        <filter id="csh2" x="-8%" y="-12%" width="116%" height="140%"><feDropShadow dx="0" dy="1.4" stdDeviation="2.2" flood-opacity=".14"/></filter>
+      </defs>
+      <rect x="28" y="22" width="1016" height="30" rx="7" fill="var(--sunk)" stroke="var(--line-soft)"/>
+      <text x="44" y="42" font-size="10.5" fill="var(--ink-2)">共用前后段同图 2a。下面三栏是 CSA 独有的部分 —— 注意它有<tspan font-weight="700">两个</tspan> compressor。</text>
+
+      <rect x="28" y="72" width="320" height="196" rx="8" fill="url(#cga2)" stroke="var(--amber-mark)" filter="url(#csh2)"/>
+      <text x="44" y="98" font-weight="600">额外模块：两个 compressor + indexer</text>
+      <text x="44" y="124" fill="var(--amber)">主 compressor</text>
+      <text x="44" y="144" fill="var(--ink-2)">wkv / wgate 各 [1024, 7168]，ape [4, 1024]</text>
+      <text x="44" y="164" fill="var(--ink-2)">overlap = True，所以宽度是 2 × 512</text>
+      <text x="44" y="192" fill="var(--petrol)">indexer 自己的 compressor</text>
+      <text x="44" y="212" fill="var(--ink-2)">wkv / wgate 各 [256, 7168]，head_dim 128</text>
+      <text x="44" y="232" fill="var(--ink-2)">rotate = True：Hadamard 旋转后量化</text>
+      <text x="44" y="256" fill="var(--moss)">额外权重 31.4 M（比 HCA 多 24.0 M）</text>
+
+      <rect x="370" y="72" width="320" height="196" rx="8" fill="url(#cga2)" stroke="var(--amber-mark)" filter="url(#csh2)"/>
+      <text x="386" y="98" font-weight="600">写入（三处）</text>
+      <text x="386" y="124" fill="var(--ink-2)">① 本层 128 行滑窗</text>
+      <text x="386" y="152" fill="var(--amber)">② 每 4 个 token 一行主压缩 KV</text>
+      <text x="386" y="172" fill="var(--ink-2)">写进 CSA 信封区，一行 [512]</text>
+      <text x="386" y="200" fill="var(--petrol)">③ 每 4 个 token 一行 index KV</text>
+      <text x="386" y="220" fill="var(--ink-2)">另一个池子，一行 [128]</text>
+      <text x="386" y="244" fill="var(--ink-3)" opacity=".9">FP4 默认（gfx942 仍 FP8）</text>
+
+      <rect x="712" y="72" width="332" height="196" rx="8" fill="url(#cgp2)" stroke="var(--petrol-mark)" filter="url(#csh2)"/>
+      <text x="728" y="98" font-weight="600">读取 · 先打分再取行</text>
+      <text x="728" y="124" fill="var(--ink-2)">滑窗 ≤ 128 行</text>
+      <text x="728" y="152" fill="var(--petrol)">加上 indexer 选出的 top-1024</text>
+      <text x="728" y="176" fill="var(--ink-2)">候选池是 (pos+1)/4 行</text>
+      <text x="728" y="196" fill="var(--ink-2)">1 M 上下文 = 262 144 选 1024</text>
+      <text x="728" y="224" fill="var(--ink-2)">选出的是 seq-local 行号，</text>
+      <text x="728" y="244" fill="var(--ink-2)">由 csa_translate_pack 翻成物理偏移</text>
+
+      <path d="M348 160 H370" stroke="var(--mute-mark)" stroke-width="1.3" marker-end="url(#car2)"/>
+      <path d="M690 160 H712" stroke="var(--mute-mark)" stroke-width="1.3" marker-end="url(#car2)"/>
+
+      <text x="28" y="298" fill="var(--ink-2)">两个 compressor 不是冗余：主 compressor 的输出是真正要被注意力读的 KV，indexer 的那个只用来<tspan font-weight="700">打分</tspan>，所以它可以压到 128 维、可以更激进地量化。</text>
+      <text x="28" y="322" fill="var(--ink-2)">overlap = True 是 CSA 独有的：相邻两组共享一半窗口，为的是不让组边界把一段连续语义切断，代价就是投影宽度翻倍。</text>
+    </svg>
+  </figure>
+
+  <figure>
+    <p class="fignum">图 2c · Dense · <code>ratio = 0</code> · 骨干里一层都没有，只有 MTP / 草稿层</p>
+    <svg viewBox="0 0 1060 240" role="img" aria-label="Dense 层的模块、写入与读取">
+      <defs>
+        <marker id="dar" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z" fill="var(--mute-mark)"/></marker>
+        <linearGradient id="dgn" x1="0" y1="0" x2=".4" y2="1"><stop offset="0%" stop-color="var(--surface)"/><stop offset="100%" stop-color="var(--surface-2)"/></linearGradient>
+        <linearGradient id="dgm" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--moss-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+        <filter id="dsh" x="-8%" y="-12%" width="116%" height="140%"><feDropShadow dx="0" dy="1.4" stdDeviation="2.2" flood-opacity=".14"/></filter>
+      </defs>
+      <rect x="28" y="18" width="1016" height="30" rx="7" fill="var(--sunk)" stroke="var(--line-soft)"/>
+      <text x="44" y="38" font-size="10.5" fill="var(--ink-2)">共用前后段同图 2a，但 RoPE 换成普通的 θ = 10000，不走 YaRN —— 这一层本来就看不远。</text>
+
+      <rect x="28" y="68" width="320" height="120" rx="8" fill="url(#dgm)" stroke="var(--moss-mark)" filter="url(#dsh)"/>
+      <text x="44" y="94" font-weight="600">额外模块</text>
+      <text x="44" y="120" fill="var(--moss)">没有 compressor</text>
+      <text x="44" y="142" fill="var(--moss)">没有 indexer</text>
+      <text x="44" y="168" fill="var(--ink-2)">额外权重 0</text>
+
+      <rect x="370" y="68" width="320" height="120" rx="8" fill="url(#dgn)" stroke="var(--line)" filter="url(#dsh)"/>
+      <text x="386" y="94" font-weight="600">写入</text>
+      <text x="386" y="120" fill="var(--ink-2)">只写本层 128 行滑窗</text>
+      <text x="386" y="148" fill="var(--ink-3)" opacity=".9">信封区里连一行都不占</text>
+
+      <rect x="712" y="68" width="332" height="120" rx="8" fill="url(#dgn)" stroke="var(--line)" filter="url(#dsh)"/>
+      <text x="728" y="94" font-weight="600">读取</text>
+      <text x="728" y="120" fill="var(--ink-2)">滑窗 min(pos+1, 128) 行</text>
+      <text x="728" y="148" fill="var(--ink-2)">kv_indices_swa / kv_indptr_swa</text>
+      <text x="728" y="172" fill="var(--moss)">KV 长度与上下文无关</text>
+
+      <path d="M348 128 H370" stroke="var(--mute-mark)" stroke-width="1.3" marker-end="url(#dar)"/>
+      <path d="M690 128 H712" stroke="var(--mute-mark)" stroke-width="1.3" marker-end="url(#dar)"/>
+
+      <text x="28" y="220" fill="var(--ink-2)">草稿层要的是便宜和短：它只负责在已经定好的上下文上往前猜几个 token，历史由被它验证的骨干负责。</text>
+    </svg>
+  </figure>
+
+  <div class="tscroll">
+  <table>
+    <thead><tr><th>类型</th><th>层数</th><th>额外权重 / 层</th><th>压缩行 / token</th><th>打分</th><th>1 M 上下文下一个 query 读的行数</th></tr></thead>
+    <tbody>
+      <tr><td class="k">HCA</td><td class="num">31</td><td class="num">7.41 M</td><td class="num">1 / 128</td><td>无</td><td class="num">≤128 + 8192</td></tr>
+      <tr><td class="k">CSA</td><td class="num">30</td><td class="num">31.40 M</td><td class="num">1 / 4 ×2 个池子</td><td><strong>top-1024</strong></td><td class="num">≤128 + 1024</td></tr>
+      <tr><td class="k">Dense</td><td class="num">0（骨干）</td><td class="num">0</td><td class="num">0</td><td>无</td><td class="num">≤128</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section>
+  <hr class="rule">
+  <p class="eyebrow">图 3 · indexer</p>
+  <h2>CSA 的 top-1024 是在一份独立的、压得更狠的 KV 上选出来的</h2>
+  <p>
+    indexer 不在主 KV 上打分。它有自己的 compressor（<code>head_dim = 128</code>，带 Hadamard 旋转），
+    把同样 4 个 token 一组压成一行 128 维的 index key，写进另一个池子；
+    query 侧也单独投影成 64 头 × 128 维。打分完只输出<strong>行号</strong>，真正的 KV 仍从主池取。
+  </p>
+  <figure>
+    <p class="fignum">图 3 · 从 hidden 到 top-1024 行号</p>
+    <svg viewBox="0 0 1060 470" role="img" aria-label="CSA indexer 的 query 侧、key 侧与 top-k">
+      <defs>
+        <marker id="iar" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z" fill="var(--petrol-mark)"/></marker>
+        <linearGradient id="ign" x1="0" y1="0" x2=".4" y2="1"><stop offset="0%" stop-color="var(--surface)"/><stop offset="100%" stop-color="var(--surface-2)"/></linearGradient>
+        <linearGradient id="igp" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--petrol-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+        <linearGradient id="iga" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--amber-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+        <linearGradient id="igb" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--brick-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+        <filter id="ish" x="-8%" y="-12%" width="116%" height="140%"><feDropShadow dx="0" dy="1.4" stdDeviation="2.2" flood-opacity=".14"/></filter>
+      </defs>
+
+      <text x="28" y="26" font-family="Archivo, sans-serif" font-size="13" font-weight="600">query 侧 · 每个 token 一次</text>
+      <rect x="28" y="40" width="300" height="186" rx="8" fill="url(#igp)" stroke="var(--petrol-mark)" filter="url(#ish)"/>
+      <text x="44" y="66" fill="var(--ink-2)">hidden [T, 7168]</text>
+      <text x="44" y="88" fill="var(--petrol)">weights_proj [64, 7168] → w [T, 64]</text>
+      <text x="44" y="116" fill="var(--ink-2)">qr [T, 1536] FP8（q_norm 顺手量化）</text>
+      <text x="44" y="138" fill="var(--petrol)">indexer.wq_b [8192, 1536]</text>
+      <text x="44" y="158" fill="var(--petrol)">→ q [T, 64, 128]</text>
+      <text x="44" y="186" fill="var(--ink-2)">RoPE + 量化融合成一次发射</text>
+      <text x="44" y="210" fill="var(--ink-2)">每 (token, head) 一个 scale，折进 w</text>
+
+      <text x="380" y="26" font-family="Archivo, sans-serif" font-size="13" font-weight="600">key 侧 · indexer 自己的压缩器</text>
+      <rect x="380" y="40" width="300" height="186" rx="8" fill="url(#iga)" stroke="var(--amber-mark)" filter="url(#ish)"/>
+      <text x="396" y="66" fill="var(--ink-2)">同样 4 个 token 一组</text>
+      <text x="396" y="88" fill="var(--amber)">wkv / wgate [256, 7168] BF16</text>
+      <text x="396" y="112" fill="var(--ink-2)">FP32 softmax 池化 → RMSNorm → RoPE</text>
+      <text x="396" y="140" fill="var(--brick)">rotate = True：先 Hadamard 旋转</text>
+      <text x="396" y="164" fill="var(--amber)">FP4：一行 68 B（64 B 值 + 4 B e8m0）</text>
+      <text x="396" y="186" fill="var(--ink-2)">FP8：一行 132 B（128 B + FP32 scale）</text>
+      <text x="396" y="212" fill="var(--ink-3)" opacity=".9">写入与量化都在 fused_compress_attn 里</text>
+
+      <text x="732" y="26" font-family="Archivo, sans-serif" font-size="13" font-weight="600">打分与 top-k</text>
+      <rect x="732" y="40" width="312" height="186" rx="8" fill="url(#ign)" stroke="var(--line)" filter="url(#ish)"/>
+      <text x="748" y="66" fill="var(--ink-2)">deepgemm_fp8_paged_mqa_logits</text>
+      <text x="748" y="86" fill="var(--ink-3)" opacity=".9">FP4 走 pa_mqa_logits_fp4 / OPUS</text>
+      <text x="748" y="114" fill="var(--petrol)">logits [T, (pos+1)/4]</text>
+      <text x="748" y="142" fill="var(--ink-2)">每行只算到自己的可见长度为止</text>
+      <text x="748" y="170" fill="var(--petrol)">top_k_per_row_{prefill,decode}</text>
+      <text x="748" y="194" fill="var(--petrol)">topk_in_seq [T, 1024] int32</text>
+      <text x="748" y="216" fill="var(--ink-2)">看不到那么多的行用 -1 填充</text>
+
+      <path d="M328 130 H380" stroke="var(--petrol-mark)" stroke-width="1.4" marker-end="url(#iar)"/>
+      <path d="M680 130 H732" stroke="var(--petrol-mark)" stroke-width="1.4" marker-end="url(#iar)"/>
+
+      <rect x="28" y="256" width="1016" height="86" rx="8" fill="url(#igb)" stroke="var(--brick)" filter="url(#ish)"/>
+      <text x="44" y="282" font-weight="600">选出来的还不能直接用：csa_translate_pack</text>
+      <text x="44" y="308" fill="var(--ink-2)">top-k 给的是「这条序列自己的第几行压缩 KV」，而主池是分页的。翻译这一步把 seq-local 行号换成物理分页偏移，并跳过 -1。</text>
+      <text x="44" y="330" fill="var(--ink-2)">翻译之后得到的 kv_indices_csa / kv_indptr_csa，和滑窗那段一起喂给同一个 CSR 形式的稀疏注意力 kernel。</text>
+
+      <text x="28" y="378" font-family="Archivo, sans-serif" font-size="13" font-weight="600">打分用的那个数</text>
+      <text x="28" y="404" fill="var(--ink-2)">logits[t, c] = Σ(h &lt; 64) w[t, h] · ⟨ q[t, h], k[c] ⟩ ÷ (√128 · √64)</text>
+      <text x="28" y="428" fill="var(--ink-2)">两个 1/√· 合起来就是代码里的 _weights_scale = softmax_scale · n_heads^-0.5；w 没有激活函数。</text>
+      <text x="28" y="452" fill="var(--ink-2)">注意温度有三套：注意力 1/√512（128 头 × 512 维），indexer 1/√128 再除 √64，压缩器内部的池化用的是 softmax 不是温度。</text>
+    </svg>
+  </figure>
+  <div class="grid2">
+    <div class="card key">
+      <p class="eyebrow">indexer 的 Q 不切 TP</p>
+      <p>
+        <code>indexer.wq_b</code> 是 <code>ReplicatedLinear</code>：64 个头在每个 rank 上都要有。
+        理由很直接 —— 打分要对 64 个头求和才得到一个 logit，切了就得为 <code>index_score</code> 再加一次 all-reduce。
+        这张表只有 12.58 M，复制一份比多一次通信便宜。
+      </p>
+    </div>
+    <div class="card good">
+      <p class="eyebrow">index KV 的精度是单独的开关</p>
+      <p>
+        原生单节点默认 <strong>FP4</strong>（<code>gfx942</code> 例外，仍 FP8），插件路径保持 FP8。
+        <code>--index-cache-dtype fp8</code> 可以强制回退。
+        gfx950 与 gfx1250 的 FP4 布局<strong>故意不兼容</strong>：前者是 <code>pa_mqa_logits_fp4</code> 的预洗牌布局，后者是 OPUS 自然行 ——
+        所以 <code>indexer_layout</code> 要和 <code>quant_mode</code> 分开记，一个说怎么量化，一个说怎么摆。
+      </p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <hr class="rule">
+  <p class="eyebrow">图 4 · KV 池</p>
+  <h2>一个行空间，两头生长：历史按块、滑窗按槽</h2>
+  <p>
+    V4 把两种 KV 放进同一个行空间：压缩历史按 block 寻址，从 0 往上长；
+    每请求的滑窗和压缩器状态按 slot 寻址，从高位往下长。
+    「一行」在所有平面上指同一个意思，但一行的<strong>字节数</strong>各平面不同 —— 这是硬要求，
+    因为稀疏 kernel 拿的是一份共享的 index 缓冲区，NoPE 和 RoPE 两个平面必须用同一个行号。
+  </p>
+  <figure>
+    <p class="fignum">图 4 · 一个 token 要多少字节，一个请求要多少</p>
+    <svg viewBox="0 0 1060 440" role="img" aria-label="V4 KV 行空间与每 token 字节">
+      <defs>
+        <linearGradient id="kgn2" x1="0" y1="0" x2=".4" y2="1"><stop offset="0%" stop-color="var(--surface)"/><stop offset="100%" stop-color="var(--surface-2)"/></linearGradient>
+        <linearGradient id="kga2" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--amber-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+        <linearGradient id="kgp2" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--petrol-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+        <linearGradient id="kgm2" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--moss-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+        <filter id="ksh2" x="-8%" y="-12%" width="116%" height="140%"><feDropShadow dx="0" dy="1.4" stdDeviation="2.2" flood-opacity=".14"/></filter>
+      </defs>
+
+      <text x="28" y="26" font-family="Archivo, sans-serif" font-size="13" font-weight="600">行空间：两端相向生长</text>
+      <rect x="28" y="40" width="600" height="56" rx="6" fill="url(#kga2)" stroke="var(--amber-mark)"/>
+      <text x="44" y="64" font-weight="600">num_blocks 个信封 · 压缩历史</text>
+      <text x="44" y="84" fill="var(--ink-2)">按 block 寻址，向上长</text>
+      <rect x="700" y="40" width="344" height="56" rx="6" fill="url(#kgp2)" stroke="var(--petrol-mark)"/>
+      <text x="716" y="64" font-weight="600">num_slots 个槽 · 状态 + 滑窗</text>
+      <text x="716" y="84" fill="var(--ink-2)">按 slot 寻址，向下长</text>
+      <text x="640" y="72" fill="var(--ink-3)" opacity=".9">gap</text>
+
+      <text x="28" y="134" font-family="Archivo, sans-serif" font-size="13" font-weight="600">信封：一个 128-token 的块里有 991 行</text>
+      <rect x="28" y="148" width="330" height="96" rx="7" fill="url(#kga2)" stroke="var(--amber-mark)" filter="url(#ksh2)"/>
+      <text x="44" y="174" font-weight="600">CSA · 30 层</text>
+      <text x="44" y="196" fill="var(--ink-2)">每层 128 / 4 = 32 行</text>
+      <text x="44" y="220" fill="var(--amber)">30 × 32 = 960 行</text>
+      <rect x="378" y="148" width="330" height="96" rx="7" fill="url(#kgm2)" stroke="var(--moss-mark)" filter="url(#ksh2)"/>
+      <text x="394" y="174" font-weight="600">HCA · 31 层</text>
+      <text x="394" y="196" fill="var(--ink-2)">每层 128 / 128 = 1 行</text>
+      <text x="394" y="220" fill="var(--moss)">31 × 1 = 31 行</text>
+      <rect x="728" y="148" width="316" height="96" rx="7" fill="url(#kgn2)" stroke="var(--line)" filter="url(#ksh2)"/>
+      <text x="744" y="174" font-weight="600">合计</text>
+      <text x="744" y="196" fill="var(--ink-2)">991 行 / 128 token</text>
+      <text x="744" y="220" fill="var(--petrol)">= 7.742 行 / token</text>
+
+      <text x="28" y="284" font-family="Archivo, sans-serif" font-size="13" font-weight="600">一行多少字节，取决于池子的 dtype</text>
+      <text x="28" y="308" fill="var(--ink-2)">BF16 主池：一行 [512] BF16 = 1024 B，RoPE 就写在这一行里 → 7.742 × 1024 = 7928 B / token</text>
+      <text x="28" y="330" fill="var(--amber)">FP8 主池：NoPE 平面一行 512 B，RoPE 64 维另走一张 BF16 平面 128 B，合计 640 B → 7.742 × 640 = 4955 B / token</text>
+      <text x="28" y="354" fill="var(--petrol)">index 池（只有 CSA 的 7.5 行 / token）：FP4 68 B/行 = 510 B / token；FP8 132 B/行 = 990 B / token</text>
+      <text x="28" y="378" font-weight="600" fill="var(--ink)">recipe 的默认组合（FP8 主池 + FP4 index）= 4955 + 510 = 5465 B / token，1 M 上下文约 5.09 GiB</text>
+
+      <text x="28" y="414" fill="var(--ink-2)">滑窗不随上下文变长：61 层 × 128 行 = 7808 行 / 请求 —— FP8 下 4.77 MiB，BF16 下 7.63 MiB。压缩器的未满组另有一条 FP32 ring。</text>
+      <text x="28" y="436" fill="var(--ink-2)">槽位在高端、从高往低分配，是为了让两类 KV 互不搬动对方已经放好的东西；移动边界只是主机端改一个计数，不用重新切分，也不用重捕获。</text>
+    </svg>
+  </figure>
+  <div class="grid2">
+    <div class="card">
+      <p class="eyebrow">为什么 NoPE 和 RoPE 不能是同一个信封的两段</p>
+      <p>
+        假设一个信封 <code>E</code> 字节，那么块 <code>b</code> 的第 <code>r</code> 行在一个平面上是 <code>b·E/512 + r</code>，
+        在另一个平面上是 <code>b·E/128 + r</code> —— 两者只有在 <code>E = 0</code> 时才相等。
+        而 <code>mla_decode_fwd_v4_nm</code> 这类 kernel 只收<strong>一份</strong> index 缓冲区，
+        所以两个平面必须各自是一张密排的平面，行号才能通用。
+      </p>
+    </div>
+    <div class="card warn">
+      <p class="eyebrow">MQA 单 KV 头 = KV 不随 TP 分摊</p>
+      <p>
+        <code>num_key_value_heads = 1</code>，所以 TP8 不会把 KV 切成 8 份：
+        上面那 5465 B/token 是<strong>每个 rank 都要存一份</strong>的量。
+        省显存的开关因此是 <code>--kv_cache_dtype fp8</code>（1024 → 640 B/行）和 FP4 index 平面，而不是加 TP。
+      </p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <hr class="rule">
+  <p class="eyebrow">图 5 · mHC</p>
+  <h2>残差一路是四路宽的，每个子层进出都要过一次 Sinkhorn</h2>
+  <p>
+    embedding 进第一层之前被展成 <code>[T, 4, 7168]</code>。每个子层（注意力、FFN 各算一个）做两件事：
+    <strong>hc_pre</strong> 把 4 路残差按预测出来的权重收成一路 <code>[T, 7168]</code> 喂给子层，
+    <strong>hc_post</strong> 把子层输出按另一组权重摊回 4 路，同时用一个 4×4 组合矩阵重新混合旧残差。
+    这两组权重和那个矩阵都是同一个投影出来的，再经 20 步 Sinkhorn 投影到双随机流形上。
+  </p>
+  <figure>
+    <p class="fignum">图 5 · 一个子层的 mHC 缝</p>
+    <svg viewBox="0 0 1060 400" role="img" aria-label="mHC 的 pre 与 post">
+      <defs>
+        <marker id="mar" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z" fill="var(--petrol-mark)"/></marker>
+        <linearGradient id="mgn" x1="0" y1="0" x2=".4" y2="1"><stop offset="0%" stop-color="var(--surface)"/><stop offset="100%" stop-color="var(--surface-2)"/></linearGradient>
+        <linearGradient id="mgp" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--petrol-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+        <linearGradient id="mga" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--amber-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+        <filter id="msh" x="-8%" y="-12%" width="116%" height="140%"><feDropShadow dx="0" dy="1.4" stdDeviation="2.2" flood-opacity=".14"/></filter>
+      </defs>
+      <rect x="28" y="30" width="236" height="150" rx="8" fill="url(#mgn)" stroke="var(--line)" filter="url(#msh)"/>
+      <text x="44" y="56" font-weight="600">残差</text>
+      <text x="44" y="82" fill="var(--petrol)">[T, 4, 7168] BF16</text>
+      <text x="44" y="108" fill="var(--ink-2)">从 embedding 起就是 4 路</text>
+      <text x="44" y="136" fill="var(--ink-2)">四路之间没有共享存储</text>
+      <text x="44" y="162" fill="var(--ink-3)" opacity=".9">hc_mult = 4</text>
+
+      <rect x="296" y="30" width="300" height="150" rx="8" fill="url(#mgp)" stroke="var(--petrol-mark)" filter="url(#msh)"/>
+      <text x="312" y="56" font-weight="600">预测三样东西</text>
+      <text x="312" y="82" fill="var(--ink-2)">先对 [T, 28672] 做 RMSNorm（无权重）</text>
+      <text x="312" y="106" fill="var(--petrol)">hc_fn [24, 28672] FP32 → [T, 24]</text>
+      <text x="312" y="130" fill="var(--ink-2)">24 = (2 + 4) × 4</text>
+      <text x="312" y="156" fill="var(--petrol)">Sinkhorn 20 步，eps 1e-6</text>
+      <text x="312" y="176" fill="var(--ink-2)">hc_scale [3]、hc_base [24] 也是 FP32</text>
+
+      <rect x="628" y="30" width="416" height="150" rx="8" fill="url(#mga)" stroke="var(--amber-mark)" filter="url(#msh)"/>
+      <text x="644" y="56" font-weight="600">拆成三份</text>
+      <text x="644" y="82" fill="var(--amber)">pre [T, 4]</text>
+      <text x="776" y="82" fill="var(--ink-2)">把 4 路收成 1 路 → [T, 7168]</text>
+      <text x="644" y="110" fill="var(--amber)">post [T, 4]</text>
+      <text x="776" y="110" fill="var(--ink-2)">子层输出摊回 4 路，门是 2·sigmoid</text>
+      <text x="644" y="138" fill="var(--amber)">comb [T, 4, 4]</text>
+      <text x="776" y="138" fill="var(--ink-2)">旧残差自己重新混合一次</text>
+      <text x="644" y="168" fill="var(--ink-2)">三者都是 FP32，且不允许降精度</text>
+
+      <path d="M264 105 H296" stroke="var(--petrol-mark)" stroke-width="1.4" marker-end="url(#mar)"/>
+      <path d="M596 105 H628" stroke="var(--petrol-mark)" stroke-width="1.4" marker-end="url(#mar)"/>
+
+      <rect x="28" y="212" width="1016" height="104" rx="8" fill="url(#mgn)" stroke="var(--line)" filter="url(#msh)"/>
+      <text x="44" y="238" font-weight="600">一层里实际发生的顺序</text>
+      <text x="44" y="264" fill="var(--ink-2)">hc_pre(attn) → attn_norm → 注意力 → hc_post(attn) → hc_pre(ffn) → ffn_norm → MoE → hc_post(ffn)</text>
+      <text x="44" y="290" fill="var(--ink-2)">层 0 以外，相邻的 hc_post + hc_pre 被 aiter 的 mhc_fused_post_pre 合成一次发射；层 0 没有前一个 post 可折，所以单独跑。</text>
+
+      <text x="28" y="352" font-family="Archivo, sans-serif" font-size="13" font-weight="600">收尾</text>
+      <text x="28" y="378" fill="var(--ink-2)">最后一层出来仍然是 [T, 4, 7168]。hc_head_fn [4, 28672] 再预测一次权重，把 4 路收成 [T, 7168]，过 norm 后才进 lm_head。</text>
+    </svg>
+    <figcaption>
+      V4 的 mHC 是「<strong>收—算—摊</strong>」的直写形式。
+      V4.1-Flash 把它改成了延迟形式：post 欠着不结算，折进下一个子层的 pre 里一起算 ——
+      那是 V4.1 的 <code>pre_delayed</code>，V4 这里没有。
+    </figcaption>
+  </figure>
+</section>
+
+<section>
+  <hr class="rule">
+  <p class="eyebrow">图 6 · MoE 与 MTP</p>
+  <h2>前 3 层查表选专家，后 58 层才用门控</h2>
+  <figure>
+    <p class="fignum">图 6 · 两种路由，以及挂在尾巴上的 MTP</p>
+    <svg viewBox="0 0 1060 430" role="img" aria-label="V4 的哈希路由、门控路由与 MTP">
+      <defs>
+        <marker id="ear" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z" fill="var(--moss-mark)"/></marker>
+        <linearGradient id="egn" x1="0" y1="0" x2=".4" y2="1"><stop offset="0%" stop-color="var(--surface)"/><stop offset="100%" stop-color="var(--surface-2)"/></linearGradient>
+        <linearGradient id="egm" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--moss-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+        <linearGradient id="egb" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--brick-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+        <linearGradient id="egp" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--petrol-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+        <filter id="esh" x="-8%" y="-12%" width="116%" height="140%"><feDropShadow dx="0" dy="1.4" stdDeviation="2.2" flood-opacity=".14"/></filter>
+      </defs>
+
+      <rect x="28" y="28" width="500" height="162" rx="8" fill="url(#egb)" stroke="var(--brick)" filter="url(#esh)"/>
+      <text x="44" y="54" font-weight="600">层 0 / 1 / 2 · hash 路由</text>
+      <text x="44" y="80" fill="var(--brick)">选哪 6 个：tid2eid[input_ids]</text>
+      <text x="44" y="102" fill="var(--ink-2)">表是 [129280, 6] int64，与 token id 绑定，和隐藏态无关</text>
+      <text x="44" y="128" fill="var(--ink-2)">权重还是 sqrtsoftplus(gate_logits) 在这 6 个位置上取值</text>
+      <text x="44" y="152" fill="var(--ink-2)">再归一化、乘 routed_scaling_factor = 2.5</text>
+      <text x="44" y="176" fill="var(--ink-3)" opacity=".9">这 3 层没有 gate.bias —— checkpoint 里就没有</text>
+
+      <rect x="560" y="28" width="484" height="162" rx="8" fill="url(#egm)" stroke="var(--moss-mark)" filter="url(#esh)"/>
+      <text x="576" y="54" font-weight="600">层 3–60 · 门控路由</text>
+      <text x="576" y="80" fill="var(--moss)">gate [384, 7168] BF16 → logits [T, 384]</text>
+      <text x="576" y="106" fill="var(--ink-2)">sqrtsoftplus 打分，gate.bias [384] FP32 只参与选择</text>
+      <text x="576" y="130" fill="var(--ink-2)">noaux_tc 取 top-6，权重再归一化 × 2.5</text>
+      <text x="576" y="156" fill="var(--ink-3)" opacity=".9">bias 不进权重，只把选择推偏 —— 负载均衡用</text>
+
+      <rect x="28" y="214" width="1016" height="92" rx="8" fill="url(#egn)" stroke="var(--line)" filter="url(#esh)"/>
+      <text x="44" y="240" font-weight="600">专家本身：两种 dtype，一个形状</text>
+      <text x="44" y="266" fill="var(--ink-2)">384 个路由专家：w1 / w3 [3072, 7168]、w2 [7168, 3072]，FP4 e2m1 按 1×32 配 e8m0 scale；SwiGLU 钳到 ±10</text>
+      <text x="44" y="290" fill="var(--ink-2)">1 个共享专家：同样的形状，但 FP8 e4m3 按 128×128 —— 一个 buffer 装不下两种 dtype，所以它是独立模块，每个 token 都走</text>
+
+      <rect x="28" y="330" width="1016" height="88" rx="8" fill="url(#egp)" stroke="var(--petrol-mark)" filter="url(#esh)"/>
+      <text x="44" y="356" font-weight="600">MTP · 1 层 · 不在主循环里</text>
+      <text x="44" y="382" fill="var(--ink-2)">enorm(embedding) 与 hnorm(上一层隐藏态) 各过一次 RMSNorm，再由 e_proj / h_proj [7168, 7168] FP8 投影相加</text>
+      <text x="44" y="406" fill="var(--ink-2)">之后是一整层 Dense 注意力 + 它自己的 384 个专家 + 它自己的 hc_head —— 25.84 B 参数，和骨干共享 embed 与 lm_head</text>
+    </svg>
+    <figcaption>
+      哈希路由只在最靠近输入的 3 层用：那里的表示还非常接近 token 本身，用 token id 直接定专家既稳定又省掉一次门控。
+      往后表示混合得越来越多，才切到按隐藏态打分。<code>-0813</code> 把 MTP 换成 3 层 DSpark，骨干一个字节都不改。
+    </figcaption>
+  </figure>
+</section>
+
+<section>
+  <hr class="rule">
+  <p class="eyebrow">量化</p>
+  <h2>密集投影是 128×128 FP8，路由专家是 1×32 FP4</h2>
+  <div class="tscroll">
+  <table>
+    <thead><tr><th>权重大类</th><th>存储</th><th>激活</th><th>备注</th></tr></thead>
+    <tbody>
+      <tr><td class="k">wq_a、wq_b、wkv、wo_a、wo_b、indexer.wq_b、e_proj、h_proj</td><td>FP8 e4m3，块 <strong>128×128</strong>，scale E8M0</td><td>动态</td><td>V4.1-Flash 用的是 32×32，这是两代之间最容易看错的一处</td></tr>
+      <tr><td class="k">路由专家 w1 / w2 / w3</td><td>FP4 e2m1，块 1×32，I8 打包</td><td>MXFP8</td><td>磁盘 K 维减半；<code>AITER_BF16_FP8_MOE_BOUND=0</code> + <code>ATOM_MOE_GU_ITLV=1</code> 走对内核</td></tr>
+      <tr><td class="k">共享专家 w1 / w2 / w3</td><td>FP8 e4m3，128×128</td><td>动态</td><td>与路由专家同形不同 dtype，因此是独立模块</td></tr>
+      <tr><td class="k">compressor（两个）、weights_proj、gate、embed、head</td><td>BF16</td><td>BF16</td><td>压缩器的组内累加指定在 FP32</td></tr>
+      <tr><td class="k">hc_*_fn / base / scale、attn_sink、gate.bias</td><td>FP32</td><td>FP32</td><td>mHC 系数不允许降精度；<code>ATOM_MHC_USE_BF16</code> 只改打包布局</td></tr>
+      <tr><td class="k">gate.tid2eid</td><td>INT64</td><td>—</td><td>查表，不参与乘加</td></tr>
+      <tr><td class="k">主 KV 池</td><td>BF16 1024 B/行 或 FP8 512+128 B/行</td><td>—</td><td><code>--kv_cache_dtype fp8</code>；RoPE 永不量化</td></tr>
+      <tr><td class="k">index KV 池</td><td>FP4 68 B/行（默认）或 FP8 132 B/行</td><td>—</td><td>gfx942 回退 FP8；gfx950 与 gfx1250 的 FP4 布局互不兼容</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section>
+  <hr class="rule">
+  <p class="eyebrow">在 ATOM 里的位置</p>
+  <h2>按这个顺序读，层类型和字节不会先分叉</h2>
+  <div class="tscroll">
+  <table>
+    <thead><tr><th>#</th><th>文件</th><th>看什么</th></tr></thead>
+    <tbody>
+      <tr><td class="num">1</td><td class="k">atom/models/deepseek_v4.py · DeepseekV4Args</td><td><code>compress_ratios</code> 的三种取值注释：0 = Dense、4 = CSA、128 = HCA</td></tr>
+      <tr><td class="num">2</td><td class="k">atom/models/deepseek_v4.py · DeepseekV4Attention.__init__</td><td>按 ratio 决定建不建 compressor / indexer；YaRN 还是普通 RoPE</td></tr>
+      <tr><td class="num">3</td><td class="k">atom/models/deepseek_v4.py · Compressor</td><td><code>overlap = (ratio == 4)</code>，以及它为什么让投影宽度翻倍</td></tr>
+      <tr><td class="num">4</td><td class="k">atom/models/deepseek_v4.py · Indexer</td><td>自带的 compressor（rotate=True）、复制而非切分的 wq_b、FP4/FP8 两种布局</td></tr>
+      <tr><td class="num">5</td><td class="k">atom/models/deepseek_v4.py · _sparse_attention</td><td>三套 <code>kv_indices_{swa,csa,hca}</code> 怎么按 ratio 选</td></tr>
+      <tr><td class="num">6</td><td class="k">atom/models/deepseek_v4.py · MoE._hash_topk</td><td><code>tid2eid[input_ids]</code> 定选择、<code>sqrtsoftplus</code> 定权重</td></tr>
+      <tr><td class="num">7</td><td class="k">atom/models/deepseek_v4.py · Block</td><td><code>hc_pre</code> / <code>hc_post</code>，以及层 0 为什么不能用融合版</td></tr>
+      <tr><td class="num">8</td><td class="k">atom/model_ops/attentions/pool_layout/v4_pool_geometry.py</td><td>行空间、信封与槽、<code>visible_csa</code> / <code>visible_hca</code></td></tr>
+      <tr><td class="num">9</td><td class="k">atom/model_ops/attentions/pool_layout/v4_pool_fields.py</td><td>一行有什么：NoPE / RoPE 两个平面，indexer 块的数据与 scale 分区</td></tr>
+      <tr><td class="num">10</td><td class="k">atom/model_ops/v4_kernels/fused_compress.py · csa_translate_pack.py</td><td>压缩与写入融合成一个 kernel；seq-local 行号翻成物理偏移</td></tr>
+      <tr><td class="num">11</td><td class="k">recipes/DeepSeek-V4.md</td><td>TP8 + FP8 KV 的启动命令、MoE 环境变量、测得的 GSM8K</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="grid2">
+    <div class="card good">
+      <p class="eyebrow">怎么跑起来</p>
+      <p>
+        recipe 给的是 <strong>8 × MI355X、TP8、FP8 KV</strong>：
+        <code>AITER_BF16_FP8_MOE_BOUND=0 ATOM_MOE_GU_ITLV=1</code> 加 <code>--kv_cache_dtype fp8 -tp 8</code>。
+        不需要 <code>--trust-remote-code</code>，<code>DeepseekV4ForCausalLM</code> 是 ATOM 内置架构。
+        这个配置在 MI355X / gfx950 上测得 GSM8K（1319 题，3-shot flexible-extract）<strong>0.9522</strong>。
+      </p>
+    </div>
+    <div class="card">
+      <p class="eyebrow">可选的 EP / DP 路线</p>
+      <p>
+        <code>--enable-expert-parallel --enable-dp-attention --all2all-backend rccl</code> 走原生 RCCL 的专家派发：
+        均匀 decode 用图安全的预路由 AllGather/ReduceScatter 快路径，prefill 与混合批走变长版本。
+        它只消费既有路由产出的物理专家 ID，不改 EPLB 策略；TBO 在这个后端上不支持。
+      </p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <p>
+    形状与参数来自 <code>deepseek-ai/DeepSeek-V4-Pro</code> 的 <strong>64 个 safetensors 分片头部</strong>（145 116 个张量，落盘 805.32 GiB），
+    逐层类型与 <code>compress_ratios</code> 来自同仓库的 <code>config.json</code>。
+    scale 不计入参数量；FP4 按解开后的逻辑元素计数。
+    层行为、kernel 与量化口径对照的是 ATOM main <code>a526f0d55</code>（2026-10-07）的
+    <code>atom/models/deepseek_v4.py</code> 与 <code>atom/model_ops/attentions/pool_layout/</code>。
+    KV 的 991 行 / 信封与 7808 行 / 请求是直接实例化 <code>UnifiedPoolGeometry</code> 得到的，字节数由各平面的行宽换算。
+  </p>
+</footer>
+</div>

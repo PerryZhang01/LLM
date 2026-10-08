@@ -375,6 +375,25 @@ a.mcard:hover .go{text-decoration:underline}
     ATOM 里它有自己的模型包，不走 DeepSeek-V2 那条 MLA 路径。
   </p>
   <div class="mgrid">
+    <a class="mcard f-a" href="models/DeepSeek/v4_pro_anatomy.html">
+      <div class="strip"></div>
+      <div class="body">
+        <h3>DeepSeek-V4-Pro</h3>
+        <span class="arch">DeepseekV4ForCausalLM · deepseek_v4</span>
+        <p class="blurb">
+          61 层交替排布：31 层 HCA（128 token 压一行，全看）与 30 层 CSA
+          （4 token 压一行，indexer 选 top-1024）。前 3 层查哈希表选专家，
+          残差是 4 路 mHC，尾部挂 1 层 MTP。
+        </p>
+        <div class="mspecs">
+          <div><b>1598.8 B</b><span>总参数</span></div>
+          <div><b>49.78 B</b><span>单 token 激活</span></div>
+          <div><b>61 + 1</b><span>骨干 / MTP</span></div>
+          <div><b>7168</b><span>hidden_size</span></div>
+        </div>
+        <div class="mfoot"><span>atom/models/deepseek_v4.py</span><span class="go">6 张图 →</span></div>
+      </div>
+    </a>
     <a class="mcard f-a" href="models/DeepSeek/v41_flash_anatomy.html">
       <div class="strip"></div>
       <div class="body">
