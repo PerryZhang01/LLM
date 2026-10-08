@@ -244,7 +244,7 @@ a.mcard:hover .go{text-decoration:underline}
   <div class="mast-id">
     <span class="tag">模型结构解剖</span>
     <span class="tag">后端 · ATOM</span>
-    <span class="tag hot">3 个模型</span>
+    <span class="tag hot">5 个模型</span>
   </div>
   <h1>LLM 模型结构手册</h1>
   <p class="lede">
@@ -253,9 +253,9 @@ a.mcard:hover .go{text-decoration:underline}
     面向的是<strong>要动这段代码的人</strong>——不是模型卡，也不是论文摘要。
   </p>
   <div class="stats">
-    <div class="stat"><span class="stat-n">4</span><span class="stat-l">已收录模型</span></div>
-    <div class="stat"><span class="stat-n">2</span><span class="stat-l">模型家族</span></div>
-    <div class="stat"><span class="stat-n">16</span><span class="stat-l">结构图</span></div>
+    <div class="stat"><span class="stat-n">5</span><span class="stat-l">已收录模型</span></div>
+    <div class="stat"><span class="stat-n">3</span><span class="stat-l">模型家族</span></div>
+    <div class="stat"><span class="stat-n">23</span><span class="stat-l">结构图</span></div>
     <div class="stat"><span class="stat-n">ATOM</span><span class="stat-l">推理后端</span></div>
   </div>
 </header>
@@ -368,26 +368,57 @@ a.mcard:hover .go{text-decoration:underline}
 
 <section>
   <hr class="rule">
+  <p class="eyebrow">DeepSeek 家族</p>
+  <h2>压缩比只有 0、1、2 的那一版</h2>
+  <p>
+    V4.1-Flash 把滑窗、按组压缩的 latent、四路残差和一张宿主机哈希表放进同一次前向。
+    ATOM 里它有自己的模型包，不走 DeepSeek-V2 那条 MLA 路径。
+  </p>
+  <div class="mgrid">
+    <a class="mcard f-a" href="models/DeepSeek/v41_flash_anatomy.html">
+      <div class="strip"></div>
+      <div class="body">
+        <h3>DeepSeek-V4.1-Flash</h3>
+        <span class="arch">DeepseekV41ForCausalLM · deepseek_v41</span>
+        <p class="blurb">
+          40 层 CSA2：2 层滑窗、18 层 2:1 压缩、20 层 1:1 压缩。
+          只有 4 层写下压缩 KV，8 层负责 top-512。残差是 4 路 mHC，
+          层 1 与层 14 各有一张 Engram 表，末尾 3 层 DSpark 起草。
+        </p>
+        <div class="mspecs">
+          <div><b>763.2 B</b><span>总参数</span></div>
+          <div><b>16.79 B</b><span>单 token 激活</span></div>
+          <div><b>40 + 3</b><span>骨干 / DSpark</span></div>
+          <div><b>5120</b><span>hidden_size</span></div>
+        </div>
+        <div class="mfoot"><span>atom/models/deepseek_v41/</span><span class="go">7 张图 →</span></div>
+      </div>
+    </a>
+  </div>
+</section>
+
+<section>
+  <hr class="rule">
   <p class="eyebrow">横向对照</p>
-  <h2>三个模型的骨架放在一起看</h2>
+  <h2>五份结构放在一起看</h2>
   <div class="tscroll">
   <table>
-    <thead><tr><th></th><th>GLM-5.2</th><th>GLM-5.3</th><th>GLM-5.3-Flash</th><th>MiniMax-M3</th></tr></thead>
+    <thead><tr><th></th><th>GLM-5.2</th><th>GLM-5.3</th><th>GLM-5.3-Flash</th><th>MiniMax-M3</th><th>V4.1-Flash</th></tr></thead>
     <tbody>
-      <tr><td>architectures</td><td class="k">GlmMoeDsa<wbr>ForCausalLM</td><td class="k">GlmMoeDsa<wbr>ForCausalLM</td><td class="k">Glm5Next<wbr>ForConditionalGeneration</td><td class="k">MiniMaxM3Sparse<wbr>ForConditionalGeneration</td></tr>
-      <tr><td>model_type</td><td class="k">glm_moe_dsa</td><td class="k">glm_moe_dsa</td><td class="k">glm5_next</td><td class="k">minimax_m3_vl</td></tr>
-      <tr><td>总参数</td><td class="num">753.3 B</td><td class="num">753.3 B</td><td class="num">321.3 B</td><td class="num">427.0 B</td></tr>
-      <tr><td>单 token 激活</td><td class="num">41.25 B</td><td class="num">41.25 B</td><td class="num">17.38 B</td><td class="num">24.73 B</td></tr>
-      <tr><td>层数</td><td class="num">78 + 1 MTP</td><td class="num">78 + 1 MTP</td><td class="num">45 + 1 MTP</td><td class="num">60（无 MTP）</td></tr>
-      <tr><td>hidden_size</td><td class="num">6144</td><td class="num">6144</td><td class="num">4096</td><td class="num">6144</td></tr>
-      <tr><td>注意力</td><td>MLA + DSA</td><td>MLA + DSA</td><td class="hl">34 KDA + 11 MLA</td><td class="hl">GQA 64:4 + MSA</td></tr>
-      <tr><td>位置编码</td><td>RoPE θ=8e6</td><td>RoPE θ=8e6</td><td class="hl">NoPE（无）</td><td class="hl">部分 RoPE θ=5e6</td></tr>
-      <tr><td>残差</td><td>单路</td><td>单路</td><td class="hl">mHC 四路</td><td>单路</td></tr>
-      <tr><td>专家</td><td class="num">256 top-8 + 1</td><td class="num">256 top-8 + 1</td><td class="num">288 top-8 + 1</td><td class="num">128 top-4 + 1</td></tr>
-      <tr><td>稀疏索引</td><td>IndexShare 21/78</td><td>IndexShare 21/78</td><td class="hl">k-pool 4 token/行</td><td class="hl">128-token 块 top-16</td></tr>
-      <tr><td>KV cache</td><td class="num">87.8 KiB/token</td><td class="num">87.8 KiB/token</td><td class="num">12.4 KiB/token</td><td class="num">134.25 KiB/token</td></tr>
-      <tr><td>ATOM 实现</td><td class="k">deepseek_v2.py</td><td class="k">deepseek_v2.py</td><td class="k">glm5_next.py</td><td class="k">minimax_m3.py</td></tr>
-      <tr><td>多模态</td><td>—</td><td>—</td><td>原生（ATOM 只 serve 文本）</td><td>原生（ATOM 只 serve 文本）</td></tr>
+      <tr><td>architectures</td><td class="k">GlmMoeDsa<wbr>ForCausalLM</td><td class="k">GlmMoeDsa<wbr>ForCausalLM</td><td class="k">Glm5Next<wbr>ForConditionalGeneration</td><td class="k">MiniMaxM3Sparse<wbr>ForConditionalGeneration</td><td class="k">DeepseekV41<wbr>ForCausalLM</td></tr>
+      <tr><td>model_type</td><td class="k">glm_moe_dsa</td><td class="k">glm_moe_dsa</td><td class="k">glm5_next</td><td class="k">minimax_m3_vl</td><td class="k">deepseek_v41</td></tr>
+      <tr><td>总参数</td><td class="num">753.3 B</td><td class="num">753.3 B</td><td class="num">321.3 B</td><td class="num">427.0 B</td><td class="num">763.2 B</td></tr>
+      <tr><td>单 token 激活</td><td class="num">41.25 B</td><td class="num">41.25 B</td><td class="num">17.38 B</td><td class="num">24.73 B</td><td class="num">16.79 B</td></tr>
+      <tr><td>层数</td><td class="num">78 + 1 MTP</td><td class="num">78 + 1 MTP</td><td class="num">45 + 1 MTP</td><td class="num">60（无 MTP）</td><td class="num">40 + 3 DSpark</td></tr>
+      <tr><td>hidden_size</td><td class="num">6144</td><td class="num">6144</td><td class="num">4096</td><td class="num">6144</td><td class="num">5120</td></tr>
+      <tr><td>注意力</td><td>MLA + DSA</td><td>MLA + DSA</td><td class="hl">34 KDA + 11 MLA</td><td class="hl">GQA 64:4 + MSA</td><td class="hl">CSA2 · 滑窗 + 压缩</td></tr>
+      <tr><td>位置编码</td><td>RoPE θ=8e6</td><td>RoPE θ=8e6</td><td class="hl">NoPE（无）</td><td class="hl">部分 RoPE θ=5e6</td><td class="hl">尾 64 维 YaRN</td></tr>
+      <tr><td>残差</td><td>单路</td><td>单路</td><td class="hl">mHC 四路</td><td>单路</td><td class="hl">mHC 四路</td></tr>
+      <tr><td>专家</td><td class="num">256 top-8 + 1</td><td class="num">256 top-8 + 1</td><td class="num">288 top-8 + 1</td><td class="num">128 top-4 + 1</td><td class="num">384 top-6 + 1</td></tr>
+      <tr><td>稀疏索引</td><td>IndexShare 21/78</td><td>IndexShare 21/78</td><td class="hl">k-pool 4 token/行</td><td class="hl">128-token 块 top-16</td><td class="hl">4 owner · top-512</td></tr>
+      <tr><td>KV cache</td><td class="num">87.8 KiB/token</td><td class="num">87.8 KiB/token</td><td class="num">12.4 KiB/token</td><td class="num">134.25 KiB/token</td><td class="num">2.82 KiB/token</td></tr>
+      <tr><td>ATOM 实现</td><td class="k">deepseek_v2.py</td><td class="k">deepseek_v2.py</td><td class="k">glm5_next.py</td><td class="k">minimax_m3.py</td><td class="k">deepseek_v41/</td></tr>
+      <tr><td>多模态</td><td>—</td><td>—</td><td>原生（ATOM 只 serve 文本）</td><td>原生（ATOM 只 serve 文本）</td><td>原生（视觉塔在模型里）</td></tr>
     </tbody>
   </table>
   </div>
@@ -395,6 +426,8 @@ a.mcard:hover .go{text-decoration:underline}
     KV cache 一列按 BF16 计：GLM-5.2/5.3 是 78 层 × 576；
     GLM-5.3-Flash 只有 11 个 MLA 层承担，代价是 34 个 KDA 层各持一份每请求的递推状态；
     MiniMax-M3 是 60 层 × 2×4×128 的主 KV（120 KiB）再加 57 层单头 index K（14.25 KiB）。
+    DeepSeek-V4.1-Flash 的 2.82 KiB 是 BF16 主 latent 加 FP8 index 摊到每个源 token 的 PAGE；
+    40 层滑窗另计，每请求 5.03 MiB，不随上下文变长。
   </p>
 </section>
 
