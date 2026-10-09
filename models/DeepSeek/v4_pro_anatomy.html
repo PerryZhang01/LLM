@@ -660,7 +660,7 @@ footer{border-top:1px solid var(--line); padding-top:22px; color:var(--ink-2); f
       <text x="44" y="98" font-weight="600">额外模块：两个 compressor + indexer</text>
       <text x="44" y="124" fill="var(--amber)">主 compressor</text>
       <text x="44" y="144" fill="var(--ink-2)">wkv / wgate 各 [1024, 7168]，ape [4, 1024]</text>
-      <text x="44" y="164" fill="var(--ink-2)">overlap = True，所以宽度是 2 × 512</text>
+      <text x="44" y="164" fill="var(--ink-2)">overlap = True：一行 reduce 的是 8 个 token</text>
       <text x="44" y="192" fill="var(--petrol)">indexer 自己的 compressor</text>
       <text x="44" y="212" fill="var(--ink-2)">wkv / wgate 各 [256, 7168]，head_dim 128</text>
       <text x="44" y="232" fill="var(--ink-2)">rotate = True：Hadamard 旋转后量化</text>
@@ -688,7 +688,7 @@ footer{border-top:1px solid var(--line); padding-top:22px; color:var(--ink-2); f
       <path d="M690 160 H712" stroke="var(--mute-mark)" stroke-width="1.3" marker-end="url(#car2)"/>
 
       <text x="28" y="298" fill="var(--ink-2)">两个 compressor 不是冗余：主 compressor 的输出是真正要被注意力读的 KV，indexer 的那个只用来<tspan font-weight="700">打分</tspan>，所以它可以压到 128 维、可以更激进地量化。</text>
-      <text x="28" y="322" fill="var(--ink-2)">overlap = True 是 CSA 独有的：相邻两组共享一半窗口，为的是不让组边界把一段连续语义切断，代价就是投影宽度翻倍。</text>
+      <text x="28" y="322" fill="var(--ink-2)">overlap = True 是 CSA 独有的：每行池化的窗口是 2 × ratio = 8 个 token，相邻两行重叠一半；同一个 token 在自己那组用投影的后 512 列、在下一组用前 512 列 —— 这就是宽度翻倍的来源。</text>
     </svg>
   </figure>
 
@@ -856,18 +856,18 @@ footer{border-top:1px solid var(--line); padding-top:22px; color:var(--ink-2); f
       <text x="716" y="84" fill="var(--ink-2)">按 slot 寻址，向下长</text>
       <text x="640" y="72" fill="var(--ink-3)" opacity=".9">gap</text>
 
-      <text x="28" y="134" font-family="Archivo, sans-serif" font-size="13" font-weight="600">信封：一个 128-token 的块里有 991 行</text>
+      <text x="28" y="134" font-family="Archivo, sans-serif" font-size="13" font-weight="600">信封：一个 256-token 的块里有 1982 行</text>
       <rect x="28" y="148" width="330" height="96" rx="7" fill="url(#kga2)" stroke="var(--amber-mark)" filter="url(#ksh2)"/>
       <text x="44" y="174" font-weight="600">CSA · 30 层</text>
-      <text x="44" y="196" fill="var(--ink-2)">每层 128 / 4 = 32 行</text>
-      <text x="44" y="220" fill="var(--amber)">30 × 32 = 960 行</text>
+      <text x="44" y="196" fill="var(--ink-2)">每层 256 / 4 = 64 行</text>
+      <text x="44" y="220" fill="var(--amber)">30 × 64 = 1920 行</text>
       <rect x="378" y="148" width="330" height="96" rx="7" fill="url(#kgm2)" stroke="var(--moss-mark)" filter="url(#ksh2)"/>
       <text x="394" y="174" font-weight="600">HCA · 31 层</text>
-      <text x="394" y="196" fill="var(--ink-2)">每层 128 / 128 = 1 行</text>
-      <text x="394" y="220" fill="var(--moss)">31 × 1 = 31 行</text>
+      <text x="394" y="196" fill="var(--ink-2)">每层 256 / 128 = 2 行</text>
+      <text x="394" y="220" fill="var(--moss)">31 × 2 = 62 行</text>
       <rect x="728" y="148" width="316" height="96" rx="7" fill="url(#kgn2)" stroke="var(--line)" filter="url(#ksh2)"/>
       <text x="744" y="174" font-weight="600">合计</text>
-      <text x="744" y="196" fill="var(--ink-2)">991 行 / 128 token</text>
+      <text x="744" y="196" fill="var(--ink-2)">1982 行 / 256 token</text>
       <text x="744" y="220" fill="var(--petrol)">= 7.742 行 / token</text>
 
       <text x="28" y="284" font-family="Archivo, sans-serif" font-size="13" font-weight="600">一行多少字节，取决于池子的 dtype</text>
@@ -1084,7 +1084,7 @@ footer{border-top:1px solid var(--line); padding-top:22px; color:var(--ink-2); f
     scale 不计入参数量；FP4 按解开后的逻辑元素计数。
     层行为、kernel 与量化口径对照的是 ATOM main <code>a526f0d55</code>（2026-10-07）的
     <code>atom/models/deepseek_v4.py</code> 与 <code>atom/model_ops/attentions/pool_layout/</code>。
-    KV 的 991 行 / 信封与 7808 行 / 请求是直接实例化 <code>UnifiedPoolGeometry</code> 得到的，字节数由各平面的行宽换算。
+    KV 的 1982 行 / 信封（原生块大小 256）与 7808 行 / 请求是直接实例化 <code>UnifiedPoolGeometry</code> 得到的，字节数由各平面的行宽换算。
   </p>
 </footer>
 </div>
