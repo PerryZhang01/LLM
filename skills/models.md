@@ -1,11 +1,11 @@
 ---
 name: model structure
-目标: 请你分析一下指定模型的结构，要整个模型介绍，关键部分要清晰，图示需要包含shape，以html形式呈现，结果放置LLM/models。
+目标: 请你按照最新代码分析一下指定模型的结构，要整个模型介绍，关键部分要清晰，尤其是attention模块不同的结构要单独描述说明，图示需要包含shape，以html形式呈现，结果放置LLM/models，然后向远端推送PR。
 ---
 
 # 模型
 
--Minimax M3
+-DeepSeekV4.1
 
 # 框架后端
 
@@ -13,4 +13,4 @@ name: model structure
 
 # 输出路径
 
--LLM/models/MiniMax
+-LLM/models/DeepSeek
