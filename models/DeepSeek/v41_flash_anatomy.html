@@ -735,6 +735,49 @@ footer{border-top:1px solid var(--line); padding-top:22px; color:var(--ink-2); f
       </p>
     </div>
   </div>
+  <div class="grid2">
+    <div class="card key">
+      <p class="eyebrow">四种层合并出来的是什么形状</p>
+      <p>
+        不管哪种模式，滑窗行和压缩行都被拼进<strong>同一份 CSR</strong>，进<strong>同一次 softmax</strong>，没有门控也没有加权合并。
+        decode 一个 token 的形状是 <code>Q [1, 64, 512]</code> 对 <code>KV [N, 512]</code> ——
+        <code>num_key_value_heads = 1</code>，64 个 query 头<strong>共用同一份 N 行</strong>，而且
+        <strong>K 和 V 是同一行</strong>（kernel 只收一个 KV 张量）。
+        N 最多是 <code>128 滑窗 + 512 压缩 = 640</code>，WINDOW 层只有 ≤128。
+        <code>attn_sink [64]</code> 每头一个，只进 softmax 分母。
+      </p>
+    </div>
+    <div class="card">
+      <p class="eyebrow">出来之后</p>
+      <p>
+        <code>out [1, 64, 512]</code> → 逆 RoPE（在 query 自己的位置上转回去，因为 K = V 且 V 是旋转过的）
+        → <code>wo_a</code> 8 组 × <code>[1024, 4096]</code> → <code>[1, 8192]</code> → <code>wo_b [5120, 8192]</code> → <code>[1, 5120]</code>。
+        <code>inverse_rope_group_quant</code> 把逆 RoPE 和 <code>wo_a</code> 的 per-32 分组量化融成一发，省一次 BF16 往返。
+      </p>
+    </div>
+  </div>
+  <div class="grid2">
+    <div class="card good">
+      <p class="eyebrow">CSA2 的池化比 V4 简单一截</p>
+      <p>
+        同一个 <code>fused_compress</code> kernel，但 CSA2 <strong>从不重叠</strong>（<code>compress_ratios</code> 恒返回
+        <code>(ratio, False)</code>）：ratio 2 的一行只池化 2 个 token，ratio 1 根本不池化。
+        所以没有 V4 那套「同一个 token 在两行里用不同半边列」的角色切换，投影宽度就是 <code>head_dim</code>。
+        池化本身仍是<strong>逐通道</strong>的 softmax —— <code>(values * scores.softmax(dim=2)).sum(dim=2)</code>，
+        <code>softmax</code> 沿组内位置，每个通道独立。
+      </p>
+    </div>
+    <div class="card warn">
+      <p class="eyebrow">ape 在这里是一串零</p>
+      <p>
+        V4 给池化的门加了一个学出来的组内位置偏置 <code>ape</code>（checkpoint 里是真张量）。
+        CSA2 不用它，但为了共用同一个 kernel，仍然挂了一个全零的
+        <code>register_buffer("ape", ..., persistent=False)</code> ——
+        不在 checkpoint 里，也不会被当成未加载的参数报警。
+        <span class="dim">反过来说：<code>compressor.ape</code> 在不在 safetensors 里，是区分 V4 与 V4.1 谱系的一个便宜判据。</span>
+      </p>
+    </div>
+  </div>
 </section>
 
 <section id="special">
