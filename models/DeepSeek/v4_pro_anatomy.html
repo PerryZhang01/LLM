@@ -698,7 +698,7 @@ footer{border-top:1px solid var(--line); padding-top:22px; color:var(--ink-2); f
       <text x="44" y="164" fill="var(--ink-2)">overlap = True：一行 reduce 的是 8 个 token</text>
       <text x="44" y="192" fill="var(--petrol)">indexer 自己的 compressor</text>
       <text x="44" y="212" fill="var(--ink-2)">wkv / wgate 各 [256, 7168]，head_dim 128</text>
-      <text x="44" y="232" fill="var(--ink-2)">rotate = True：Hadamard 旋转后量化</text>
+      <text x="44" y="232" fill="var(--ink-2)">逐行量化后写进另一个池</text>
       <text x="44" y="256" fill="var(--moss)">额外权重 31.4 M（比 HCA 多 24.0 M）</text>
 
       <rect x="370" y="72" width="320" height="196" rx="8" fill="url(#cga2)" stroke="var(--amber-mark)" filter="url(#csh2)"/>
@@ -774,6 +774,98 @@ footer{border-top:1px solid var(--line); padding-top:22px; color:var(--ink-2); f
   </table>
   </div>
 </section>
+<section>
+  <hr class="rule">
+  <p class="eyebrow">Attention 块 · 合并</p>
+  <h2>1152 行不是两次注意力，是一次 softmax</h2>
+  <p>
+    滑窗行和压缩行被拼进<strong>同一份 CSR 索引表</strong>，交给<strong>同一个 kernel</strong>。
+    没有门控，没有加权合并，两类行在 softmax 里平等竞争。
+    能这样做的前提是它们在池子里结构同构：都是一条 <code>[512]</code> 的 latent，
+    而且 <strong>K 和 V 是同一行</strong> —— kernel 只收一个 KV 张量。
+  </p>
+  <figure>
+    <p class="fignum">图 2d · 一个 decode token 的完整形状（CSA 层，pos = 20000）</p>
+    <svg viewBox="0 0 1060 470" role="img" aria-label="decode 时 Q 与 KV 的维度，以及一次 softmax 的合并">
+      <defs>
+        <marker id="zar" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z" fill="var(--petrol-mark)"/></marker>
+        <linearGradient id="zgn" x1="0" y1="0" x2=".4" y2="1"><stop offset="0%" stop-color="var(--surface)"/><stop offset="100%" stop-color="var(--surface-2)"/></linearGradient>
+        <linearGradient id="zgp" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--petrol-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+        <linearGradient id="zga" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--amber-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+        <linearGradient id="zgm" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--moss-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+        <filter id="zsh" x="-8%" y="-12%" width="116%" height="140%"><feDropShadow dx="0" dy="1.4" stdDeviation="2.2" flood-opacity=".14"/></filter>
+      </defs>
+
+      <rect x="28" y="24" width="236" height="132" rx="8" fill="url(#zgp)" stroke="var(--petrol-mark)" filter="url(#zsh)"/>
+      <text x="44" y="50" font-weight="600">Q · 1 个 token</text>
+      <text x="44" y="76" fill="var(--petrol)">[1, 128, 512]</text>
+      <text x="44" y="100" fill="var(--ink-2)">128 个 query 头</text>
+      <text x="44" y="122" fill="var(--ink-2)">每头 512 维</text>
+      <text x="44" y="144" fill="var(--ink-3)" opacity=".9">尾 64 维已在 pos 20000 旋转</text>
+
+      <rect x="300" y="24" width="300" height="132" rx="8" fill="url(#zga)" stroke="var(--amber-mark)" filter="url(#zsh)"/>
+      <text x="316" y="50" font-weight="600">KV · 1 个 KV 头（MQA）</text>
+      <text x="316" y="76" fill="var(--amber)">[1152, 512]</text>
+      <text x="316" y="100" fill="var(--ink-2)">1024 行压缩（indexer 选的）</text>
+      <text x="316" y="122" fill="var(--ink-2)">+ 128 行滑窗（未压缩）</text>
+      <text x="316" y="144" fill="var(--brick)">K = V，同一行，不是两个张量</text>
+
+      <rect x="636" y="24" width="408" height="132" rx="8" fill="url(#zgn)" stroke="var(--line)" filter="url(#zsh)"/>
+      <text x="652" y="50" font-weight="600">128 个头共用这同一份 1152 行</text>
+      <text x="652" y="76" fill="var(--ink-2)">所以索引表是 per-token 的，不是 per-head</text>
+      <text x="652" y="100" fill="var(--ink-2)">indexer 把 64 个打分头加权求和成一个 logit，</text>
+      <text x="652" y="120" fill="var(--ink-2)">也是因为选择必须全头共用</text>
+      <text x="652" y="144" fill="var(--moss)">KV 只读一次，摊给 128 个头 —— MQA 的全部好处</text>
+
+      <path d="M264 90 H300" stroke="var(--petrol-mark)" stroke-width="1.4" marker-end="url(#zar)"/>
+
+      <rect x="28" y="184" width="572" height="150" rx="8" fill="url(#zgn)" stroke="var(--line)" filter="url(#zsh)"/>
+      <text x="44" y="210" font-weight="600">一次 softmax，对第 h 个头</text>
+      <text x="44" y="238" fill="var(--ink-2)">S = {1024 压缩行} ∪ {128 滑窗行}，共 1152 项</text>
+      <text x="44" y="262" fill="var(--petrol)">s_j = 512^-0.5 · ⟨ q_h , k_j ⟩</text>
+      <text x="44" y="294" fill="var(--ink-2)">out_h = Σ(j∈S) exp(s_j)·v_j</text>
+      <text x="44" y="314" fill="var(--ink-2)">        ÷ ( exp(sink_h) + Σ(j∈S) exp(s_j) )</text>
+      <text x="320" y="294" fill="var(--brick)">sink 只进分母</text>
+      <text x="320" y="314" fill="var(--ink-3)" opacity=".9">没有对应 value，概率质量可以漏掉</text>
+
+      <rect x="636" y="184" width="408" height="150" rx="8" fill="url(#zgm)" stroke="var(--moss-mark)" filter="url(#zsh)"/>
+      <text x="652" y="210" font-weight="600">分数矩阵</text>
+      <text x="652" y="238" fill="var(--moss)">[128, 1152]</text>
+      <text x="652" y="266" fill="var(--ink-2)">128 × 1152 次长度 512 的点积</text>
+      <text x="652" y="290" fill="var(--ink-2)">≈ 75.5 M MAC（QK）+ 同样多（AV）</text>
+      <text x="652" y="314" fill="var(--ink-2)">KV 读取 1152 × 640 B ≈ 737 KB（FP8 池）</text>
+
+      <rect x="28" y="362" width="1016" height="84" rx="8" fill="url(#zgp)" stroke="var(--petrol-mark)" filter="url(#zsh)"/>
+      <text x="44" y="388" font-weight="600">出来之后</text>
+      <text x="44" y="414" fill="var(--ink-2)">out [1, 128, 512] → 逆 RoPE（在 query 自己的位置上转回去）→ wo_a 16 组 × [1024, 4096] → [1, 16384] → wo_b [7168, 16384] → [1, 7168]</text>
+      <text x="44" y="436" fill="var(--ink-3)" opacity=".9">逆 RoPE 是必须的：K = V 且 V 是旋转过的，输出会带进绝对位置分量。mxscale 路径把它和 wo_a 的分组量化融成一发。</text>
+    </svg>
+    <figcaption>
+      <strong>1152 行不等于 1152 个 token。</strong>滑窗一行 = 1 个 token；压缩一行 = 8 个 token 的加权平均，且相邻行相隔 4 个 token。
+      这 1024 行是从 5000 行候选里挑的，覆盖的源 token 最多约 4096 个，且不连续 ——
+      所以这个 query 看到的历史远不止 1152 个 token，只是分辨率分两档。
+    </figcaption>
+  </figure>
+  <div class="grid2">
+    <div class="card key">
+      <p class="eyebrow">三种层只有行数不同</p>
+      <p>
+        Q 和 KV 的<strong>维度三种层完全一样</strong>：<code>[1, 128, 512]</code> 对 <code>[N, 512]</code>。
+        变的只是 N —— CSA 是 ≤1024+128，HCA 是「全部 <code>(pos+1)/128</code> 行 + ≤128」（1 M 上下文 = 8192+128），
+        Dense 只剩 ≤128。同一个 kernel、同一条输出通路。
+      </p>
+    </div>
+    <div class="card">
+      <p class="eyebrow">prefill 是两源，仍是一次 softmax</p>
+      <p>
+        prefill 走 <code>sparse_attn_v4_paged_prefill</code>，收两套 indptr：prefix（池子里前面 chunk 的滑窗 + 压缩行）
+        和 extend（本 chunk 还没进池的 K）。kernel 内部按 flash 的方式分段算再用 log-sum-exp 归并，
+        数学上仍是<strong>对 prefix ∪ extend 这一个集合的一次 softmax</strong>。
+      </p>
+    </div>
+  </div>
+</section>
+
 
 <section id="special">
   <hr class="rule">
@@ -828,8 +920,8 @@ footer{border-top:1px solid var(--line); padding-top:22px; color:var(--ink-2); f
       <text x="740" y="52" font-weight="600">indexer 的 compressor</text>
       <text x="740" y="78" fill="var(--moss)">wkv / wgate [256, 7168]</text>
       <text x="740" y="102" fill="var(--ink-2)">BF16，head_dim 128</text>
-      <text x="740" y="126" fill="var(--ink-2)">rotate = True</text>
-      <text x="740" y="150" fill="var(--ink-2)">Hadamard 后再量化</text>
+      <text x="740" y="126" fill="var(--ink-2)">逐行 amax → ue8m0 → e4m3</text>
+      <text x="740" y="150" fill="var(--ink-2)">（rotate 标志目前不生效）</text>
       <text x="740" y="174" fill="var(--moss)">每 4 token 一行 [128]</text>
       <text x="740" y="198" fill="var(--ink-2)">写进另一份 index 池</text>
       <text x="740" y="222" fill="var(--ink-2)">注意力不读这行</text>
@@ -840,13 +932,72 @@ footer{border-top:1px solid var(--line); padding-top:22px; color:var(--ink-2); f
       <text x="24" y="348" fill="var(--ink-2)">Dense（只有 MTP / 草稿）没有这三块里的任何一块。组内累加指定在 FP32。</text>
     </svg>
   </figure>
+<figure>
+  <p class="fignum">图 3b · 一行压缩 KV 是怎么算出来的（CSA，边界 pos = 7，写出 row 1）</p>
+  <svg viewBox="0 0 1060 520" role="img" aria-label="CSA 压缩一行的内部算法：角色切列、逐通道 softmax、norm、rope">
+    <defs>
+      <marker id="yar" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z" fill="var(--petrol-mark)"/></marker>
+      <linearGradient id="ygn" x1="0" y1="0" x2=".4" y2="1"><stop offset="0%" stop-color="var(--surface)"/><stop offset="100%" stop-color="var(--surface-2)"/></linearGradient>
+      <linearGradient id="ygp" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--petrol-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+      <linearGradient id="yga" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--amber-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+      <linearGradient id="ygb" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--brick-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+      <filter id="ysh" x="-8%" y="-12%" width="116%" height="140%"><feDropShadow dx="0" dy="1.4" stdDeviation="2.2" flood-opacity=".14"/></filter>
+    </defs>
+
+    <text x="28" y="26" font-family="Archivo, sans-serif" font-size="13" font-weight="600">① 每个 token 的投影：1024 宽 = 两种角色各 512</text>
+    <rect x="28" y="40" width="1016" height="54" rx="7" fill="url(#yga)" stroke="var(--amber-mark)"/>
+    <text x="44" y="64" fill="var(--ink-2)">wkv_gate(x) → kv [T, 1024] 与 score [T, 1024]</text>
+    <text x="520" y="64" fill="var(--amber)">列 [0:512] = 当「旧组成员」时用</text>
+    <text x="800" y="64" fill="var(--petrol)">列 [512:1024] = 当「新组成员」时用</text>
+    <text x="44" y="84" fill="var(--ink-3)" opacity=".9">这一步没有 norm、没有 RoPE，是原始 GEMM 输出</text>
+
+    <text x="28" y="126" font-family="Archivo, sans-serif" font-size="13" font-weight="600">② 窗口是 8 个源位置，角色决定读哪半列</text>
+    <rect x="28" y="140" width="640" height="150" rx="7" fill="url(#ygn)" stroke="var(--line)" filter="url(#ysh)"/>
+    <text x="44" y="164" fill="var(--ink-2)">k_static</text><text x="160" y="164" fill="var(--ink-2)">0    1    2    3</text><text x="330" y="164" fill="var(--ink-2)">4    5    6    7</text>
+    <text x="44" y="188" fill="var(--ink-2)">源位置 s</text><text x="160" y="188" fill="var(--ink-2)">0    1    2    3</text><text x="330" y="188" fill="var(--ink-2)">4    5    6    7</text>
+    <text x="44" y="212" fill="var(--ink-2)">col_off</text><text x="160" y="212" fill="var(--amber)">0    0    0    0</text><text x="330" y="212" fill="var(--petrol)">512  512  512  512</text>
+    <text x="44" y="236" fill="var(--ink-2)">ape 行</text><text x="160" y="236" fill="var(--ink-2)">0    1    2    3</text><text x="330" y="236" fill="var(--ink-2)">0    1    2    3</text>
+    <text x="44" y="264" fill="var(--amber)">旧组（上一行也用过它们）</text>
+    <text x="330" y="264" fill="var(--petrol)">新组（这一行才闭合）</text>
+    <text x="44" y="284" fill="var(--ink-3)" opacity=".9">window_len 决定前几个从 FP32 状态环取、后几个从本次输入取</text>
+
+    <rect x="692" y="140" width="352" height="150" rx="7" fill="url(#ygb)" stroke="var(--brick)" filter="url(#ysh)"/>
+    <text x="708" y="164" font-weight="600">ape：加在门上，只加一次</text>
+    <text x="708" y="190" fill="var(--ink-2)">score_k = score + ape[k%4][col_off:]</text>
+    <text x="708" y="214" fill="var(--ink-2)">写环时就已经加好（ape[pos%4]）</text>
+    <text x="708" y="238" fill="var(--brick)">所以 kernel 只对本次输入行加</text>
+    <text x="708" y="266" fill="var(--ink-3)" opacity=".9">4 个组内位置 × 2 种角色 = 8 个偏置向量</text>
+
+    <text x="28" y="322" font-family="Archivo, sans-serif" font-size="13" font-weight="600">③ 512 个独立的 softmax —— 不是每个 token 一个标量权重</text>
+    <rect x="28" y="336" width="640" height="118" rx="7" fill="url(#ygp)" stroke="var(--petrol-mark)" filter="url(#ysh)"/>
+    <text x="44" y="360" fill="var(--ink-2)">系数表 w[k][d] 是 [8, 512]：每一<tspan font-weight="700">列</tspan>沿 8 个位置归一化，列与列之间彼此独立</text>
+    <text x="44" y="386" fill="var(--petrol)">out[d] = Σ(k&lt;8) softmax_k( score[s_k][off_k+d] + ape[k%4][off_k+d] ) · kv[s_k][off_k+d]</text>
+    <text x="44" y="414" fill="var(--ink-2)">同一个 token 可以在通道 0 上占 0.31、在通道 1 上只占 0.02 —— 没有哪个标量代表「这个 token 的重要性」</text>
+    <text x="44" y="438" fill="var(--ink-3)" opacity=".9">在线 softmax，FP32；除以 w_acc 说明是加权平均，padding 位 score = -inf 分子分母都不进</text>
+
+    <rect x="692" y="336" width="352" height="118" rx="7" fill="url(#ygn)" stroke="var(--line)" filter="url(#ysh)"/>
+    <text x="708" y="360" font-weight="600">④ 归一与旋转，轴不一样</text>
+    <text x="708" y="386" fill="var(--ink-2)">RMSNorm：沿全部 <tspan font-weight="700">512</tspan> 维（除以 head_dim）</text>
+    <text x="708" y="410" fill="var(--ink-2)">RoPE：只转 <tspan font-weight="700">448–511</tspan>，GPT-J 相邻配对</text>
+    <text x="708" y="434" fill="var(--brick)">位置取组首 (pos//4)×4 = 4，不是边界 7</text>
+
+    <rect x="28" y="476" width="1016" height="34" rx="7" fill="var(--sunk)" stroke="var(--line-soft)"/>
+    <text x="44" y="498" font-size="10.5" fill="var(--ink-2)">⑤ 落盘：ci = pos//4 → block_table[bid][ci//64] 的第 ci%64 行。主通路写 BF16 1024 B（或 FP8 512+128 B）；indexer 通路逐行量化后写另一个池。整条链在一个 kernel 的寄存器里跑完，只有最后这次 scatter 写内存。</text>
+  </svg>
+  <figcaption>
+    这张图画的是 CSA 主 compressor。<strong>indexer 的那个逐字相同</strong>，只是 head_dim 128、投影 <code>[256, 7168]</code>、<code>ape [4, 256]</code>、
+    RoPE 转的是 128 维里的 64 维（<strong>一半</strong>，主通路只有八分之一），最后多一步逐行量化。
+    HCA 把 <code>col_off</code> 恒设为 0、窗口换成 128 个不重叠的 token，其余完全一致。
+  </figcaption>
+</figure>
+
 </section>
 <section>
   <hr class="rule">
   <p class="eyebrow">特殊模块 · indexer</p>
   <h2>CSA 的 top-1024 是在一份独立的、压得更狠的 KV 上选出来的</h2>
   <p>
-    indexer 不在主 KV 上打分。它有自己的 compressor（<code>head_dim = 128</code>，带 Hadamard 旋转），
+    indexer 不在主 KV 上打分。它有自己的 compressor（<code>head_dim = 128</code>），
     把同样 4 个 token 一组压成一行 128 维的 index key，写进另一个池子；
     query 侧也单独投影成 64 头 × 128 维。打分完只输出<strong>行号</strong>，真正的 KV 仍从主池取。
   </p>
@@ -877,7 +1028,7 @@ footer{border-top:1px solid var(--line); padding-top:22px; color:var(--ink-2); f
       <text x="396" y="66" fill="var(--ink-2)">同样 4 个 token 一组</text>
       <text x="396" y="88" fill="var(--amber)">wkv / wgate [256, 7168] BF16</text>
       <text x="396" y="112" fill="var(--ink-2)">FP32 softmax 池化 → RMSNorm → RoPE</text>
-      <text x="396" y="140" fill="var(--brick)">rotate = True：先 Hadamard 旋转</text>
+      <text x="396" y="140" fill="var(--ink-2)">逐行 amax → ue8m0 → e4m3 → 预洗牌</text>
       <text x="396" y="164" fill="var(--amber)">FP4：一行 68 B（64 B 值 + 4 B e8m0）</text>
       <text x="396" y="186" fill="var(--ink-2)">FP8：一行 132 B（128 B + FP32 scale）</text>
       <text x="396" y="212" fill="var(--ink-3)" opacity=".9">写入与量化都在 fused_compress_attn 里</text>
@@ -922,6 +1073,52 @@ footer{border-top:1px solid var(--line); padding-top:22px; color:var(--ink-2); f
         <code>--index-cache-dtype fp8</code> 可以强制回退。
         gfx950 与 gfx1250 的 FP4 布局<strong>故意不兼容</strong>：前者是 <code>pa_mqa_logits_fp4</code> 的预洗牌布局，后者是 OPUS 自然行 ——
         所以 <code>indexer_layout</code> 要和 <code>quant_mode</code> 分开记，一个说怎么量化，一个说怎么摆。
+      </p>
+    </div>
+  </div>
+  <div class="grid2">
+    <div class="card warn">
+      <p class="eyebrow">rotate = True 是个还没接上的标志</p>
+      <p>
+        <code>Compressor.__init__</code> 收一个 <code>rotate</code> 参数，indexer 那份传的是 <code>True</code>。
+        但 <code>rotate_activation</code>（<code>atom/model_ops/quant_v4.py</code> 的 Walsh-Hadamard）
+        <strong>在整个 V4 路径里没有任何调用者</strong> —— 全仓只有 GLM-5.3 的 k-pool 和 V4.1 的融合 RoPE 用到 Hadamard，
+        后者还显式传 <code>do_rotate_act=False</code>。
+        源码注释说明了它是给后续 PR 留的判别位：参考实现训练时做的是
+        <code>rotate_activation(kv)</code> 再 FP4 量化的 QAT 往返，这一步目前没有移植。
+        看到这个标志不要当成「跑了 Hadamard」。
+      </p>
+    </div>
+    <div class="card good">
+      <p class="eyebrow">稀疏要到 4K 之后才真的生效</p>
+      <p>
+        CSA 的候选行数是 <code>(pos+1)/4</code>，要超过 <code>index_topk = 1024</code> 才会丢东西 ——
+        也就是 <strong>pos ≥ 4095</strong>。在那之前 top-1024 选中的是全部候选行，
+        CSA 层等价于「滑窗 + 全部压缩历史」。
+        4K 以内的 benchmark 测不到这套机制的稀疏行为，只测到它的压缩损失。
+      </p>
+    </div>
+  </div>
+  <div class="grid2">
+    <div class="card">
+      <p class="eyebrow">打分读的字节和它要剪枝的那次注意力差不多</p>
+      <p>
+        同样在 pos = 20000：打分要扫 5000 行 index K，FP8 下 <code>5000 × 132 B ≈ 660 KB</code>；
+        而被它剪到 1024 行之后，注意力读主 KV 是 <code>1024 × 640 B ≈ 655 KB</code>。
+        换成 FP4 index 平面（68 B/行）降到 <strong>340 KB</strong>，约为注意力的一半 ——
+        这大概就是原生单节点默认选 FP4 的原因（recipe 写了 gfx942 除外）。
+        <span class="dim">只是字节数对比，不是时延对比；两者访存模式不同，没有实测。</span>
+      </p>
+    </div>
+    <div class="card warn">
+      <p class="eyebrow">压缩器状态环比滑窗还大</p>
+      <p>
+        每请求、每层、FP32、<code>kv_state</code> 与 <code>score_state</code> 各一份：
+        CSA 主环 <code>(8, 1024)</code> = 64 KiB、CSA index 环 <code>(8, 256)</code> = 16 KiB、
+        <strong>HCA 主环 <code>(128, 512)</code> = 512 KiB</strong>。
+        合计约 <strong>17.8 MiB / 请求</strong>，其中 HCA 占 15.5 MiB ——
+        比 FP8 滑窗的 4.77 MiB 还大 3.7 倍。
+        HCA 环必须 128 深，因为它的池化窗口就是 128，跨 forward 边界时最多要补 127 个历史位置。
       </p>
     </div>
   </div>
@@ -1113,7 +1310,7 @@ footer{border-top:1px solid var(--line); padding-top:22px; color:var(--ink-2); f
       <tr><td class="k">compressor.wkv / wgate</td><td class="num">[1024, 7168]</td><td>BF16</td><td><strong>CSA 层</strong>（ratio 4，重叠窗口，宽度翻倍）；<code>ape [4, 1024]</code></td></tr>
       <tr><td class="k">indexer.wq_b</td><td class="num">[8192, 1536]</td><td>FP8 128×128</td><td>只有 30 个 CSA 层。64 头 × 128，<strong>不切 TP</strong></td></tr>
       <tr><td class="k">indexer.weights_proj</td><td class="num">[64, 7168]</td><td>BF16</td><td>每头一个打分权重</td></tr>
-      <tr><td class="k">indexer.compressor.wkv / wgate</td><td class="num">[256, 7168]</td><td>BF16</td><td>indexer <strong>自己的</strong> 压缩器，head_dim 128，带 Hadamard 旋转</td></tr>
+      <tr><td class="k">indexer.compressor.wkv / wgate</td><td class="num">[256, 7168]</td><td>BF16</td><td>indexer <strong>自己的</strong> 压缩器，head_dim 128，输出只给打分</td></tr>
       <tr><td class="k">ffn.gate.weight</td><td class="num">[384, 7168]</td><td>BF16</td><td>层 3–60 另有 <code>gate.bias [384]</code> FP32</td></tr>
       <tr><td class="k">ffn.gate.tid2eid</td><td class="num">[129280, 6]</td><td>INT64</td><td><strong>只有层 0 / 1 / 2</strong>，与 <code>gate.bias</code> 互斥</td></tr>
       <tr><td class="k">ffn.experts.e.w1 / w3</td><td class="num">[3072, 3584]</td><td>I8 打包 FP4</td><td>逻辑列数 7168。<code>scale [3072, 224]</code> E8M0，块 1×32</td></tr>
@@ -1231,7 +1428,7 @@ footer{border-top:1px solid var(--line); padding-top:22px; color:var(--ink-2); f
       <tr><td class="num">1</td><td class="k">atom/models/deepseek_v4.py · DeepseekV4Args</td><td><code>compress_ratios</code> 的三种取值注释：0 = Dense、4 = CSA、128 = HCA</td></tr>
       <tr><td class="num">2</td><td class="k">atom/models/deepseek_v4.py · DeepseekV4Attention.__init__</td><td>按 ratio 决定建不建 compressor / indexer；YaRN 还是普通 RoPE</td></tr>
       <tr><td class="num">3</td><td class="k">atom/models/deepseek_v4.py · Compressor</td><td><code>overlap = (ratio == 4)</code>，以及它为什么让投影宽度翻倍</td></tr>
-      <tr><td class="num">4</td><td class="k">atom/models/deepseek_v4.py · Indexer</td><td>自带的 compressor（rotate=True）、复制而非切分的 wq_b、FP4/FP8 两种布局</td></tr>
+      <tr><td class="num">4</td><td class="k">atom/models/deepseek_v4.py · Indexer</td><td>自带的 compressor、复制而非切分的 wq_b、FP4/FP8 两种布局</td></tr>
       <tr><td class="num">5</td><td class="k">atom/models/deepseek_v4.py · _sparse_attention</td><td>三套 <code>kv_indices_{swa,csa,hca}</code> 怎么按 ratio 选</td></tr>
       <tr><td class="num">6</td><td class="k">atom/models/deepseek_v4.py · MoE._hash_topk</td><td><code>tid2eid[input_ids]</code> 定选择、<code>sqrtsoftplus</code> 定权重</td></tr>
       <tr><td class="num">7</td><td class="k">atom/models/deepseek_v4.py · Block</td><td><code>hc_pre</code> / <code>hc_post</code>，以及层 0 为什么不能用融合版</td></tr>
