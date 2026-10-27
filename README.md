@@ -1,19 +1,23 @@
 # LLM
 
-大模型**结构解剖**文档集。每个模型一份自包含的 HTML：完整结构图、逐模块的张量形状、
-从 checkpoint 分片头部实读的参数账，以及它在推理后端里究竟落在哪几个文件上。
+大模型与推理框架的**结构解剖**文档集，分两个栏目：
 
-面向的是要动这段代码的人——不是模型卡，也不是论文摘要。当前全部文档以
-[ATOM](https://github.com/ROCm/ATOM) 为后端。
+- **[模型解剖](#模型解剖)**：每个模型一份自包含的 HTML，包括完整结构图、逐模块的张量形状、
+  从 checkpoint 分片头部实读的参数账，以及它在推理后端里落在哪几个文件上。后端统一是
+  [ATOM](https://github.com/ROCm/ATOM)。
+- **[框架解剖](#框架解剖)**：每个推理框架一组多页 HTML，按「整体结构 → 关键模块 → 关键 feature → 优势」
+  把源码读一遍，并标出每个结论的 `文件:行号`。
+
+面向的是要动这段代码的人——不是模型卡，也不是论文摘要。
 
 ---
 
 ## 📖 在线阅读
 
-> **[→ 打开模型结构手册](https://perryzhang01.github.io/LLM/)**
+> **[→ 打开总览页](https://perryzhang01.github.io/LLM/)** · **[→ 直接进入 DeepInfer 框架解剖](https://perryzhang01.github.io/LLM/framework/DeepInfer/index.html)**
 
 GitHub 的文件浏览器不渲染 HTML（只显示源码），所以文档通过 GitHub Pages 托管。
-上面这个链接是总览页，点任意一张模型卡片即可进入对应的解剖页。
+总览页上半部分是模型卡片，下半部分是框架卡片，点任意一张进入对应的解剖页。
 
 <details>
 <summary>Pages 还没启用？两种办法</summary>
@@ -35,7 +39,9 @@ GitHub 的文件浏览器不渲染 HTML（只显示源码），所以文档通�
 
 ---
 
-## 已收录的模型
+## 模型解剖
+
+### 已收录的模型
 
 | 模型 | 架构 | 总参数 / 激活 | 结构要点 | 后端实现 |
 |---|---|---|---|---|
@@ -48,9 +54,7 @@ GitHub 的文件浏览器不渲染 HTML（只显示源码），所以文档通�
 
 GLM-5.2 另有一份 Markdown 版，GitHub 可直接阅读：[`models/GLM/model.md`](models/GLM/model.md)。
 
----
-
-## 每份文档包含什么
+### 每份模型文档包含什么
 
 - **完整模型结构**，每个模块标注张量形状；复杂的 attention 先画成一块
 - **这块的单独拆解**，以及 mHC、MoE、Engram 这类特殊模块各自的结构
@@ -63,12 +67,44 @@ GLM-5.2 另有一份 Markdown 版，GitHub 可直接阅读：[`models/GLM/model.
 
 ---
 
+## 框架解剖
+
+### 已收录的框架
+
+| 框架 | 源码版本 | 支持的模型 / 硬件 | 结构要点 | 文档 |
+|---|---|---|---|---|
+| **[DeepInfer](https://perryzhang01.github.io/LLM/framework/DeepInfer/index.html)** | [`deepseek-ai/DeepInfer@5537415`](https://github.com/deepseek-ai/DeepInfer/tree/553741557a57df44a46fb3ab72b6aafeaf945337)（2026-10-25） | DeepSeek-V4.1-Flash · NVIDIA SM100 / Ascend 950 | C++ 调度器 + 零开销异步调度；DSpark 块并行草稿与置信度调度验证；块池 + 状态槽两块裸显存，YOCO 截断让解码层只重放 140 个 token；无 TP，Attention DP + Wide-EP；双平台共用一套代码 | 6 章 · 10 张图 |
+
+### DeepInfer 的六章
+
+| 章 | 页面 | 讲什么 |
+|---|---|---|
+| 1 | [总览](https://perryzhang01.github.io/LLM/framework/DeepInfer/index.html) | 开源范围（有什么、没有什么）、七层分层结构、进程拓扑、一个 step 的顺序、十四个关键模块与行数 |
+| 2 | [调度与执行](https://perryzhang01.github.io/LLM/framework/DeepInfer/scheduling.html) | C++ 调度器与 DP 投票、准入与抢占、零开销异步调度（ZOS）、热路径同步守卫、按 total_q 分档的 CUDA Graph、三种引擎类型 |
+| 3 | [KV 缓存与有界重放](https://perryzhang01.github.io/LLM/framework/DeepInfer/memory.html) | 块池 + 状态槽、FP4 / MXFP8 缓存格式、显存预算、生产 KV 存储形状、YOCO 截断与命中上限 |
+| 4 | [投机解码与采样](https://perryzhang01.github.io/LLM/framework/DeepInfer/speculative.html) | DSpark 块并行草稿、置信度调度验证、无损拒绝采样、融合采样器与计数器 RNG、批不变推理、结构化输出 |
+| 5 | [并行与算子层](https://perryzhang01.github.io/LLM/framework/DeepInfer/parallel.html) | 无 TP 的进程组、镜像 CP、mega MoE 与 DeepEP、EPLB、双平台分发、43 个 TileLang 内核清单 |
+| 6 | [性能与优势](https://perryzhang01.github.io/LLM/framework/DeepInfer/summary.html) | 官方 Pareto 曲线读图重绘、优势与代价、与 vLLM 的取舍、注释与代码不一致之处、读码路线、常用环境变量 |
+
+### 每组框架文档包含什么
+
+- **整体结构**：分层结构图、进程与通信拓扑、一个 step 的执行顺序
+- **关键模块清单**：路径、行数、职责
+- **关键 feature 逐个拆解**：机制图 + 关键代码节选 + `文件:行号`
+- **优势与代价**，以及和同类框架的取舍对照
+- **读码坑**：注释或文档与代码不一致的地方，以代码为准
+- **一条读码路线**
+
+结论都回到源码核对过；吞吐、精度这类运行时数字取自框架仓库自带的文档，会注明出处，没有本地复跑。
+
+---
+
 ## 目录结构
 
 ```
 .
-├── index.html                          # 模型总览页（GitHub Pages 入口）
-├── models/
+├── index.html                          # 总览页（GitHub Pages 入口）：模型卡片 + 框架卡片
+├── models/                             # 模型解剖
 │   ├── glm52_anatomy.html              # GLM-5.2
 │   ├── GLM/
 │   │   ├── glm53_anatomy.html          # GLM-5.3（旗舰）
@@ -79,8 +115,17 @@ GLM-5.2 另有一份 Markdown 版，GitHub 可直接阅读：[`models/GLM/model.
 │   └── DeepSeek/
 │       ├── v4_pro_anatomy.html         # DeepSeek-V4-Pro
 │       └── v41_flash_anatomy.html      # DeepSeek-V4.1-Flash
+├── framework/                          # 框架解剖
+│   └── DeepInfer/                      # DeepInfer，六章
+│       ├── index.html                  # 1 总览
+│       ├── scheduling.html             # 2 调度与执行
+│       ├── memory.html                 # 3 KV 缓存与有界重放
+│       ├── speculative.html            # 4 投机解码与采样
+│       ├── parallel.html               # 5 并行与算子层
+│       └── summary.html                # 6 性能与优势
 └── skills/                             # 驱动这些文档生成的 skill
     ├── models.md                       # 模型结构解剖
+    ├── framework.md                    # 框架结构解剖
     ├── accuracy.md                     # 精度调查
     ├── atom-ops-debug.md               # 算子调试
     └── vllm_plugin_upgrade.md          # vLLM 插件升级
@@ -105,3 +150,18 @@ GLM-5.2 另有一份 Markdown 版，GitHub 可直接阅读：[`models/GLM/model.
 
 产物是一份不依赖构建步骤的 HTML（深浅色自适应、响应式、图全部是内联 SVG）。
 生成后把它加进 `index.html` 的卡片网格，README 表格里补一行，就完成了收录。
+
+## 新增一个框架
+
+文档由 [`skills/framework.md`](skills/framework.md) 驱动生成。改两处，然后交给 Claude Code 执行该 skill：
+
+```markdown
+# 框架
+DeepInfer
+
+# 输出路径
+-LLM/framework/
+```
+
+产物放在 `framework/<框架名>/` 下，是一组互相链接的 HTML，每页自包含，同样不依赖构建步骤。
+生成后在 `index.html` 的「推理框架」一节加一张卡片，在上面的框架表里补一行，再补一张该框架的章节表。
