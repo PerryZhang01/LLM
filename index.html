@@ -1,4 +1,4 @@
-<title>LLM 模型结构手册</title>
+<title>LLM 模型与框架结构手册</title>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -242,28 +242,33 @@ a.mcard:hover .go{text-decoration:underline}
 
 <header class="mast">
   <div class="mast-id">
-    <span class="tag">模型结构解剖</span>
-    <span class="tag">后端 · ATOM</span>
-    <span class="tag hot">5 个模型</span>
+    <span class="tag">模型解剖 · 后端 ATOM</span>
+    <span class="tag">框架解剖 · 源码逐行</span>
+    <span class="tag hot">6 个模型</span>
     <span class="tag hot">1 个框架</span>
   </div>
-  <h1>LLM 模型结构手册</h1>
+  <h1>LLM 模型与框架结构手册</h1>
   <p class="lede">
-    每个模型一份解剖文档：完整结构图、逐个模块的张量形状、
-    从 checkpoint 分片头部实读的参数账、以及它在 ATOM 里究竟落在哪几个文件上。
+    两个栏目。<strong>模型解剖</strong>：每个模型一份文档，包括完整结构图、逐个模块的张量形状、
+    从 checkpoint 分片头部实读的参数账，以及它在 ATOM 里落在哪几个文件上。
+    <strong>框架解剖</strong>：每个推理框架一组多页文档，按整体结构、关键模块、关键 feature、优势把源码读一遍。
     面向的是<strong>要动这段代码的人</strong>——不是模型卡，也不是论文摘要。
   </p>
   <div class="stats">
-    <div class="stat"><span class="stat-n">5</span><span class="stat-l">已收录模型</span></div>
+    <div class="stat"><span class="stat-n">6</span><span class="stat-l">已收录模型</span></div>
     <div class="stat"><span class="stat-n">3</span><span class="stat-l">模型家族</span></div>
-    <div class="stat"><span class="stat-n">40</span><span class="stat-l">结构图</span></div>
-    <div class="stat"><span class="stat-n">ATOM</span><span class="stat-l">推理后端</span></div>
-    <div class="stat"><span class="stat-n">1</span><span class="stat-l">推理框架解剖</span></div>
+    <div class="stat"><span class="stat-n">1</span><span class="stat-l">已收录推理框架</span></div>
+    <div class="stat"><span class="stat-n">53</span><span class="stat-l">结构图（模型 43 + 框架 10）</span></div>
+    <div class="stat"><span class="stat-n">ATOM</span><span class="stat-l">模型文档的推理后端</span></div>
+  </div>
+  <div class="mast-id" style="margin:26px 0 0">
+    <a class="tag" href="#models" style="text-decoration:none">模型解剖 ↓</a>
+    <a class="tag" href="#frameworks" style="text-decoration:none">框架解剖 ↓</a>
   </div>
 </header>
 
-<section>
-  <p class="eyebrow">GLM 家族</p>
+<section id="models">
+  <p class="eyebrow">模型解剖 · GLM 家族</p>
   <h2>点开任意一张卡片进入该模型的解剖页</h2>
   <p>
     这三者中<strong>只有两种结构</strong>：GLM-5.2 与旗舰 GLM-5.3 的 config 逐字段相同，
@@ -393,7 +398,7 @@ a.mcard:hover .go{text-decoration:underline}
           <div><b>61 + 1</b><span>骨干 / MTP</span></div>
           <div><b>7168</b><span>hidden_size</span></div>
         </div>
-        <div class="mfoot"><span>atom/models/deepseek_v4.py</span><span class="go">10 张图 →</span></div>
+        <div class="mfoot"><span>atom/models/deepseek_v4.py</span><span class="go">12 张图 →</span></div>
       </div>
     </a>
     <a class="mcard f-a" href="models/DeepSeek/v41_flash_anatomy.html">
@@ -419,9 +424,9 @@ a.mcard:hover .go{text-decoration:underline}
   </div>
 </section>
 
-<section>
+<section id="frameworks">
   <hr class="rule">
-  <p class="eyebrow">推理框架</p>
+  <p class="eyebrow">框架解剖</p>
   <h2>不只拆模型，也拆跑模型的框架</h2>
   <p>
     框架文档按「整体结构 → 关键模块 → 关键 feature → 优势」组织，一个框架一组多页，
@@ -486,8 +491,8 @@ a.mcard:hover .go{text-decoration:underline}
 <section>
   <hr class="rule">
   <p class="eyebrow">这些文档怎么来的</p>
-  <h2>每一份都由 skills/models.md 驱动生成</h2>
-  <div class="grid2">
+  <h2>模型由 skills/models.md、框架由 skills/framework.md 驱动生成</h2>
+  <div class="grid2" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr))">
     <div class="card key">
       <p class="eyebrow">新增一个模型</p>
       <p>在 <code>skills/models.md</code> 里写明模型、后端与输出路径，然后交给 Claude Code 执行：</p>
@@ -501,11 +506,24 @@ a.mcard:hover .go{text-decoration:underline}
 -LLM/models/GLM</pre>
       <p style="margin-top:14px">
         产物是一份自包含的 HTML（无外部依赖，深浅色自适应）。
-        生成后把它加进本页的卡片网格即可。框架解剖同理，由 <code>skills/framework.md</code> 驱动，输出到 <code>framework/</code>。
+        生成后把它加进本页的卡片网格即可。
+      </p>
+    </div>
+    <div class="card key">
+      <p class="eyebrow">新增一个框架</p>
+      <p>在 <code>skills/framework.md</code> 里写明框架与输出路径，然后交给 Claude Code 执行：</p>
+      <pre class="code"># 框架
+DeepInfer
+
+# 输出路径
+-LLM/framework/</pre>
+      <p style="margin-top:14px">
+        产物放在 <code>framework/&lt;框架名&gt;/</code> 下，是一组互相链接的自包含 HTML。
+        生成后在本页「框架解剖」一节加一张卡片即可。
       </p>
     </div>
     <div class="card">
-      <p class="eyebrow">每份文档一定包含</p>
+      <p class="eyebrow">每份模型文档一定包含</p>
       <ul class="tight">
         <li>完整模型栈图 + 单层展开图，<strong>每个模块标注张量形状</strong></li>
         <li>从 safetensors 分片头部实读的权重形状与参数账</li>
@@ -517,13 +535,26 @@ a.mcard:hover .go{text-decoration:underline}
         数字一律来自 checkpoint 与源码实读，不引用模型卡上的标称值。
       </p>
     </div>
+    <div class="card">
+      <p class="eyebrow">每组框架文档一定包含</p>
+      <ul class="tight">
+        <li>分层结构图、进程与通信拓扑、一个 step 的执行顺序</li>
+        <li>关键模块清单：路径、行数、职责</li>
+        <li>关键 feature 逐个拆解：机制图 + 代码节选 + <code>文件:行号</code></li>
+        <li>优势与代价，以及和同类框架的取舍对照</li>
+        <li>注释与代码不一致之处，以及一条读码路线</li>
+      </ul>
+      <p class="note" style="margin-top:12px">
+        结论都回到源码核对；运行时数字取自框架仓库自带的文档并注明出处。
+      </p>
+    </div>
   </div>
 </section>
 
 <footer>
   <p>
     仓库 <a href="https://github.com/PerryZhang01/LLM">PerryZhang01/LLM</a> ·
-    文档面向 <a href="https://github.com/ROCm/ATOM">ATOM</a> 推理后端 ·
+    模型文档面向 <a href="https://github.com/ROCm/ATOM">ATOM</a> 推理后端，框架文档分析框架本身 ·
     页面由 GitHub Pages 从 <code>main</code> 分支直接托管。
   </p>
 </footer>
