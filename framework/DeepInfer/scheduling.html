@@ -1,0 +1,550 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DeepInfer · 调度与执行</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
+<style>
+:root{
+  --bg:#E8EBEA; --surface:#F6F8F7; --surface-2:#DDE3E2; --sunk:#D3DAD9;
+  --ink:#141A1C; --ink-2:#4B5A5C; --ink-3:#75858880;
+  --line:#C3CDCC; --line-soft:#D4DCDB;
+  --amber:#8A5D0C; --amber-mark:#C79433; --amber-bg:#EFE2C2;
+  --petrol:#1D5A74; --petrol-mark:#3D87A6; --petrol-bg:#D3E3EA;
+  --brick:#8E3629; --brick-bg:#F0DAD5;
+  --moss:#3F6034; --moss-mark:#6E9A5C; --moss-bg:#DDE8D6;
+  --mute-mark:#9FADAF;
+  --c1:#1F7AB0; --c2:#B5700F;
+  --shadow:0 1px 2px rgba(20,26,28,.06), 0 8px 24px -14px rgba(20,26,28,.24);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0D1315; --surface:#141C1E; --surface-2:#1C2629; --sunk:#101819;
+    --ink:#E3EAE9; --ink-2:#94A4A6; --ink-3:#6E7E8080;
+    --line:#283437; --line-soft:#1F2B2E;
+    --amber:#E0AB53; --amber-mark:#D69B36; --amber-bg:#3B2E13;
+    --petrol:#6FB6D5; --petrol-mark:#4C93B4; --petrol-bg:#12303D;
+    --brick:#E58472; --brick-bg:#3A1D18;
+    --moss:#A8CE96; --moss-mark:#7FAE6B; --moss-bg:#22301B;
+    --mute-mark:#3C4A4D;
+    --c1:#3A90C8; --c2:#BF7E22;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 30px -18px rgba(0,0,0,.8);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0D1315; --surface:#141C1E; --surface-2:#1C2629; --sunk:#101819;
+  --ink:#E3EAE9; --ink-2:#94A4A6; --ink-3:#6E7E8080;
+  --line:#283437; --line-soft:#1F2B2E;
+  --amber:#E0AB53; --amber-mark:#D69B36; --amber-bg:#3B2E13;
+  --petrol:#6FB6D5; --petrol-mark:#4C93B4; --petrol-bg:#12303D;
+  --brick:#E58472; --brick-bg:#3A1D18;
+  --moss:#A8CE96; --moss-mark:#7FAE6B; --moss-bg:#22301B;
+  --mute-mark:#3C4A4D;
+  --c1:#3A90C8; --c2:#BF7E22;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 30px -18px rgba(0,0,0,.8);
+}
+*{box-sizing:border-box}
+body{margin:0; background:var(--bg); color:var(--ink);
+  font-family:"Source Serif 4", "Songti SC", "Noto Serif CJK SC", "Source Han Serif SC", Georgia, serif;
+  font-size:16.5px; line-height:1.72; -webkit-font-smoothing:antialiased}
+.wrap{max-width:1140px; margin:0 auto; padding:0 28px 96px}
+h1,h2,h3,.eyebrow,.stat-n,.lgd,.tag,th,.chapnav,.pager{font-family:Archivo, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif}
+h1{font-size:clamp(2.2rem,5.2vw,3.6rem); line-height:1.04; letter-spacing:-.028em; font-weight:700; margin:0; text-wrap:balance}
+h2{font-size:clamp(1.3rem,2.5vw,1.68rem); line-height:1.22; letter-spacing:-.014em; font-weight:600; margin:0 0 .3em; text-wrap:balance}
+h3{font-size:1.0rem; letter-spacing:.005em; font-weight:600; margin:0 0 .35em}
+p{margin:0 0 1em; max-width:72ch}
+a{color:var(--petrol)}
+code,.mono{font-family:"IBM Plex Mono", ui-monospace, monospace; font-size:.855em; font-variant-ligatures:none}
+:not(pre) > code{background:var(--surface-2); padding:.1em .38em; border-radius:3px; color:var(--ink); overflow-wrap:anywhere}
+.eyebrow{font-size:.66rem; font-weight:600; letter-spacing:.16em; text-transform:uppercase; color:var(--ink-2); margin:0 0 .55em}
+.lede{font-size:1.1rem; color:var(--ink-2); max-width:70ch}
+.note{font-size:.9rem; color:var(--ink-2)}
+header.mast{border-bottom:1px solid var(--line); margin-bottom:52px; padding:24px 0 34px}
+.mast-id{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:22px}
+.tag{font-size:.68rem; font-weight:600; letter-spacing:.09em; text-transform:uppercase; padding:.32em .7em; border:1px solid var(--line); border-radius:2px; color:var(--ink-2); background:var(--surface)}
+.tag.hot{border-color:var(--amber); color:var(--amber); background:var(--amber-bg)}
+.mast p.lede{margin-top:18px}
+.stats{display:grid; grid-template-columns:repeat(auto-fit,minmax(128px,1fr)); gap:1px; background:var(--line-soft); border:1px solid var(--line-soft); margin-top:34px}
+.stat{background:var(--surface); padding:14px 16px 16px}
+.stat-n{display:block; font-size:1.45rem; font-weight:700; letter-spacing:-.02em; font-variant-numeric:tabular-nums; line-height:1.15}
+.stat-l{display:block; font-size:.74rem; color:var(--ink-2); letter-spacing:.02em; margin-top:3px; font-family:"IBM Plex Mono", monospace}
+section{margin:0 0 68px; scroll-margin-top:20px}
+.rule{border:0; border-top:1px solid var(--line); margin:0 0 34px}
+figure{margin:26px 0 0; background:var(--surface); border:1px solid var(--line); padding:24px 22px 16px; box-shadow:var(--shadow); overflow-x:auto}
+figure svg{max-width:100%; height:auto; display:block; margin:0 auto; color:var(--ink-2); font-family:"IBM Plex Mono", ui-monospace, monospace; font-size:10.5px}
+figure svg text{fill:var(--ink)}
+figure .fignum{font-family:Archivo,sans-serif; font-size:.66rem; font-weight:600; letter-spacing:.16em; text-transform:uppercase; color:var(--ink-2); margin:0 0 14px}
+figcaption{font-size:.86rem; color:var(--ink-2); margin-top:16px; padding-top:12px; border-top:1px solid var(--line-soft); max-width:80ch}
+figcaption strong{color:var(--ink)}
+.svg-min{min-width:760px}
+figure svg.chart{max-width:760px}
+.tscroll{overflow-x:auto; margin-top:22px; border:1px solid var(--line); background:var(--surface); box-shadow:var(--shadow)}
+table{border-collapse:collapse; width:100%; min-width:640px; font-size:.9rem}
+th{text-align:left; font-size:.68rem; letter-spacing:.11em; text-transform:uppercase; font-weight:600; color:var(--ink-2); padding:11px 16px; background:var(--surface-2); border-bottom:1px solid var(--line); white-space:nowrap}
+td{padding:10px 16px; border-bottom:1px solid var(--line-soft); vertical-align:top; line-height:1.55}
+tbody tr:last-child td{border-bottom:0}
+td.num{font-family:"IBM Plex Mono",monospace; font-variant-numeric:tabular-nums; white-space:nowrap}
+td.k{font-family:"IBM Plex Mono",monospace; font-size:.8rem}
+.hl{color:var(--amber); font-weight:600}
+.dim{color:var(--ink-2)}
+.pos{color:var(--moss); font-weight:600}
+.neg{color:var(--brick); font-weight:600}
+.grid2{display:grid; grid-template-columns:repeat(auto-fit,minmax(310px,1fr)); gap:18px; margin-top:24px}
+.grid3{display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:16px; margin-top:24px}
+.card{background:var(--surface); border:1px solid var(--line); padding:18px 20px 16px; box-shadow:var(--shadow)}
+.card h3{color:var(--ink)}
+.card p:last-child{margin-bottom:0}
+.card.warn{border-left:3px solid var(--brick)}
+.card.good{border-left:3px solid var(--petrol)}
+.card.key{border-left:3px solid var(--amber-mark)}
+.card.moss{border-left:3px solid var(--moss-mark)}
+.card .eyebrow{margin-bottom:.4em}
+a.card{display:block; text-decoration:none; color:inherit; transition:transform .12s ease, border-color .12s ease}
+a.card:hover{transform:translateY(-2px); border-color:var(--amber-mark)}
+a.card .go{font-family:"IBM Plex Mono",monospace; font-size:.76rem; color:var(--amber); font-weight:600}
+ul.tight,ol.tight{margin:0; padding-left:1.25em}
+ul.tight li,ol.tight li{margin-bottom:.42em}
+ul.tight li:last-child,ol.tight li:last-child{margin-bottom:0}
+.pathline{font-family:"IBM Plex Mono",monospace; font-size:.76rem; color:var(--ink-2); background:var(--sunk); padding:5px 9px; display:inline-block; margin-top:10px; border-radius:2px; word-break:break-all}
+.callout{background:var(--amber-bg); border:1px solid var(--amber-mark); padding:16px 20px; margin-top:24px}
+.callout .eyebrow{color:var(--amber)}
+.callout p:last-child{margin-bottom:0}
+.callout.p{background:var(--petrol-bg); border-color:var(--petrol-mark)}
+.callout.p .eyebrow{color:var(--petrol)}
+pre.code{background:var(--sunk); border:1px solid var(--line-soft); padding:14px 16px; overflow-x:auto; font-family:"IBM Plex Mono",monospace; font-size:.78rem; line-height:1.6; margin:20px 0 0; color:var(--ink)}
+pre.code .c{color:var(--ink-2)}
+pre.code .h{color:var(--amber); font-weight:600}
+footer{border-top:1px solid var(--line); padding-top:22px; color:var(--ink-2); font-size:.85rem}
+.backnav{padding:22px 0 0; font-family:Archivo,"PingFang SC",system-ui,sans-serif; font-size:.8rem}
+.backnav a{color:var(--ink-2); text-decoration:none}
+.backnav a:hover{color:var(--amber)}
+.chapnav{display:flex; flex-wrap:wrap; gap:6px; margin:14px 0 0; font-size:.74rem}
+.chapnav a{padding:.36em .8em; border:1px solid var(--line); background:var(--surface); color:var(--ink-2); text-decoration:none; border-radius:2px; white-space:nowrap}
+.chapnav a:hover{border-color:var(--amber-mark); color:var(--ink)}
+.chapnav a.on{border-color:var(--amber); color:var(--amber); background:var(--amber-bg); font-weight:600}
+.pager{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin:12px 0 40px}
+.pager a{display:block; text-decoration:none; color:var(--ink); background:var(--surface); border:1px solid var(--line); padding:14px 18px; box-shadow:var(--shadow)}
+.pager a:hover{border-color:var(--amber-mark)}
+.pager a span{display:block; font-size:.66rem; letter-spacing:.14em; text-transform:uppercase; color:var(--ink-2)}
+.pager a.next{text-align:right; grid-column:2}
+/* svg 语义类 */
+.sv-band{fill:var(--surface-2)}
+.sv-box{fill:var(--surface); stroke:var(--line); stroke-width:1.2}
+.sv-a{fill:var(--amber-bg); stroke:var(--amber-mark); stroke-width:1.3}
+.sv-p{fill:var(--petrol-bg); stroke:var(--petrol-mark); stroke-width:1.3}
+.sv-m{fill:var(--moss-bg); stroke:var(--moss-mark); stroke-width:1.3}
+.sv-r{fill:var(--brick-bg); stroke:var(--brick); stroke-width:1.3}
+.sv-sunk{fill:var(--sunk); stroke:var(--line); stroke-width:1}
+.sv-dash{fill:none; stroke:var(--ink-2); stroke-width:1.1; stroke-dasharray:5 4}
+.sv-hatch{fill:url(#hatch); stroke:var(--line); stroke-width:1}
+.sv-ln{stroke:var(--ink-2); stroke-width:1.3; fill:none}
+.sv-ln-d{stroke:var(--ink-2); stroke-width:1.2; fill:none; stroke-dasharray:4 3}
+.sv-ln-a{stroke:var(--amber-mark); stroke-width:1.6; fill:none}
+.sv-ln-p{stroke:var(--petrol-mark); stroke-width:1.6; fill:none}
+.sv-grid{stroke:var(--line-soft); stroke-width:1}
+.sv-axis{stroke:var(--ink-2); stroke-width:1}
+figure svg text.n{font-size:11.5px; font-weight:600}
+figure svg text.s{fill:var(--ink-2); font-size:9.5px}
+figure svg text.xs{fill:var(--ink-2); font-size:9px}
+figure svg text.h{font-family:Archivo,"PingFang SC",system-ui,sans-serif; font-size:12px; font-weight:600}
+figure svg text.am{fill:var(--amber)}
+figure svg text.pe{fill:var(--petrol)}
+.mk{fill:var(--ink-2)} .mka{fill:var(--amber-mark)} .mkp{fill:var(--petrol-mark)}
+.hatch-l{stroke:var(--line); stroke-width:2}
+.c1l{stroke:var(--c1); stroke-width:2; fill:none} .c2l{stroke:var(--c2); stroke-width:2; fill:none}
+.c1d{fill:var(--c1); stroke:var(--surface); stroke-width:2} .c2d{fill:var(--c2); stroke:var(--surface); stroke-width:2}
+.hit{fill:transparent; cursor:default}
+.hit:hover + .c1d, .hit:hover + .c2d{stroke:var(--ink)}
+@media (max-width:640px){ .wrap{padding:0 16px 64px} .pager{grid-template-columns:1fr} .pager a.next{grid-column:1} }
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+:focus-visible{outline:2px solid var(--petrol); outline-offset:2px}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
+<marker id="ar" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path class="mk" d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z"/></marker>
+<marker id="ara" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path class="mka" d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z"/></marker>
+<marker id="arp" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path class="mkp" d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z"/></marker>
+<pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line class="hatch-l" x1="0" y1="0" x2="0" y2="6"/></pattern>
+</defs></svg>
+<div class="wrap">
+<nav class="backnav"><a href="../../index.html">← LLM 模型结构手册</a></nav>
+<nav class="chapnav" aria-label="章节"><a href="index.html">1 · 总览</a><a href="scheduling.html" class="on">2 · 调度与执行</a><a href="memory.html">3 · KV 缓存与有界重放</a><a href="speculative.html">4 · 投机解码与采样</a><a href="parallel.html">5 · 并行与算子层</a><a href="summary.html">6 · 性能与优势</a></nav>
+<header class="mast">
+  <div class="mast-id">
+    <span class="tag">第 2 章</span>
+    <span class="tag hot">C++ Scheduler</span>
+    <span class="tag hot">ZOS</span>
+    <span class="tag">CUDA Graph</span>
+  </div>
+  <h1>调度与执行</h1>
+  <p class="lede">
+    DeepInfer 让 GPU 不等 CPU，靠三件事。调度写在 C++ 里并释放 GIL；
+    下一步在上一步的结果出来之前就排好、发射出去；热路径上任何会同步的操作都会直接报错。
+    这一章按这条线读 <code>csrc/engine/</code> 和 <code>deepinfer/worker/</code>。
+  </p>
+  <div class="stats">
+    <div class="stat"><span class="stat-n">1 种</span><span class="stat-l">每步只做 prefill 或 decode</span></div>
+    <div class="stat"><span class="stat-n">70 / 100</span><span class="stat-l">ALL / ANY 投票间隔（decode 步）</span></div>
+    <div class="stat"><span class="stat-n">0.9</span><span class="stat-l">KV 占用超过即不再收 prefill</span></div>
+    <div class="stat"><span class="stat-n">128</span><span class="stat-l">每块 token 数（写死）</span></div>
+    <div class="stat"><span class="stat-n">195</span><span class="stat-l">默认抓的 decode 图（按 total_q）</span></div>
+  </div>
+</header>
+
+<section id="cpp">
+  <p class="eyebrow">调度核心</p>
+  <h2>调度器在 C++ 里，Python 只拿指针</h2>
+  <p>
+    <code>csrc/engine/scheduler.hpp</code> 1329 行，加上序列、块管理、MTP 变长、输入元数据准备，一共 5.2k 行 C++，经 pybind11 暴露成 <code>deepinfer._C.engine</code>。
+    值得注意的不是「用了 C++」，而是它如何避免和 Python 互相拖累：
+  </p>
+  <div class="grid2">
+    <div class="card key">
+      <p class="eyebrow">不占 GIL</p>
+      <ul class="tight">
+        <li><code>_schedule</code> 在 <code>py::gil_scoped_release</code> 下运行（<code>scheduler.hpp:276</code>，注释：「否则会阻塞其他 python 线程」）</li>
+        <li><code>build_request_outputs</code>、<code>prepare_sampler_inputs</code>、<code>prepare_zos_inputs</code>、<code>free_seq</code> 等同样释放 GIL</li>
+        <li>块管理器的锁 <code>Lockable</code> 断言调用时<strong>不</strong>持有 GIL，用带 20 秒超时的 error-checking mutex，防止死锁变成静默挂起</li>
+      </ul>
+    </div>
+    <div class="card key">
+      <p class="eyebrow">不造 Python 对象</p>
+      <ul class="tight">
+        <li><code>SequenceMetadata</code> 来自对象池，placement-new 复用（<code>object_pool.hpp</code>）</li>
+        <li><code>RequestOutputPool</code> 固定 10,000 槽，输出以 <code>uint64</code> 指针数组穿过 Python，下一步自动回收</li>
+        <li><code>process_outputs</code> 等返回借用函数内 static vector 的 numpy 数组，注释要求「下一次调用前用完」</li>
+        <li><code>DeferredRelease</code> 把池化对象的释放推迟一步，因为 ZOS 下 GPU 可能还在读</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="vote">
+  <hr class="rule">
+  <p class="eyebrow">关键 feature · 步型统一</p>
+  <h2>一步只做一件事，DP 组靠投票统一步型</h2>
+  <p>
+    <code>SchedulerOutputs.prompt_run</code> 只是一个 bool，<code>prepare_sample.cpp:61</code> 直接断言
+    「Mixed prefill and decode batches are unsupported」。不混批的代价是 decode 要偶尔给 prefill 让路；
+    换来的是 decode 步的形状只取决于 <code>total_q</code>，可以整步进 CUDA Graph。
+  </p>
+  <p>
+    麻烦在 DP：各 rank 的调度器独立，但 MoE 层的 EP 通信要求全组同一步做同一种事。代码注释原话是「dp 内必须同型，靠投票统一」。
+    NORMAL 引擎默认做 decode，只在两类投票点上考虑 prefill：
+  </p>
+  <div class="tscroll">
+  <table>
+    <thead><tr><th>投票点</th><th>间隔（环境变量 · 默认）</th><th>规则</th><th>为什么</th></tr></thead>
+    <tbody>
+      <tr><td class="hl">ALL</td><td class="k">DEEPINFER_PREFILL_ATTEMPT_INTERVAL · 70</td><td>全员都想 prefill 才做（<code>allreduce MIN</code>）</td><td>防止一个 rank 干活、其余 rank 陪跑空 prompt step</td></tr>
+      <tr><td class="hl">ANY</td><td class="k">DEEPINFER_PREFILL_ANY_ATTEMPT_INTERVAL · 100</td><td>任一 rank 想做就全组做；与 ALL 点重合时按 ANY</td><td>给孤立 rank 兜底：它的 prefill 最多等 100 个 decode 步</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p style="margin-top:18px">
+    「想做」的定义是 KV 占用 ≤ 0.9（<code>GPU_CACHE_PREFILL_WATERMARK</code>）且 waiting 队首可调度。
+    投票通过后还有<strong>第二轮投票</strong>，确认真有 rank 排出了 prefill；全组都空手就退回 decode。
+    排到 prefill 的 rank 正常做，没排到的 rank 跑一个空 prompt step「陪跑」。
+  </p>
+  <pre class="code"><span class="c">// scheduler.hpp:307-340（节选，注释原文）</span>
+bool is_any_point = (decode_step != 0) &amp;&amp; (decode_step % prefill_any_attempt_interval == 0);
+bool is_all_point = (decode_step % prefill_attempt_interval == 0);
+if (!is_any_point &amp;&amp; !is_all_point) return _schedule_decode(acquire);
+bool want = (get_gpu_cache_usage() &lt;= GPU_CACHE_PREFILL_WATERMARK) &amp;&amp; _has_prefill_waiting();
+...
+<span class="c">// 第二轮投票：确认这轮真有 rank 排出了 prefill。want 只看了 waiting 非空，
+// 但 _schedule_prefill 仍可能空手（slot 满、KV 块不够）。
+// 全组都空手时必须转 decode：硬做空 prompt step 会把 decode_step 清零，
+// 下一步接着投票、接着空手——running 满 + waiting 非空就死循环了。</span>
+bool any_scheduled = (_dp_allreduce(outputs ? 0 : 1, c10d::ReduceOp::MIN) == 0);
+...
+<span class="h">// 组内确有 rank 在做 prompt：本 rank 陪跑空 prompt step 保持步型一致</span>
+return _make_outputs({}, true, 0, {}, {}, {}, 0);</pre>
+  <div class="callout p">
+    <p class="eyebrow">一个细节</p>
+    <p>
+      prompt step 会把 <code>decode_step</code> 清零，而 0 恰好是 ALL 点。所以做完一次 prefill 后，
+      只有全员都还有 prefill 活才会接着做，不会出现一个 rank 拖着全组连做 prefill 的情况。
+      PROMPT 引擎只做 prefill，COMPLETION 引擎只做 decode，这两种都不投票。
+    </p>
+  </div>
+</section>
+
+<section id="admission">
+  <hr class="rule">
+  <p class="eyebrow">准入与抢占</p>
+  <h2>prefill 先到先得，decode 抢输出最长的</h2>
+  <div class="grid2">
+    <div class="card">
+      <p class="eyebrow">prefill 准入（_schedule_prefill，按顺序检查）</p>
+      <ol class="tight">
+        <li><b>长度</b>：超过 <code>prompt_limit</code> 记为 <code>FINISHED_IGNORED</code></li>
+        <li><b>KV 一次分够</b>：块和状态槽一起检查，整条序列的块在首次调度时全部分配，即使之后分块 prefill</li>
+        <li><b>序列数</b>：与 running 合计不超过 <code>max_num_seqs</code>（默认 256）</li>
+        <li><b>注意力预算</b>：Σseqlen_k ≤ <code>DEEPINFER_PREFILL_MAX_SUM_SEQLEN_K</code>（默认不限）</li>
+        <li><b>token 预算</b>：<code>max_num_batched_tokens</code>，分块长度对齐到 <code>2·cp</code>（镜像 CP 要求）</li>
+        <li><b>边界</b>：图像不能被切开（<code>_adjust_chunk_size</code>）；外部可强制 <code>chunk_checkpoints</code></li>
+      </ol>
+      <p class="note" style="margin-top:10px">遇到第一条排不下的就停，不跳过去找后面的。<code>chunked_prefill</code> 默认关闭；打开后 NORMAL 模式每步最多一条被切分的序列，且放在最后。</p>
+    </div>
+    <div class="card">
+      <p class="eyebrow">decode 调度与抢占（_schedule_decode）</p>
+      <ul class="tight">
+        <li>先把 <code>prompted</code> 队列（prefill 完、或 fork 出来的序列）接入 running；fork 的序列对状态槽和最后一个半满块做写时复制</li>
+        <li>running 按输出长度降序排，<strong>从输出最短的一端开始</strong>分块，每条至少要一个空闲块</li>
+        <li>块不够时从<strong>输出最长的一端</strong>挑牺牲者（<code>running[l]</code>）</li>
+        <li>牺牲者默认重算：重置后推回 waiting 队首，释放块。<code>stop_preempted_request</code> 打开时（<code>EngineArgs</code> 默认打开，<code>LLM()</code> 默认关闭），或请求带结构化输出时（无法重算），直接以 <code>FINISHED_PREEMPTED</code> 结束</li>
+        <li>没有 swap 到 CPU（<code>SWAPPED</code> 状态存在但没人用），没有优先级</li>
+      </ul>
+    </div>
+  </div>
+  <pre class="code"><span class="c"># 序列状态机（sequence.hpp:30-43）</span>
+WAITING ──▶ RUNNING ──▶ FINISHED_{STOPPED, LENGTH_CAPPED, ABORTED, IGNORED, PREEMPTED, SO_FAILED, VE_FAILED}
+   ▲  │         │
+   │  └─ 分块 prefill 的中间块：仍是 WAITING，process_outputs 把它推回 waiting 队首
+   └──────── 重算式抢占：RUNNING → WAITING
+
+<span class="c"># 子状态按结构体分组：KvCacheState（num_tokens / block_table / state_id）、SequenceScheduleState（在途 token 计数、branch_id）、
+# MtpState（草稿 token、接受率、info_slot、schedule_cnt / process_cnt）、StructuredOutputState</span></pre>
+</section>
+
+<section id="zos">
+  <hr class="rule">
+  <p class="eyebrow">关键 feature · 零开销异步调度（ZOS）</p>
+  <h2>CPU 永远领先 GPU 一步</h2>
+  <p>
+    朴素的流水是 schedule → forward → sample → 后处理，后处理前要等 GPU 把采样结果拷回来。
+    这段时间加上下一步的调度，GPU 是空的。部署文档说明 ZOS 参考了 SGLang 和 NanoFlow 的做法：
+    GPU 在跑 <code>forward(N) → sample(N)</code> 时，CPU 同时跑 <code>schedule(N+1) → launch_forward(N+1) → 后处理(N−1) → launch_sample(N+1)</code>。
+  </p>
+  <figure>
+    <p class="fignum">图 3 · 开 / 关 ZOS 的时间线</p>
+    <svg class="svg-min" viewBox="0 0 1060 300" role="img" aria-label="ZOS 打开时 GPU 连续执行，关闭时每步之间有空闲">
+      <text class="h" x="16" y="56">CPU 线程</text><text class="s" x="16" y="72">开 ZOS</text>
+      <text class="h" x="16" y="122">GPU 流</text><text class="s" x="16" y="138">开 ZOS</text>
+      <text class="h" x="16" y="244">GPU 流</text><text class="s" x="16" y="260">关 ZOS · 对照</text>
+      <g text-anchor="middle">
+        <rect class="sv-box" x="140" y="36" width="56" height="40" rx="2"/><text class="xs" x="168" y="60">调度 N+1</text>
+        <rect class="sv-box" x="198" y="36" width="42" height="40" rx="2"/><text class="xs" x="219" y="60" style="font-size:8px">发射 fwd</text>
+        <rect class="sv-dash" x="242" y="36" width="142" height="40" rx="2"/><text class="xs" x="313" y="60">等 sample N 的结束事件</text>
+        <rect class="sv-m" x="386" y="36" width="76" height="40" rx="2"/><text class="xs" x="424" y="60">后处理 N</text>
+        <rect class="sv-box" x="464" y="36" width="60" height="40" rx="2"/><text class="xs" x="494" y="60">发射 smp</text>
+        <rect class="sv-box" x="526" y="36" width="58" height="40" rx="2"/><text class="xs" x="555" y="60">调度 N+2</text>
+        <rect class="sv-box" x="586" y="36" width="40" height="40" rx="2"/><text class="xs" x="606" y="60" style="font-size:8px">发射 fwd</text>
+        <rect class="sv-dash" x="628" y="36" width="20" height="40" rx="2"/>
+        <rect class="sv-m" x="650" y="36" width="76" height="40" rx="2"/><text class="xs" x="688" y="60">后处理 N+1</text>
+        <rect class="sv-box" x="728" y="36" width="60" height="40" rx="2"/><text class="xs" x="758" y="60">发射 smp</text>
+        <rect class="sv-box" x="790" y="36" width="58" height="40" rx="2"/><text class="xs" x="819" y="60">调度 N+3</text>
+        <rect class="sv-box" x="850" y="36" width="40" height="40" rx="2"/><text class="xs" x="870" y="60" style="font-size:8px">发射 fwd</text>
+        <rect class="sv-dash" x="892" y="36" width="20" height="40" rx="2"/>
+        <rect class="sv-m" x="914" y="36" width="76" height="40" rx="2"/><text class="xs" x="952" y="60">后处理 N+2</text>
+        <rect class="sv-box" x="992" y="36" width="48" height="40" rx="2"/><text class="xs" x="1016" y="60">发射 smp</text>
+
+        <rect class="sv-p" x="140" y="102" width="182" height="40" rx="2"/><text class="s" x="231" y="126">forward N</text>
+        <rect class="sv-a" x="324" y="102" width="60" height="40" rx="2"/><text class="s" x="354" y="126">sample N</text>
+        <rect class="sv-p" x="386" y="102" width="200" height="40" rx="2"/><text class="s" x="486" y="126">forward N+1</text>
+        <rect class="sv-a" x="588" y="102" width="60" height="40" rx="2"/><text class="s" x="618" y="126">sample N+1</text>
+        <rect class="sv-p" x="650" y="102" width="200" height="40" rx="2"/><text class="s" x="750" y="126">forward N+2</text>
+        <rect class="sv-a" x="852" y="102" width="60" height="40" rx="2"/><text class="s" x="882" y="126">sample N+2</text>
+        <rect class="sv-p" x="914" y="102" width="126" height="40" rx="2"/><text class="s" x="977" y="126">forward N+3 …</text>
+
+        <rect class="sv-p" x="140" y="224" width="182" height="40" rx="2"/><text class="s" x="231" y="248">forward N</text>
+        <rect class="sv-a" x="324" y="224" width="60" height="40" rx="2"/><text class="s" x="354" y="248">sample N</text>
+        <rect class="sv-hatch" x="386" y="224" width="130" height="40" rx="2"/><text class="s" x="451" y="248">GPU 空闲</text>
+        <rect class="sv-p" x="518" y="224" width="182" height="40" rx="2"/><text class="s" x="609" y="248">forward N+1</text>
+        <rect class="sv-a" x="702" y="224" width="60" height="40" rx="2"/><text class="s" x="732" y="248">sample N+1</text>
+        <rect class="sv-hatch" x="764" y="224" width="130" height="40" rx="2"/><text class="s" x="829" y="248">GPU 空闲</text>
+        <rect class="sv-p" x="896" y="224" width="144" height="40" rx="2"/><text class="s" x="968" y="248">forward N+2 …</text>
+      </g>
+      <path class="sv-ln-d" d="M219,76 C219,92 390,86 390,100" marker-end="url(#ar)"/>
+      <path class="sv-ln-a" d="M354,142 C354,172 404,172 404,145" marker-end="url(#ara)"/>
+      <text class="s" x="418" y="168">input_ids、seqlens_k 在 GPU 上按 remap 从 sample N 的结果取（gather_input_ids_zos · compute_seqlens_k_zos）</text>
+      <text class="s" x="418" y="184">CPU 发射 forward N+1 时并不知道这些值，也不需要知道</text>
+      <line class="sv-grid" x1="16" y1="204" x2="1040" y2="204" stroke-dasharray="3 4"/>
+      <text class="s" x="386" y="284">空闲 = 同步 sample → 后处理 → 调度下一步 → 准备输入；CPU 越慢，GPU 等得越久</text>
+    </svg>
+    <figcaption>
+      宽度示意顺序，不代表实测耗时。虚线框是 CPU 在 <code>torch.cuda.Event.synchronize()</code> 上等待。
+      注意 CPU 的「后处理 N」排在「发射 fwd N+1」<strong>之后</strong>，这就是 <code>execute_model_step</code> 里 forward → 后处理上一步 → sample 的顺序。
+      prefill 步一律当场后处理（<code>worker.py:183</code>），所以只有 decode 步享受这条流水。
+    </figcaption>
+  </figure>
+
+  <h3 style="margin-top:34px">N 的结果还没出来，N+1 怎么排</h3>
+  <p>
+    难点在于：调度 N+1 时，N 采到哪个 token、接受了几个草稿、下一轮草稿置信度多少，CPU 全都不知道。
+    DeepInfer 的办法是<strong>CPU 只按上界排，确切值留在 GPU 上算</strong>：
+  </p>
+  <div class="tscroll">
+  <table>
+    <thead><tr><th>CPU 不知道的</th><th>做法</th><th>代码</th></tr></thead>
+    <tbody>
+      <tr><td>N 接受了几个 token，所以 seqlen_k 不确定</td><td>CPU 悲观记账：每条在途步记 <code>nextn+1</code> 个 token，块也按全部接受预留。GPU 上 <code>seqlens_k += seqlens_q − (nextn − 上一步接受数[remap])</code></td><td class="k">scheduler.hpp:726 · compute_seqlens_k_zos.py:10-32</td></tr>
+      <tr><td>N 采到了哪个 token，所以 input_ids 不确定</td><td>CPU 不填。C++ <code>prepare_zos_inputs</code> 只给出 <code>remap[i]</code> = 本批第 i 条在上一批里的下标（顺序没变时走快路径）。GPU 上第 0 位取上一步采样的 token，第 j 位取上一步的第 j−1 个草稿</td><td class="k">zos.cpp:172-226 · gather_input_ids_zos.py</td></tr>
+      <tr><td>N 的置信度，所以每条验证多长不确定</td><td>CPU 只定总量 <code>total_q</code>（也就决定了用哪张 CUDA Graph），按请求的分配在 GPU 上用最新置信度重算，见<a href="speculative.html#varlen">第 4 章</a></td><td class="k">schedule_mtp_varlen.py</td></tr>
+      <tr><td>Engram 的 n-gram 窗口</td><td>同样从上一步设备端的采样与草稿结果拼出来</td><td class="k">gather_engram_tokens_zos.py</td></tr>
+      <tr><td>decode 元数据（位置、槽位、索引）</td><td>C++ 只抽出每条序列的紧凑数组；一个 TileLang 内核 <code>prepare_v4_decode_metadata</code> 把全部 decode 元数据直接写进 CUDA Graph 的输入缓冲</td><td class="k">prepare_tensor_input_zos.py · prepare_v4_decode_metadata.py</td></tr>
+      <tr><td>采样前 CPU 需要确切的 seqlens</td><td>GPU 算出的 seqlens_q 拷回 pinned 缓冲并记一个事件；采样前 <code>update_metadata_for_sampling_zos</code> 等这个事件，再刷新 last_output_token、草稿槽、SO 状态</td><td class="k">worker.py:146-152 · zos.cpp:309-335</td></tr>
+      <tr><td>N 已经 EOS 的序列</td><td>N+1 可能还会被 forward 一次，结果丢弃。它的块要等到 GPU 越过那一步之后的 <code>pre_sampler_sync</code> 才释放</td><td class="k">zos.cpp:328 · llm_engine.py:67-119</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="grid2">
+    <div class="card">
+      <p class="eyebrow">默认打开，但开关藏在 EngineArgs 里</p>
+      <p>
+        环境变量 <code>DEEPINFER_ZERO_OVERHEAD_SCHEDULING</code> 本身默认 False（<code>environ.py:186</code>）。
+        <code>EngineArgs.__post_init__</code> 按引擎类型 <code>setdefault</code>：NORMAL 与 COMPLETION 为 1，PROMPT 为 0（<code>engine_type.py:16</code>）。
+        直接构造 <code>LLMEngine</code>、不经过 <code>EngineArgs</code> 时就是关的。
+      </p>
+    </div>
+    <div class="card">
+      <p class="eyebrow">代价</p>
+      <p>
+        块按全接受预留，在 KV 紧张时会更早触发抢占。<code>runtime_max_model_len</code> 为 ZOS 额外多留 <code>nextn+1</code> 个位置（<code>config.py:11-16</code>）。
+        已经 EOS 的序列会被多算一次。关掉的方法：<code>DEEPINFER_ZERO_OVERHEAD_SCHEDULING=0</code>，此时改用非 ZOS 的 <code>prepare_decode_v4</code>。
+      </p>
+    </div>
+  </div>
+</section>
+
+<section id="syncguard">
+  <hr class="rule">
+  <p class="eyebrow">关键 feature · 热路径守卫</p>
+  <h2>「热路径不准同步」是运行时检查，不是约定</h2>
+  <p>
+    <code>model_runner.py</code> 的 forward 和 sample 两个发射函数都标着「IMPORTANT: This function must NOT contain any cuda synchronize」（<code>:317</code>、<code>:346</code>），
+    并且确实用 <code>forbid_cuda_sync()</code> 包住：它把 torch 的 sync debug mode 设成 <code>error</code>，
+    任何阻塞拷贝、<code>.item()</code>、stream 或 device 同步都会直接抛异常。
+  </p>
+  <pre class="code"><span class="c"># deepinfer/utils.py（节选）</span>
+class _SyncDebugArbiter:
+    <span class="c">"""torch 的 sync debug mode 是进程级全局开关（C++ 静态单例），无法真正按线程生效；
+    这里按线程记 intent 栈（线程内内层覆盖外层），全局模式由各线程栈顶合成：
+    任一线程 allow 即放行（宁漏报不误杀），否则有 forbid 即报错，全空还原基线。"""</span>
+    def _apply(self) -&gt; None:
+        tops = [s[-1] for s in self._stacks.values()]
+        if not tops:          mode = self._baseline
+        elif "allow" in tops: mode = "default"
+        else:                 mode = "error"
+        torch.cuda.set_sync_debug_mode(mode)
+
+def forbid_cuda_sync():
+    <span class="c">"""torch.cuda.Event.synchronize is NOT covered by torch's sync debug mode, so intentional
+    event-based sync points (e.g. in ZOS) are unaffected."""</span></pre>
+  <div class="grid2">
+    <div class="card">
+      <p class="eyebrow">为什么要「仲裁者」</p>
+      <p>
+        开关是进程全局的，而引擎进程里有其他线程（SO 编译、统计日志、profiler）会合法地同步。
+        如果每个 scope 各自保存、恢复旧值，两个线程交错退出时会把 <code>error</code> 泄漏给别人。
+        测试 <code>tests/test_cuda_sync_guards.py</code> 专门复现了这个旧 bug，并跑 3 秒随机压力测试，
+        断言「任何线程在自己的 allow 里都不会看到 error」。
+      </p>
+    </div>
+    <div class="card">
+      <p class="eyebrow">ZOS 的合法同步点从哪走</p>
+      <p>
+        ZOS 需要等上一步采样结束，用的是 <code>torch.cuda.Event.synchronize()</code>，它不在 sync debug mode 的覆盖范围内。
+        所以「刻意的同步」和「意外的同步」在机制上就分开了。
+        调试时可以用 <code>DEEPINFER_DISABLE_SYNC_GUARD=1</code> 整体关掉，比如要在 forward 里打印张量。
+      </p>
+    </div>
+  </div>
+</section>
+
+<section id="cudagraph">
+  <hr class="rule">
+  <p class="eyebrow">关键 feature · CUDA Graph</p>
+  <h2>decode 图按 total_q 抓，prefill 永远 eager</h2>
+  <p>
+    <code>use_cuda_graph = not DEEPINFER_ENFORCE_EAGER and engine_type != PROMPT</code>，而且只在 decode 步回放（<code>model_runner.py:73, 182</code>）。
+    因为有投机解码，一条序列一步可能验证 1 到 6 个 token，所以图按<strong>总 query token 数</strong>分档，而不是按请求数。
+  </p>
+  <div class="tscroll">
+  <table>
+    <thead><tr><th></th><th>主模型图</th><th>DFlash 草稿图</th></tr></thead>
+    <tbody>
+      <tr><td>分档键</td><td><code>total_q</code>，上限 <code>max_num_seqs × (1 + nextn)</code> = 256 × 6 = 1536</td><td>请求数，上限 <code>max_num_seqs</code></td></tr>
+      <tr><td>档位</td><td><code>build_graph_batch_sizes(max, 8)</code>：1, 2, 4，之后每 8 一档到 1528，再加 1536，共 195 张</td><td>同一函数，间隔 <code>DEEPINFER_DFLASH_CUDAGRAPH_BATCH_SIZE_INTERVAL</code>（8）</td></tr>
+      <tr><td>图里有什么</td><td>整个 forward：图内的索引展开（<code>compute_attn_info</code>）、DFlash 主缓存写入；CP&gt;1 时还有图内 broadcast。ZOS 下没有 H2D 拷贝，源缓冲本来就在设备上</td><td>CP 广播、草稿元数据、草稿层、逐位采样、写 MTP 信息池</td></tr>
+      <tr><td>抓取</td><td>从最大的开始抓，所有图共用一个内存池；输入输出都是最大缓冲的前缀切片，用占位序列填充；<code>bisect_left</code> 选能装下的最小一张</td><td>与主图共用内存池和流</td></tr>
+      <tr><td>关掉</td><td class="k">DEEPINFER_ENFORCE_EAGER=1</td><td class="k">DEEPINFER_DFLASH_ENFORCE_EAGER=1</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="grid2">
+    <div class="card">
+      <p class="eyebrow">图内计时</p>
+      <p>
+        <code>_C.graph_timer</code> 把一对 ping-pong CUDA 事件换进<strong>已经抓好的图</strong>的事件记录节点里，
+        回放时就能量出图内某一段的耗时（<code>csrc/graph_timer/</code>）。置信度调度用的 forward / sample 实测耗时就是这么来的。NPU 上暂不支持。
+      </p>
+    </div>
+    <div class="card">
+      <p class="eyebrow">decode 性能曲线</p>
+      <p>
+        打开 <code>DEEPINFER_ENABLE_MTP_VARLEN</code> 时，warm-up 会把每张图回放 1 + 5 次，去掉最大最小取均值，再在 EP 组内平均，
+        得到 <code>[(graph_tokens, ms)]</code> 交给 C++ 调度器。曲线按模型、档位、dp/cp/ep 的 sha256 缓存到 <code>DEEPINFER_DECODE_PERF_CACHE_DIR</code>，TTL 3600 秒。
+      </p>
+    </div>
+  </div>
+</section>
+
+<section id="engines">
+  <hr class="rule">
+  <p class="eyebrow">引擎类型</p>
+  <h2>三种引擎，PD 拆分的骨架已经在了</h2>
+  <div class="tscroll">
+  <table>
+    <thead><tr><th>类型</th><th>调度</th><th>其他差异</th></tr></thead>
+    <tbody>
+      <tr><td class="hl">NORMAL</td><td>投票决定 prefill / decode</td><td>开源版离线推理用的就是它</td></tr>
+      <tr><td class="hl">PROMPT</td><td>只做 prefill，没排到也返回空的 prefill 结果</td><td>不抓 CUDA Graph；ZOS 默认关；每步后调 <code>send_processed_prompts</code>；<code>pe_prepare_save_kvcache</code> / <code>pe_do_save_kvcache</code> 钩子</td></tr>
+      <tr><td class="hl">COMPLETION</td><td>只做 decode</td><td>必须 <code>stop_preempted_request</code>（无法重算，<code>scheduler.hpp:102</code>）；禁止 CP&gt;1；没有多模态处理器；GC 间隔 ×10</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p style="margin-top:18px">
+    <code>llm_engine.py:800-857</code> 有一组空的「虚函数」：<code>init_pd_split</code>、<code>send_processed_prompts</code>、<code>do_save_kvcache</code>、
+    <code>pe_prepare_save_kvcache</code>、<code>pe_do_save_kvcache</code>、<code>should_copy_state</code>、<code>post_schedule</code>、<code>process_output</code>。
+    仓库里没有任何子类实现它们。C++ 侧的配套接口都在：<code>prompted</code> 队列、<code>fork_seq</code>、pin / unpin、<code>zero_states</code>、<code>set_schedulable</code>。
+    内部版本大概率就是在这些点上接 KV 存储和 PD 传输（推断）。
+  </p>
+</section>
+
+<section id="stats">
+  <hr class="rule">
+  <p class="eyebrow">可观测性</p>
+  <h2>统计、FLOPs 估计和按需 profiler</h2>
+  <div class="grid3">
+    <div class="card">
+      <p class="eyebrow">StatsLogger</p>
+      <p>每 100 步打一次：SPS、TPS、各位置草稿接受率、平均验证长度、置信度误差、MoE 负载比、KV 与状态槽占用、TTFT、MFU。日志行先进队列，主线程不碰 logger 的锁。</p>
+    </div>
+    <div class="card">
+      <p class="eyebrow">FlopsEstimator</p>
+      <p>按 FP8 当量估每步 FLOPs（压缩注意力、SWA、indexer、MoE、mHC、Engram、logits，含 YOCO 截断），<strong>只用于统计和 MFU</strong>，不参与调度。<code>LLM()</code> 默认关统计，所以离线跑时它不运行。</p>
+    </div>
+    <div class="card">
+      <p class="eyebrow">profile server</p>
+      <p><code>DEEPINFER_PROFILE_HTTP_ENABLE=1</code> 后每个 driver 起一个 FastAPI 线程（端口 6070 + gpu_id），<code>POST /profile?num_steps=20</code> 在 step 边界启停 torch profiler，因为 kineto 绑线程。</p>
+    </div>
+  </div>
+</section>
+
+<nav class="pager" aria-label="翻页"><a class="prev" href="index.html"><span>← 上一章</span>1 · 总览</a><a class="next" href="memory.html"><span>下一章 →</span>3 · KV 缓存与有界重放</a></nav>
+<footer>
+  <p>
+    源码 <a href="https://github.com/deepseek-ai/DeepInfer/tree/553741557a57df44a46fb3ab72b6aafeaf945337">deepseek-ai/DeepInfer@5537415</a>（2026-10-25）·
+    文中 <code>文件:行号</code> 均指这一提交 · 运行时数字来自仓库自带的 <code>doc/</code> 与 <code>examples/</code>，没有在本地复跑 ·
+    仓库 <a href="https://github.com/PerryZhang01/LLM">PerryZhang01/LLM</a>
+  </p>
+</footer>
+</div>
+</body>
+</html>

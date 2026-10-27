@@ -1,0 +1,455 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DeepInfer · KV 缓存与有界重放</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
+<style>
+:root{
+  --bg:#E8EBEA; --surface:#F6F8F7; --surface-2:#DDE3E2; --sunk:#D3DAD9;
+  --ink:#141A1C; --ink-2:#4B5A5C; --ink-3:#75858880;
+  --line:#C3CDCC; --line-soft:#D4DCDB;
+  --amber:#8A5D0C; --amber-mark:#C79433; --amber-bg:#EFE2C2;
+  --petrol:#1D5A74; --petrol-mark:#3D87A6; --petrol-bg:#D3E3EA;
+  --brick:#8E3629; --brick-bg:#F0DAD5;
+  --moss:#3F6034; --moss-mark:#6E9A5C; --moss-bg:#DDE8D6;
+  --mute-mark:#9FADAF;
+  --c1:#1F7AB0; --c2:#B5700F;
+  --shadow:0 1px 2px rgba(20,26,28,.06), 0 8px 24px -14px rgba(20,26,28,.24);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0D1315; --surface:#141C1E; --surface-2:#1C2629; --sunk:#101819;
+    --ink:#E3EAE9; --ink-2:#94A4A6; --ink-3:#6E7E8080;
+    --line:#283437; --line-soft:#1F2B2E;
+    --amber:#E0AB53; --amber-mark:#D69B36; --amber-bg:#3B2E13;
+    --petrol:#6FB6D5; --petrol-mark:#4C93B4; --petrol-bg:#12303D;
+    --brick:#E58472; --brick-bg:#3A1D18;
+    --moss:#A8CE96; --moss-mark:#7FAE6B; --moss-bg:#22301B;
+    --mute-mark:#3C4A4D;
+    --c1:#3A90C8; --c2:#BF7E22;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 30px -18px rgba(0,0,0,.8);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0D1315; --surface:#141C1E; --surface-2:#1C2629; --sunk:#101819;
+  --ink:#E3EAE9; --ink-2:#94A4A6; --ink-3:#6E7E8080;
+  --line:#283437; --line-soft:#1F2B2E;
+  --amber:#E0AB53; --amber-mark:#D69B36; --amber-bg:#3B2E13;
+  --petrol:#6FB6D5; --petrol-mark:#4C93B4; --petrol-bg:#12303D;
+  --brick:#E58472; --brick-bg:#3A1D18;
+  --moss:#A8CE96; --moss-mark:#7FAE6B; --moss-bg:#22301B;
+  --mute-mark:#3C4A4D;
+  --c1:#3A90C8; --c2:#BF7E22;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 30px -18px rgba(0,0,0,.8);
+}
+*{box-sizing:border-box}
+body{margin:0; background:var(--bg); color:var(--ink);
+  font-family:"Source Serif 4", "Songti SC", "Noto Serif CJK SC", "Source Han Serif SC", Georgia, serif;
+  font-size:16.5px; line-height:1.72; -webkit-font-smoothing:antialiased}
+.wrap{max-width:1140px; margin:0 auto; padding:0 28px 96px}
+h1,h2,h3,.eyebrow,.stat-n,.lgd,.tag,th,.chapnav,.pager{font-family:Archivo, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif}
+h1{font-size:clamp(2.2rem,5.2vw,3.6rem); line-height:1.04; letter-spacing:-.028em; font-weight:700; margin:0; text-wrap:balance}
+h2{font-size:clamp(1.3rem,2.5vw,1.68rem); line-height:1.22; letter-spacing:-.014em; font-weight:600; margin:0 0 .3em; text-wrap:balance}
+h3{font-size:1.0rem; letter-spacing:.005em; font-weight:600; margin:0 0 .35em}
+p{margin:0 0 1em; max-width:72ch}
+a{color:var(--petrol)}
+code,.mono{font-family:"IBM Plex Mono", ui-monospace, monospace; font-size:.855em; font-variant-ligatures:none}
+:not(pre) > code{background:var(--surface-2); padding:.1em .38em; border-radius:3px; color:var(--ink); overflow-wrap:anywhere}
+.eyebrow{font-size:.66rem; font-weight:600; letter-spacing:.16em; text-transform:uppercase; color:var(--ink-2); margin:0 0 .55em}
+.lede{font-size:1.1rem; color:var(--ink-2); max-width:70ch}
+.note{font-size:.9rem; color:var(--ink-2)}
+header.mast{border-bottom:1px solid var(--line); margin-bottom:52px; padding:24px 0 34px}
+.mast-id{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:22px}
+.tag{font-size:.68rem; font-weight:600; letter-spacing:.09em; text-transform:uppercase; padding:.32em .7em; border:1px solid var(--line); border-radius:2px; color:var(--ink-2); background:var(--surface)}
+.tag.hot{border-color:var(--amber); color:var(--amber); background:var(--amber-bg)}
+.mast p.lede{margin-top:18px}
+.stats{display:grid; grid-template-columns:repeat(auto-fit,minmax(128px,1fr)); gap:1px; background:var(--line-soft); border:1px solid var(--line-soft); margin-top:34px}
+.stat{background:var(--surface); padding:14px 16px 16px}
+.stat-n{display:block; font-size:1.45rem; font-weight:700; letter-spacing:-.02em; font-variant-numeric:tabular-nums; line-height:1.15}
+.stat-l{display:block; font-size:.74rem; color:var(--ink-2); letter-spacing:.02em; margin-top:3px; font-family:"IBM Plex Mono", monospace}
+section{margin:0 0 68px; scroll-margin-top:20px}
+.rule{border:0; border-top:1px solid var(--line); margin:0 0 34px}
+figure{margin:26px 0 0; background:var(--surface); border:1px solid var(--line); padding:24px 22px 16px; box-shadow:var(--shadow); overflow-x:auto}
+figure svg{max-width:100%; height:auto; display:block; margin:0 auto; color:var(--ink-2); font-family:"IBM Plex Mono", ui-monospace, monospace; font-size:10.5px}
+figure svg text{fill:var(--ink)}
+figure .fignum{font-family:Archivo,sans-serif; font-size:.66rem; font-weight:600; letter-spacing:.16em; text-transform:uppercase; color:var(--ink-2); margin:0 0 14px}
+figcaption{font-size:.86rem; color:var(--ink-2); margin-top:16px; padding-top:12px; border-top:1px solid var(--line-soft); max-width:80ch}
+figcaption strong{color:var(--ink)}
+.svg-min{min-width:760px}
+figure svg.chart{max-width:760px}
+.tscroll{overflow-x:auto; margin-top:22px; border:1px solid var(--line); background:var(--surface); box-shadow:var(--shadow)}
+table{border-collapse:collapse; width:100%; min-width:640px; font-size:.9rem}
+th{text-align:left; font-size:.68rem; letter-spacing:.11em; text-transform:uppercase; font-weight:600; color:var(--ink-2); padding:11px 16px; background:var(--surface-2); border-bottom:1px solid var(--line); white-space:nowrap}
+td{padding:10px 16px; border-bottom:1px solid var(--line-soft); vertical-align:top; line-height:1.55}
+tbody tr:last-child td{border-bottom:0}
+td.num{font-family:"IBM Plex Mono",monospace; font-variant-numeric:tabular-nums; white-space:nowrap}
+td.k{font-family:"IBM Plex Mono",monospace; font-size:.8rem}
+.hl{color:var(--amber); font-weight:600}
+.dim{color:var(--ink-2)}
+.pos{color:var(--moss); font-weight:600}
+.neg{color:var(--brick); font-weight:600}
+.grid2{display:grid; grid-template-columns:repeat(auto-fit,minmax(310px,1fr)); gap:18px; margin-top:24px}
+.grid3{display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:16px; margin-top:24px}
+.card{background:var(--surface); border:1px solid var(--line); padding:18px 20px 16px; box-shadow:var(--shadow)}
+.card h3{color:var(--ink)}
+.card p:last-child{margin-bottom:0}
+.card.warn{border-left:3px solid var(--brick)}
+.card.good{border-left:3px solid var(--petrol)}
+.card.key{border-left:3px solid var(--amber-mark)}
+.card.moss{border-left:3px solid var(--moss-mark)}
+.card .eyebrow{margin-bottom:.4em}
+a.card{display:block; text-decoration:none; color:inherit; transition:transform .12s ease, border-color .12s ease}
+a.card:hover{transform:translateY(-2px); border-color:var(--amber-mark)}
+a.card .go{font-family:"IBM Plex Mono",monospace; font-size:.76rem; color:var(--amber); font-weight:600}
+ul.tight,ol.tight{margin:0; padding-left:1.25em}
+ul.tight li,ol.tight li{margin-bottom:.42em}
+ul.tight li:last-child,ol.tight li:last-child{margin-bottom:0}
+.pathline{font-family:"IBM Plex Mono",monospace; font-size:.76rem; color:var(--ink-2); background:var(--sunk); padding:5px 9px; display:inline-block; margin-top:10px; border-radius:2px; word-break:break-all}
+.callout{background:var(--amber-bg); border:1px solid var(--amber-mark); padding:16px 20px; margin-top:24px}
+.callout .eyebrow{color:var(--amber)}
+.callout p:last-child{margin-bottom:0}
+.callout.p{background:var(--petrol-bg); border-color:var(--petrol-mark)}
+.callout.p .eyebrow{color:var(--petrol)}
+pre.code{background:var(--sunk); border:1px solid var(--line-soft); padding:14px 16px; overflow-x:auto; font-family:"IBM Plex Mono",monospace; font-size:.78rem; line-height:1.6; margin:20px 0 0; color:var(--ink)}
+pre.code .c{color:var(--ink-2)}
+pre.code .h{color:var(--amber); font-weight:600}
+footer{border-top:1px solid var(--line); padding-top:22px; color:var(--ink-2); font-size:.85rem}
+.backnav{padding:22px 0 0; font-family:Archivo,"PingFang SC",system-ui,sans-serif; font-size:.8rem}
+.backnav a{color:var(--ink-2); text-decoration:none}
+.backnav a:hover{color:var(--amber)}
+.chapnav{display:flex; flex-wrap:wrap; gap:6px; margin:14px 0 0; font-size:.74rem}
+.chapnav a{padding:.36em .8em; border:1px solid var(--line); background:var(--surface); color:var(--ink-2); text-decoration:none; border-radius:2px; white-space:nowrap}
+.chapnav a:hover{border-color:var(--amber-mark); color:var(--ink)}
+.chapnav a.on{border-color:var(--amber); color:var(--amber); background:var(--amber-bg); font-weight:600}
+.pager{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin:12px 0 40px}
+.pager a{display:block; text-decoration:none; color:var(--ink); background:var(--surface); border:1px solid var(--line); padding:14px 18px; box-shadow:var(--shadow)}
+.pager a:hover{border-color:var(--amber-mark)}
+.pager a span{display:block; font-size:.66rem; letter-spacing:.14em; text-transform:uppercase; color:var(--ink-2)}
+.pager a.next{text-align:right; grid-column:2}
+/* svg 语义类 */
+.sv-band{fill:var(--surface-2)}
+.sv-box{fill:var(--surface); stroke:var(--line); stroke-width:1.2}
+.sv-a{fill:var(--amber-bg); stroke:var(--amber-mark); stroke-width:1.3}
+.sv-p{fill:var(--petrol-bg); stroke:var(--petrol-mark); stroke-width:1.3}
+.sv-m{fill:var(--moss-bg); stroke:var(--moss-mark); stroke-width:1.3}
+.sv-r{fill:var(--brick-bg); stroke:var(--brick); stroke-width:1.3}
+.sv-sunk{fill:var(--sunk); stroke:var(--line); stroke-width:1}
+.sv-dash{fill:none; stroke:var(--ink-2); stroke-width:1.1; stroke-dasharray:5 4}
+.sv-hatch{fill:url(#hatch); stroke:var(--line); stroke-width:1}
+.sv-ln{stroke:var(--ink-2); stroke-width:1.3; fill:none}
+.sv-ln-d{stroke:var(--ink-2); stroke-width:1.2; fill:none; stroke-dasharray:4 3}
+.sv-ln-a{stroke:var(--amber-mark); stroke-width:1.6; fill:none}
+.sv-ln-p{stroke:var(--petrol-mark); stroke-width:1.6; fill:none}
+.sv-grid{stroke:var(--line-soft); stroke-width:1}
+.sv-axis{stroke:var(--ink-2); stroke-width:1}
+figure svg text.n{font-size:11.5px; font-weight:600}
+figure svg text.s{fill:var(--ink-2); font-size:9.5px}
+figure svg text.xs{fill:var(--ink-2); font-size:9px}
+figure svg text.h{font-family:Archivo,"PingFang SC",system-ui,sans-serif; font-size:12px; font-weight:600}
+figure svg text.am{fill:var(--amber)}
+figure svg text.pe{fill:var(--petrol)}
+.mk{fill:var(--ink-2)} .mka{fill:var(--amber-mark)} .mkp{fill:var(--petrol-mark)}
+.hatch-l{stroke:var(--line); stroke-width:2}
+.c1l{stroke:var(--c1); stroke-width:2; fill:none} .c2l{stroke:var(--c2); stroke-width:2; fill:none}
+.c1d{fill:var(--c1); stroke:var(--surface); stroke-width:2} .c2d{fill:var(--c2); stroke:var(--surface); stroke-width:2}
+.hit{fill:transparent; cursor:default}
+.hit:hover + .c1d, .hit:hover + .c2d{stroke:var(--ink)}
+@media (max-width:640px){ .wrap{padding:0 16px 64px} .pager{grid-template-columns:1fr} .pager a.next{grid-column:1} }
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+:focus-visible{outline:2px solid var(--petrol); outline-offset:2px}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
+<marker id="ar" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path class="mk" d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z"/></marker>
+<marker id="ara" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path class="mka" d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z"/></marker>
+<marker id="arp" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path class="mkp" d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z"/></marker>
+<pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line class="hatch-l" x1="0" y1="0" x2="0" y2="6"/></pattern>
+</defs></svg>
+<div class="wrap">
+<nav class="backnav"><a href="../../index.html">← LLM 模型结构手册</a></nav>
+<nav class="chapnav" aria-label="章节"><a href="index.html">1 · 总览</a><a href="scheduling.html">2 · 调度与执行</a><a href="memory.html" class="on">3 · KV 缓存与有界重放</a><a href="speculative.html">4 · 投机解码与采样</a><a href="parallel.html">5 · 并行与算子层</a><a href="summary.html">6 · 性能与优势</a></nav>
+<header class="mast">
+  <div class="mast-id">
+    <span class="tag">第 3 章</span>
+    <span class="tag hot">块池 + 状态槽</span>
+    <span class="tag hot">SWA 有界重放</span>
+    <span class="tag">FP4 / MXFP8 KV</span>
+  </div>
+  <h1>KV 缓存与有界重放</h1>
+  <p class="lede">
+    V4.1 的 KV 分成两类：随上下文增长的压缩 KV，和长度固定的滑窗 KV 加压缩中间态。
+    DeepInfer 用两块独立的裸显存分别装它们，并利用模型的 encoder / decoder 分层，
+    让后 20 层在 prefill 时只重算最后 140 个 token。这一章读 <code>worker/cache_engine.py</code>、
+    <code>tilelang_ops/cache_common.py</code> 和 YOCO 相关代码。
+  </p>
+  <div class="stats">
+    <div class="stat"><span class="stat-n">128</span><span class="stat-l">token / 块</span></div>
+    <div class="stat"><span class="stat-n">288 B</span><span class="stat-l">主 KV / token（FP4，默认）</span></div>
+    <div class="stat"><span class="stat-n">528 B</span><span class="stat-l">SWA / token（MXFP8）</span></div>
+    <div class="stat"><span class="stat-n">68 B</span><span class="stat-l">index K / token（MXFP4）</span></div>
+    <div class="stat"><span class="stat-n">134</span><span class="stat-l">SWA 环槽数 = 128 + 6</span></div>
+    <div class="stat"><span class="stat-n">140</span><span class="stat-l">解码层 prefill 只重放的 token 数</span></div>
+  </div>
+</header>
+
+<section id="layout">
+  <p class="eyebrow">关键 feature · 两块裸显存</p>
+  <h2>块池装会变长的，状态槽装不会变长的</h2>
+  <p>
+    <code>CacheEngine</code> 只做两次分配，都走 <code>_C.cuda_utils.alloc_tensor</code>（直接 <code>cuMemAlloc</code>），不经过 torch 的 caching allocator。
+    块池按 128 token 一块分页，块内按层切片；状态槽每条序列一个，大小固定，与上下文长度无关。
+    两边各有一个 C++ <code>BlockManager</code>：空闲链表加引用计数，fork 出的序列靠 pin 共享块。
+  </p>
+  <figure>
+    <p class="fignum">图 4 · 显存布局</p>
+    <svg class="svg-min" viewBox="0 0 1060 400" role="img" aria-label="左：块池，一块 128 token，按 KV owner 层切片；右：状态槽，存储区、丢弃区、压缩状态">
+      <!-- 左：块池 -->
+      <text class="h" x="20" y="24">块池 gpu_blocks</text>
+      <text class="s" x="20" y="42">uint8 [num_gpu_blocks, bytes_per_block] · 一块 = 128 个原始 token</text>
+      <g text-anchor="middle">
+        <rect class="sv-sunk" x="20" y="56" width="46" height="34" rx="2"/><text class="s" x="43" y="77">0</text>
+        <rect class="sv-box" x="72" y="56" width="46" height="34" rx="2"/><text class="s" x="95" y="77">1</text>
+        <rect class="sv-box" x="124" y="56" width="46" height="34" rx="2"/><text class="s" x="147" y="77">2</text>
+        <rect class="sv-a" x="176" y="56" width="46" height="34" rx="2"/><text class="n" x="199" y="78">k</text>
+        <rect class="sv-box" x="228" y="56" width="46" height="34" rx="2"/><text class="s" x="251" y="77">4</text>
+        <rect class="sv-box" x="280" y="56" width="46" height="34" rx="2"/><text class="s" x="303" y="77">5</text>
+        <rect class="sv-box" x="332" y="56" width="46" height="34" rx="2"/><text class="s" x="355" y="77">6</text>
+        <rect class="sv-box" x="384" y="56" width="46" height="34" rx="2"/><text class="s" x="407" y="77">7</text>
+        <rect class="sv-box" x="436" y="56" width="84" height="34" rx="2"/><text class="s" x="478" y="77">…</text>
+      </g>
+      <line class="sv-ln-d" x1="176" y1="90" x2="20" y2="118"/>
+      <line class="sv-ln-d" x1="222" y1="90" x2="520" y2="118"/>
+      <rect class="sv-box" x="20" y="118" width="500" height="262" rx="3"/>
+      <text class="h" x="34" y="142">块 k 内部：每个 KV owner 层一段</text>
+      <text class="s" x="34" y="171">层 2 · ca（2:1）</text><rect class="sv-a" x="196" y="158" width="95" height="18"/><text class="xs" x="299" y="171">64 行 × 288 B</text>
+      <text class="s" x="34" y="195">层 2 · ica</text><rect class="sv-p" x="196" y="182" width="22" height="18"/><text class="xs" x="226" y="195">64 行 × 68 B</text>
+      <text class="s" x="34" y="219">层 8 · ca + ica</text><rect class="sv-a" x="196" y="206" width="95" height="18"/><rect class="sv-p" x="293" y="206" width="22" height="18"/><text class="xs" x="323" y="219">同层 2</text>
+      <text class="s" x="34" y="243">层 14 · ca + ica</text><rect class="sv-a" x="196" y="230" width="95" height="18"/><rect class="sv-p" x="293" y="230" width="22" height="18"/><text class="xs" x="323" y="243">同层 2</text>
+      <text class="s" x="34" y="267">层 20 · ca（1:1）</text><rect class="sv-a" x="196" y="254" width="190" height="18"/><text class="xs" x="394" y="267">128 行 × 288 B</text>
+      <text class="s" x="34" y="291">层 20 · ica</text><rect class="sv-p" x="196" y="278" width="45" height="18"/><text class="xs" x="249" y="291">128 行 × 68 B</text>
+      <text class="s" x="34" y="320">其余 36 层不占字节：ca / ica 经 layer_kv_map 别名到所属 owner</text>
+      <text class="n" x="34" y="344">合计 113,920 B / 128 token ≈ 890 B / token</text>
+      <text class="xs" x="34" y="366">以 V4.1-Flash 的 owner 层 2 / 8 / 14 / 20 为例，主 KV 取默认 FP4，忽略 32 B 对齐</text>
+
+      <!-- 右：状态槽 -->
+      <text class="h" x="545" y="24">状态张量 gpu_states</text>
+      <text class="s" x="545" y="42">uint8 [num_state_slots, state_bytes] · 槽数 = int(max_num_seqs × 1.2) + 1</text>
+      <g text-anchor="middle">
+        <rect class="sv-box" x="545" y="56" width="46" height="34" rx="2"/><text class="s" x="568" y="77">0</text>
+        <rect class="sv-box" x="597" y="56" width="46" height="34" rx="2"/><text class="s" x="620" y="77">1</text>
+        <rect class="sv-p" x="649" y="56" width="46" height="34" rx="2"/><text class="n" x="672" y="78">s</text>
+        <rect class="sv-box" x="701" y="56" width="46" height="34" rx="2"/><text class="s" x="724" y="77">3</text>
+        <rect class="sv-box" x="753" y="56" width="46" height="34" rx="2"/><text class="s" x="776" y="77">4</text>
+        <rect class="sv-box" x="805" y="56" width="46" height="34" rx="2"/><text class="s" x="828" y="77">5</text>
+        <rect class="sv-box" x="857" y="56" width="183" height="34" rx="2"/><text class="s" x="948" y="77">…</text>
+      </g>
+      <line class="sv-ln-d" x1="649" y1="90" x2="545" y2="118"/>
+      <line class="sv-ln-d" x1="695" y1="90" x2="1040" y2="118"/>
+      <rect class="sv-box" x="545" y="118" width="495" height="262" rx="3"/>
+      <text class="h" x="559" y="142">槽 s 内部：前段可落盘，后段只活在显存里</text>
+      <g text-anchor="middle">
+        <rect class="sv-a" x="559" y="156" width="210" height="44"/><text class="n" x="664" y="175">存储区 · 编码层 SWA</text><text class="xs" x="664" y="191">可落盘、PE→CE 传输</text>
+        <rect class="sv-sunk" x="771" y="156" width="150" height="44"/><text class="n" x="846" y="175">丢弃区 · 解码层 SWA</text><text class="xs" x="846" y="191">靠 prefill 重放恢复</text>
+        <rect class="sv-p" x="923" y="156" width="103" height="44"/><text class="n" x="974" y="175">压缩状态</text><text class="xs" x="974" y="191">fp32 环</text>
+      </g>
+      <text class="s" x="559" y="224">SWA 环：每层 W + B 个槽，每槽 528 B（512 × e4m3 + 16 × ue8m0）</text>
+      <text class="s" x="559" y="244">B = max(DEEPINFER_MAX_BACKTRACKING_TOKENS, nextn + 1) = 6；W = 128，所以 134 个槽</text>
+      <text class="s" x="559" y="264">压缩环：ratio + B − 1 行 fp32，存 2:1 压缩跨步的半成品</text>
+      <text class="n" x="559" y="292">落盘只取存储区：20 层 × 134 × 528 B = 1,415,040 B / 序列</text>
+      <text class="s" x="559" y="314">按 128 token 粒度落盘（KVSTORE_GRAIN）；开源版只有布局，没有调用方</text>
+      <text class="s" x="559" y="344">块池与状态张量都由 cuMemAlloc 直接分配，</text>
+      <text class="s" x="559" y="362">绕开 torch 的 caching allocator</text>
+    </svg>
+    <figcaption>
+      左图的 owner 层号来自本仓库的 <a href="../../models/DeepSeek/v41_flash_anatomy.html">V4.1-Flash 解剖页</a>（<code>kv_source_layer_ids = [2, 8, 14, 20]</code>）。
+      DeepInfer 读的是同名 HF 字段（<code>hugging_face/config.py:68-85</code>），只给 source 层分配 <code>ca_cache</code> / <code>ica_cache</code>，其余层在 <code>layer_kv_map</code> 里指向 owner。
+      块 0 保留作空块，fork 出的序列靠引用计数共享块；每条活着的序列独占一个状态槽（<code>state_id</code>），fork 时整槽写时复制。
+      右图的分区写在 <code>StateBlock</code> 的 docstring 里（<code>cache_engine.py:221</code>）：「需要落盘的 state 全部放在前面的 stored region……to disk 只取前 state_size_to_disk 字节」。
+    </figcaption>
+  </figure>
+</section>
+
+<section id="formats">
+  <hr class="rule">
+  <p class="eyebrow">缓存格式</p>
+  <h2>三种低精度格式，按用途分开选</h2>
+  <p>
+    MLA 只有一个 KV 头，latent 是 512 维（448 维 NoPE + 64 维 RoPE），所以「每 token 字节数」就是整层的 KV 开销。
+    部署文档的「低精度」一节给出了这三处 FP4 的取舍，代码里的格式定义在 <code>cache_common.py</code>。
+  </p>
+  <div class="tscroll">
+  <table>
+    <thead><tr><th>缓存</th><th>放在</th><th>默认格式</th><th>B / token</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td class="k">swa_cache</td><td>状态槽</td><td>MXFP8：512 × e4m3 + 每 32 个一个 ue8m0 scale</td><td class="num">528</td><td>环形，W + B 个槽；decode 时由融合内核 norm + RoPE + 量化后直接写入</td></tr>
+      <tr><td class="k">ca_cache</td><td>块池</td><td>FP4 e2m1，每 16 个一个 e4m3 scale（类 NVFP4，无全局 scale）</td><td class="num hl">288</td><td><code>use_fp4_sparse_kv</code> 默认 True（<code>hugging_face/config.py:303</code>）；可退回 MXFP8，528 B</td></tr>
+      <tr><td class="k">ica_cache</td><td>块池</td><td>MXFP4：e2m1 + 每 32 个一个 ue8m0</td><td class="num">68</td><td>indexer 的 K，128 维；只有写 KV 的 owner 层有</td></tr>
+      <tr><td class="k">ca_state · ica_state</td><td>状态槽</td><td>fp32</td><td class="num">—</td><td>2:1 压缩跨步的半成品；环长 <code>ratio + B − 1</code>，回退时不会被覆盖</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="note" style="margin-top:14px">
+    启动日志会打印实际选中的格式（<code>deepseek.py:459-460</code>）。<code>fused_transform</code> 里有 Hadamard 变换选项，但模型代码没有调用方传入 <code>HadamardArgs</code>。
+  </p>
+</section>
+
+<section id="budget">
+  <hr class="rule">
+  <p class="eyebrow">显存预算</p>
+  <h2>先假跑一遍，再把剩下的全给块池</h2>
+  <ol class="tight">
+    <li><code>profile_run</code> 模拟 <code>max_num_seqs</code> 条序列跑一次 forward。prefill 引擎把 token 预算摊给它们，并让 0 号序列的 seqlen_k 取到最大长度；decode 引擎每条 <code>1 + nextn</code> 个 token。期间分配一份临时的真 KV，并把 <code>DEEPINFER_FORCE_IMBALANCE_RATIO</code> 设为 1.8，模拟 MoE 负载不均时的峰值（<code>model_runner.py:444-512</code>）。</li>
+    <li>可用量 = 总显存 × 0.9 − 峰值（torch 分配 + 非 torch 分配）− 2 × 状态张量大小。代码注释说 2 倍是「state store &amp; copy buffer」（<code>base.py:242</code>），而 <code>CacheEngine</code> 实际只分配一份。</li>
+    <li>块数在整个 world 上 all-reduce 求和、除以 world size、向下取偶（<code>base.py:264-266</code>），即<strong>平均值</strong>。<code>_init_cache</code> 的 docstring 写的是「取最小值」，与代码不符。</li>
+    <li>引擎要求 <code>128 × 块数 × 0.8 ≥ runtime_max_model_len</code>，否则启动失败。</li>
+  </ol>
+</section>
+
+<section id="prefix">
+  <hr class="rule">
+  <p class="eyebrow">前缀复用</p>
+  <h2>开源版没有自动前缀缓存，只留了注入口</h2>
+  <p>
+    每次调度都传 <code>num_cached_tokens_gpu=0</code>，所以统计里的 prefill_caching_rate 恒为 0。
+    能用的复用手段只有两个：<code>fork_seq</code>（pin 住父序列的块和状态槽，分支 id 以 <code>_</code> 开头表示「待 fork」），
+    以及 <code>num_cached_tokens</code> setter（注释：「外部注入的命中数」）。<code>examples/benchmark.py</code> 就是用 fork 构造「先算一条长前缀，再分出 N 条」的场景。
+  </p>
+  <p>
+    生产环境的 KV 系统没有开源，部署文档描述了它的形状。理解这个形状，才能理解为什么状态槽要分「可落盘」和「丢弃」两段：
+  </p>
+  <div class="tscroll">
+  <table>
+    <thead><tr><th>KV 类型</th><th>放在哪</th><th>怎么取回</th></tr></thead>
+    <tbody>
+      <tr><td>在途的块 KV、状态 KV</td><td>推理 GPU 显存</td><td>—</td></tr>
+      <tr><td>SWA KV（存储区那 1.35 MiB）</td><td>产生它的那台机器的主存，单副本，不进 3FS</td><td>Entrypoint 机器上有一张按 key 分区的内存目录记录它在哪；跨机命中走 400G VLAN 拉取</td></tr>
+      <tr><td>分页的块 KV</td><td>独立的 3FS 集群，10+2 纠删码，约 100 PiB SSD</td><td>Entrypoint 先做哈希链前缀匹配（这一步无法隐藏）；3FS → 主存由独立进程异步拉；主存 → HBM 用 GDR，逐层与 forward 重叠</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="grid2">
+    <div class="card">
+      <p class="eyebrow">为什么用独立存储集群</p>
+      <p>这样每台 prefill 机器都能命中任意前缀，前缀亲和与负载均衡不再冲突；存储扩缩容与计算解耦；计算节点故障率高一个数量级以上，存储也不受影响。</p>
+    </div>
+    <div class="card">
+      <p class="eyebrow">保留多久</p>
+      <p>kvcache-store 自身没有 TTL，回收全靠 3FS 的 GC。agent 流量 3 天，chatbot 7 天。chatbot 的长尾更重：经验上 TTL 缩到 3 天会损失 0.5%–1% 的命中率。decode 不开 KV offload，但 decode 产生的 KV 仍写盘，用来提高命中率。</p>
+    </div>
+  </div>
+</section>
+
+<section id="yoco">
+  <hr class="rule">
+  <p class="eyebrow">关键 feature · SWA 有界重放</p>
+  <h2>解码层在 prefill 时只算最后 140 个 token</h2>
+  <p>
+    V4.1 的 40 层在 DeepInfer 里被分成两段：<code>n_prefill_layer</code> 之前是「编码层」，之后是「解码层」（YOCO consumer）。
+    <code>n_prefill_layer</code> 取第一个压缩比为 1 的层的下标（<code>hugging_face/config.py:158</code>），V4.1 是 20，层 20–39 是解码层。
+    关键约束在 <code>cross_layer.py</code>：解码层里写 KV 的 owner 层，其压缩 KV 和 index K 是从<strong>边界处的同一份 hidden</strong>
+    （<code>shared_hidden</code>，第一个解码层 attn-norm 之后的输出）投影出来的，而不是从各自的 hidden。
+    所以解码层的块 KV 只依赖编码层的计算，可以按全长精确写出。真正要逐层算的只剩解码层的 SWA。
+  </p>
+  <figure>
+    <p class="fignum">图 5 · compact 截断下一次 prefill 的计算范围</p>
+    <svg class="svg-min" viewBox="0 0 1060 296" role="img" aria-label="编码层算全长；解码层块 KV 按全长写；解码层主干只算最后 140 个 token">
+      <text class="h" x="16" y="56">编码层</text><text class="s" x="16" y="72">0 – 19</text>
+      <rect class="sv-a" x="210" y="34" width="800" height="50" rx="2"/>
+      <text class="n" x="610" y="56" text-anchor="middle">全长 L 个 token 都算</text>
+      <text class="s" x="610" y="73" text-anchor="middle">写压缩 KV、index K、SWA；SWA 进状态槽存储区，可落盘</text>
+      <line class="sv-ln-d" x1="210" y1="100" x2="1010" y2="100"/>
+      <text class="s" x="16" y="104">边界 · 层 20</text>
+      <text class="xs" x="1010" y="95" text-anchor="end">shared_hidden = 层 20 的 attn-norm 输出，全长保留一份</text>
+      <text class="h" x="16" y="128">解码层</text><text class="s" x="16" y="144">压缩 KV / index K</text>
+      <rect class="sv-p" x="210" y="110" width="800" height="38" rx="2"/>
+      <text class="n" x="610" y="134" text-anchor="middle">用全长 shared_hidden 写（_store_yoco_full_kv）：精确，可进前缀缓存</text>
+      <text class="h" x="16" y="186">解码层</text><text class="s" x="16" y="202">20 – 39 主干</text>
+      <rect class="sv-hatch" x="210" y="164" width="660" height="50" rx="2"/>
+      <text class="s" x="540" y="193" text-anchor="middle">compact：这些 query 行在解码层直接丢掉，不算 attention、MoE</text>
+      <rect class="sv-m" x="872" y="164" width="138" height="50" rx="2"/>
+      <text class="n" x="941" y="186" text-anchor="middle">最后 140 行</text>
+      <text class="xs" x="941" y="202" text-anchor="middle">照常算</text>
+      <path class="sv-ln" d="M872,222 L872,230 L1010,230 L1010,222"/>
+      <text class="s" x="1010" y="248" text-anchor="end">keep = 140 ≥ W 128 + 回退 B 6 = 134</text>
+      <text class="s" x="210" y="248">位置 0</text>
+      <text class="s" x="210" y="280">解码层 SWA 落在状态槽的丢弃区：不进前缀缓存，每次 prefill 都在截断窗口里重放。前缀命中上限 = L − 134</text>
+    </svg>
+    <figcaption>
+      截断矩形的下界是 <code>data_len − keep_tokens</code>。保留区里每个 query 的 SWA 可见范围是
+      <code>[max(pos − W + 1, data_len − keep, valid_start), pos]</code>（<code>yoco_swa_visibility</code>，<code>prepare_tensor_input_v4.cpp:149</code>）。
+      所以重放出来的是<strong>近似</strong>的 SWA：最前面那几个 token 看不到完整的 128 窗口。部署文档的说法是「把重算代价降到常数，与上下文长度和层数无关」，
+      并且「几乎砍掉一半的 prefill 计算」。
+    </figcaption>
+  </figure>
+
+  <div class="tscroll">
+  <table>
+    <thead><tr><th>DEEPINFER_YOCO_PREFILL_TRUNCATION_MODE</th><th>行为</th><th>用途</th></tr></thead>
+    <tbody>
+      <tr><td class="k">off（默认）</td><td>解码层照常全长计算</td><td>精确，代价最高</td></tr>
+      <tr><td class="k">mask</td><td>保留全部 query 行，只把解码层 SWA 的可见区收窄到截断矩形</td><td>不省计算，用来和 compact 做逐位对拍</td></tr>
+      <tr><td class="k hl">compact</td><td>在边界层换成 <code>get_consumer_view()</code>：每条序列只留最后 <code>KEEP_TOKENS</code> 行（每个 chunk 至少 1 行），hidden、mHC 残差、top-k、候选块都 gather 到紧凑行上（CP&gt;1 时先 all-gather）</td><td>README 推荐配置：<code>compact</code> + <code>KEEP_TOKENS=140</code></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="grid2">
+    <div class="card key">
+      <p class="eyebrow">为什么下界是 W + B</p>
+      <p>
+        C++ 强制 <code>keep_tokens ≥ window_size + max_backtracking_tokens</code>（<code>prepare_tensor_input_v4.cpp:355</code>），
+        注释是「截断范围要 ≥ window size + 回退 B，要保证回退后仍然有 window size 个」。
+        投机解码被拒时序列最多回退 B = nextn + 1 = 6 个位置，回退之后解码层的 SWA 环里仍要有一整窗有效 KV。
+        128 + 6 = 134；推荐值 140 比下界多 6 个，代码和文档都没说这 6 个的用途。
+      </p>
+    </div>
+    <div class="card key">
+      <p class="eyebrow">命中策略随之改变</p>
+      <p>
+        文档的规则是「命中长度由块 KV 决定，最后一块要不要重算由 SWA 决定」。
+        长度 L 的输入最多命中 L − 134。先查块 KV 得到 L1（128 的倍数）；若 <code>[L1 − 128, L1]</code> 里有 SWA 存档就命中 L1，否则命中 L1 − 128，并重放最后 128 个 token 重建编码层 SWA（encoder 侧的有界重放）。
+      </p>
+    </div>
+  </div>
+  <div class="callout">
+    <p class="eyebrow">它对其他模块的约束</p>
+    <p>
+      compact 模式下 DeepEP dispatch 关掉 <code>do_cpu_sync</code>（<code>mlp.py:485</code>）；Engram 层必须在编码层里（<code>deepseek.py:136</code>）；
+      DSpark 的目标层必须全部落在边界同一侧。开着截断时，代码注释允许「抢占导致的结果变化」（<code>llm_engine.py:888</code>），
+      因为重算时 SWA 是重放出来的近似值。
+    </p>
+  </div>
+</section>
+
+<section id="verify">
+  <hr class="rule">
+  <p class="eyebrow">怎么验证没算错</p>
+  <h2>mask 与 compact 两级对拍</h2>
+  <div class="grid2">
+    <div class="card">
+      <p class="eyebrow">L1 · 单卡，几秒，不要权重</p>
+      <p><code>examples/yoco/yoco_equiv.py mask-compact</code> 比较两种模式下的 SWA pivot、可见 key、写入槽位、压缩 key 范围，元数据必须完全一致。</p>
+    </div>
+    <div class="card">
+      <p class="eyebrow">L2 · 8 卡，真 checkpoint</p>
+      <p><code>run_yoco_equiv_l2.sh</code> 固定 teacher-forcing 轨迹，逐元素比较 logprob 和 top-K。加 <code>--mtp N</code> 时还逐位比较 DSpark 的置信度，用来直接检查 DFlash 主缓存。</p>
+    </div>
+  </div>
+</section>
+
+<nav class="pager" aria-label="翻页"><a class="prev" href="scheduling.html"><span>← 上一章</span>2 · 调度与执行</a><a class="next" href="speculative.html"><span>下一章 →</span>4 · 投机解码与采样</a></nav>
+<footer>
+  <p>
+    源码 <a href="https://github.com/deepseek-ai/DeepInfer/tree/553741557a57df44a46fb3ab72b6aafeaf945337">deepseek-ai/DeepInfer@5537415</a>（2026-10-25）·
+    文中 <code>文件:行号</code> 均指这一提交 · 运行时数字来自仓库自带的 <code>doc/</code> 与 <code>examples/</code>，没有在本地复跑 ·
+    仓库 <a href="https://github.com/PerryZhang01/LLM">PerryZhang01/LLM</a>
+  </p>
+</footer>
+</div>
+</body>
+</html>

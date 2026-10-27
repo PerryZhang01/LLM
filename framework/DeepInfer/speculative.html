@@ -1,0 +1,523 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DeepInfer · 投机解码与采样</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
+<style>
+:root{
+  --bg:#E8EBEA; --surface:#F6F8F7; --surface-2:#DDE3E2; --sunk:#D3DAD9;
+  --ink:#141A1C; --ink-2:#4B5A5C; --ink-3:#75858880;
+  --line:#C3CDCC; --line-soft:#D4DCDB;
+  --amber:#8A5D0C; --amber-mark:#C79433; --amber-bg:#EFE2C2;
+  --petrol:#1D5A74; --petrol-mark:#3D87A6; --petrol-bg:#D3E3EA;
+  --brick:#8E3629; --brick-bg:#F0DAD5;
+  --moss:#3F6034; --moss-mark:#6E9A5C; --moss-bg:#DDE8D6;
+  --mute-mark:#9FADAF;
+  --c1:#1F7AB0; --c2:#B5700F;
+  --shadow:0 1px 2px rgba(20,26,28,.06), 0 8px 24px -14px rgba(20,26,28,.24);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0D1315; --surface:#141C1E; --surface-2:#1C2629; --sunk:#101819;
+    --ink:#E3EAE9; --ink-2:#94A4A6; --ink-3:#6E7E8080;
+    --line:#283437; --line-soft:#1F2B2E;
+    --amber:#E0AB53; --amber-mark:#D69B36; --amber-bg:#3B2E13;
+    --petrol:#6FB6D5; --petrol-mark:#4C93B4; --petrol-bg:#12303D;
+    --brick:#E58472; --brick-bg:#3A1D18;
+    --moss:#A8CE96; --moss-mark:#7FAE6B; --moss-bg:#22301B;
+    --mute-mark:#3C4A4D;
+    --c1:#3A90C8; --c2:#BF7E22;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 30px -18px rgba(0,0,0,.8);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0D1315; --surface:#141C1E; --surface-2:#1C2629; --sunk:#101819;
+  --ink:#E3EAE9; --ink-2:#94A4A6; --ink-3:#6E7E8080;
+  --line:#283437; --line-soft:#1F2B2E;
+  --amber:#E0AB53; --amber-mark:#D69B36; --amber-bg:#3B2E13;
+  --petrol:#6FB6D5; --petrol-mark:#4C93B4; --petrol-bg:#12303D;
+  --brick:#E58472; --brick-bg:#3A1D18;
+  --moss:#A8CE96; --moss-mark:#7FAE6B; --moss-bg:#22301B;
+  --mute-mark:#3C4A4D;
+  --c1:#3A90C8; --c2:#BF7E22;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 30px -18px rgba(0,0,0,.8);
+}
+*{box-sizing:border-box}
+body{margin:0; background:var(--bg); color:var(--ink);
+  font-family:"Source Serif 4", "Songti SC", "Noto Serif CJK SC", "Source Han Serif SC", Georgia, serif;
+  font-size:16.5px; line-height:1.72; -webkit-font-smoothing:antialiased}
+.wrap{max-width:1140px; margin:0 auto; padding:0 28px 96px}
+h1,h2,h3,.eyebrow,.stat-n,.lgd,.tag,th,.chapnav,.pager{font-family:Archivo, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif}
+h1{font-size:clamp(2.2rem,5.2vw,3.6rem); line-height:1.04; letter-spacing:-.028em; font-weight:700; margin:0; text-wrap:balance}
+h2{font-size:clamp(1.3rem,2.5vw,1.68rem); line-height:1.22; letter-spacing:-.014em; font-weight:600; margin:0 0 .3em; text-wrap:balance}
+h3{font-size:1.0rem; letter-spacing:.005em; font-weight:600; margin:0 0 .35em}
+p{margin:0 0 1em; max-width:72ch}
+a{color:var(--petrol)}
+code,.mono{font-family:"IBM Plex Mono", ui-monospace, monospace; font-size:.855em; font-variant-ligatures:none}
+:not(pre) > code{background:var(--surface-2); padding:.1em .38em; border-radius:3px; color:var(--ink); overflow-wrap:anywhere}
+.eyebrow{font-size:.66rem; font-weight:600; letter-spacing:.16em; text-transform:uppercase; color:var(--ink-2); margin:0 0 .55em}
+.lede{font-size:1.1rem; color:var(--ink-2); max-width:70ch}
+.note{font-size:.9rem; color:var(--ink-2)}
+header.mast{border-bottom:1px solid var(--line); margin-bottom:52px; padding:24px 0 34px}
+.mast-id{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:22px}
+.tag{font-size:.68rem; font-weight:600; letter-spacing:.09em; text-transform:uppercase; padding:.32em .7em; border:1px solid var(--line); border-radius:2px; color:var(--ink-2); background:var(--surface)}
+.tag.hot{border-color:var(--amber); color:var(--amber); background:var(--amber-bg)}
+.mast p.lede{margin-top:18px}
+.stats{display:grid; grid-template-columns:repeat(auto-fit,minmax(128px,1fr)); gap:1px; background:var(--line-soft); border:1px solid var(--line-soft); margin-top:34px}
+.stat{background:var(--surface); padding:14px 16px 16px}
+.stat-n{display:block; font-size:1.45rem; font-weight:700; letter-spacing:-.02em; font-variant-numeric:tabular-nums; line-height:1.15}
+.stat-l{display:block; font-size:.74rem; color:var(--ink-2); letter-spacing:.02em; margin-top:3px; font-family:"IBM Plex Mono", monospace}
+section{margin:0 0 68px; scroll-margin-top:20px}
+.rule{border:0; border-top:1px solid var(--line); margin:0 0 34px}
+figure{margin:26px 0 0; background:var(--surface); border:1px solid var(--line); padding:24px 22px 16px; box-shadow:var(--shadow); overflow-x:auto}
+figure svg{max-width:100%; height:auto; display:block; margin:0 auto; color:var(--ink-2); font-family:"IBM Plex Mono", ui-monospace, monospace; font-size:10.5px}
+figure svg text{fill:var(--ink)}
+figure .fignum{font-family:Archivo,sans-serif; font-size:.66rem; font-weight:600; letter-spacing:.16em; text-transform:uppercase; color:var(--ink-2); margin:0 0 14px}
+figcaption{font-size:.86rem; color:var(--ink-2); margin-top:16px; padding-top:12px; border-top:1px solid var(--line-soft); max-width:80ch}
+figcaption strong{color:var(--ink)}
+.svg-min{min-width:760px}
+figure svg.chart{max-width:760px}
+.tscroll{overflow-x:auto; margin-top:22px; border:1px solid var(--line); background:var(--surface); box-shadow:var(--shadow)}
+table{border-collapse:collapse; width:100%; min-width:640px; font-size:.9rem}
+th{text-align:left; font-size:.68rem; letter-spacing:.11em; text-transform:uppercase; font-weight:600; color:var(--ink-2); padding:11px 16px; background:var(--surface-2); border-bottom:1px solid var(--line); white-space:nowrap}
+td{padding:10px 16px; border-bottom:1px solid var(--line-soft); vertical-align:top; line-height:1.55}
+tbody tr:last-child td{border-bottom:0}
+td.num{font-family:"IBM Plex Mono",monospace; font-variant-numeric:tabular-nums; white-space:nowrap}
+td.k{font-family:"IBM Plex Mono",monospace; font-size:.8rem}
+.hl{color:var(--amber); font-weight:600}
+.dim{color:var(--ink-2)}
+.pos{color:var(--moss); font-weight:600}
+.neg{color:var(--brick); font-weight:600}
+.grid2{display:grid; grid-template-columns:repeat(auto-fit,minmax(310px,1fr)); gap:18px; margin-top:24px}
+.grid3{display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:16px; margin-top:24px}
+.card{background:var(--surface); border:1px solid var(--line); padding:18px 20px 16px; box-shadow:var(--shadow)}
+.card h3{color:var(--ink)}
+.card p:last-child{margin-bottom:0}
+.card.warn{border-left:3px solid var(--brick)}
+.card.good{border-left:3px solid var(--petrol)}
+.card.key{border-left:3px solid var(--amber-mark)}
+.card.moss{border-left:3px solid var(--moss-mark)}
+.card .eyebrow{margin-bottom:.4em}
+a.card{display:block; text-decoration:none; color:inherit; transition:transform .12s ease, border-color .12s ease}
+a.card:hover{transform:translateY(-2px); border-color:var(--amber-mark)}
+a.card .go{font-family:"IBM Plex Mono",monospace; font-size:.76rem; color:var(--amber); font-weight:600}
+ul.tight,ol.tight{margin:0; padding-left:1.25em}
+ul.tight li,ol.tight li{margin-bottom:.42em}
+ul.tight li:last-child,ol.tight li:last-child{margin-bottom:0}
+.pathline{font-family:"IBM Plex Mono",monospace; font-size:.76rem; color:var(--ink-2); background:var(--sunk); padding:5px 9px; display:inline-block; margin-top:10px; border-radius:2px; word-break:break-all}
+.callout{background:var(--amber-bg); border:1px solid var(--amber-mark); padding:16px 20px; margin-top:24px}
+.callout .eyebrow{color:var(--amber)}
+.callout p:last-child{margin-bottom:0}
+.callout.p{background:var(--petrol-bg); border-color:var(--petrol-mark)}
+.callout.p .eyebrow{color:var(--petrol)}
+pre.code{background:var(--sunk); border:1px solid var(--line-soft); padding:14px 16px; overflow-x:auto; font-family:"IBM Plex Mono",monospace; font-size:.78rem; line-height:1.6; margin:20px 0 0; color:var(--ink)}
+pre.code .c{color:var(--ink-2)}
+pre.code .h{color:var(--amber); font-weight:600}
+footer{border-top:1px solid var(--line); padding-top:22px; color:var(--ink-2); font-size:.85rem}
+.backnav{padding:22px 0 0; font-family:Archivo,"PingFang SC",system-ui,sans-serif; font-size:.8rem}
+.backnav a{color:var(--ink-2); text-decoration:none}
+.backnav a:hover{color:var(--amber)}
+.chapnav{display:flex; flex-wrap:wrap; gap:6px; margin:14px 0 0; font-size:.74rem}
+.chapnav a{padding:.36em .8em; border:1px solid var(--line); background:var(--surface); color:var(--ink-2); text-decoration:none; border-radius:2px; white-space:nowrap}
+.chapnav a:hover{border-color:var(--amber-mark); color:var(--ink)}
+.chapnav a.on{border-color:var(--amber); color:var(--amber); background:var(--amber-bg); font-weight:600}
+.pager{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin:12px 0 40px}
+.pager a{display:block; text-decoration:none; color:var(--ink); background:var(--surface); border:1px solid var(--line); padding:14px 18px; box-shadow:var(--shadow)}
+.pager a:hover{border-color:var(--amber-mark)}
+.pager a span{display:block; font-size:.66rem; letter-spacing:.14em; text-transform:uppercase; color:var(--ink-2)}
+.pager a.next{text-align:right; grid-column:2}
+/* svg 语义类 */
+.sv-band{fill:var(--surface-2)}
+.sv-box{fill:var(--surface); stroke:var(--line); stroke-width:1.2}
+.sv-a{fill:var(--amber-bg); stroke:var(--amber-mark); stroke-width:1.3}
+.sv-p{fill:var(--petrol-bg); stroke:var(--petrol-mark); stroke-width:1.3}
+.sv-m{fill:var(--moss-bg); stroke:var(--moss-mark); stroke-width:1.3}
+.sv-r{fill:var(--brick-bg); stroke:var(--brick); stroke-width:1.3}
+.sv-sunk{fill:var(--sunk); stroke:var(--line); stroke-width:1}
+.sv-dash{fill:none; stroke:var(--ink-2); stroke-width:1.1; stroke-dasharray:5 4}
+.sv-hatch{fill:url(#hatch); stroke:var(--line); stroke-width:1}
+.sv-ln{stroke:var(--ink-2); stroke-width:1.3; fill:none}
+.sv-ln-d{stroke:var(--ink-2); stroke-width:1.2; fill:none; stroke-dasharray:4 3}
+.sv-ln-a{stroke:var(--amber-mark); stroke-width:1.6; fill:none}
+.sv-ln-p{stroke:var(--petrol-mark); stroke-width:1.6; fill:none}
+.sv-grid{stroke:var(--line-soft); stroke-width:1}
+.sv-axis{stroke:var(--ink-2); stroke-width:1}
+figure svg text.n{font-size:11.5px; font-weight:600}
+figure svg text.s{fill:var(--ink-2); font-size:9.5px}
+figure svg text.xs{fill:var(--ink-2); font-size:9px}
+figure svg text.h{font-family:Archivo,"PingFang SC",system-ui,sans-serif; font-size:12px; font-weight:600}
+figure svg text.am{fill:var(--amber)}
+figure svg text.pe{fill:var(--petrol)}
+.mk{fill:var(--ink-2)} .mka{fill:var(--amber-mark)} .mkp{fill:var(--petrol-mark)}
+.hatch-l{stroke:var(--line); stroke-width:2}
+.c1l{stroke:var(--c1); stroke-width:2; fill:none} .c2l{stroke:var(--c2); stroke-width:2; fill:none}
+.c1d{fill:var(--c1); stroke:var(--surface); stroke-width:2} .c2d{fill:var(--c2); stroke:var(--surface); stroke-width:2}
+.hit{fill:transparent; cursor:default}
+.hit:hover + .c1d, .hit:hover + .c2d{stroke:var(--ink)}
+@media (max-width:640px){ .wrap{padding:0 16px 64px} .pager{grid-template-columns:1fr} .pager a.next{grid-column:1} }
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+:focus-visible{outline:2px solid var(--petrol); outline-offset:2px}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
+<marker id="ar" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path class="mk" d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z"/></marker>
+<marker id="ara" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path class="mka" d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z"/></marker>
+<marker id="arp" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path class="mkp" d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z"/></marker>
+<pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line class="hatch-l" x1="0" y1="0" x2="0" y2="6"/></pattern>
+</defs></svg>
+<div class="wrap">
+<nav class="backnav"><a href="../../index.html">← LLM 模型结构手册</a></nav>
+<nav class="chapnav" aria-label="章节"><a href="index.html">1 · 总览</a><a href="scheduling.html">2 · 调度与执行</a><a href="memory.html">3 · KV 缓存与有界重放</a><a href="speculative.html" class="on">4 · 投机解码与采样</a><a href="parallel.html">5 · 并行与算子层</a><a href="summary.html">6 · 性能与优势</a></nav>
+<header class="mast">
+  <div class="mast-id">
+    <span class="tag">第 4 章</span>
+    <span class="tag hot">DSpark</span>
+    <span class="tag hot">置信度调度验证</span>
+    <span class="tag">拒绝采样</span>
+    <span class="tag">批不变</span>
+    <span class="tag">结构化输出</span>
+  </div>
+  <h1>投机解码与采样</h1>
+  <p class="lede">
+    DeepInfer 的投机解码有两个特点。一是草稿一次 forward 出整块，不是逐个自回归。
+    二是每个草稿 token 都带一个「会被接受的概率」，调度器据此决定这一步验证多少个。
+    验证用真正的拒绝采样，输出分布不变。采样器从随机数到求和顺序都和批的组成无关，所以确定性采样可以只靠开关打开。
+  </p>
+  <div class="stats">
+    <div class="stat"><span class="stat-n">5</span><span class="stat-l">每步草稿数（nextn 默认）</span></div>
+    <div class="stat"><span class="stat-n">−30%</span><span class="stat-l">变长验证少验的草稿（文档）</span></div>
+    <div class="stat"><span class="stat-n">+5.4%</span><span class="stat-l">吞吐 @ 60 并发 / rank（文档）</span></div>
+    <div class="stat"><span class="stat-n">5e-5</span><span class="stat-l">DRAFT_PROB_PENALTY</span></div>
+    <div class="stat"><span class="stat-n">3</span><span class="stat-l">打开确定性采样要的条件</span></div>
+  </div>
+</header>
+
+<section id="dspark">
+  <p class="eyebrow">关键 feature · DSpark</p>
+  <h2>草稿是块并行的：一次 forward，B 个位置</h2>
+  <p>
+    代码里 DSpark 的实现叫 DFlash（<code>models/mtp/dflash.py</code>）。草稿输入是一块 B 个 token：
+    第 0 位放目标模型刚采到的 token（golden），其余位置放一个专用的 noise token（<code>_embed_draft_init_tokens</code>）。
+    B 就是 <code>DEEPINFER_USE_NEXTN_DECODE</code>，默认 5，设 0 关闭投机解码。
+    草稿层对这一块做<strong>一次</strong>非 causal 的 forward，所以 B 个位置的 logits 同时出来。
+    唯一串行的部分是一个很便宜的一阶 Markov 修正。
+  </p>
+  <figure>
+    <p class="fignum">图 6 · DSpark 起草与置信度调度验证</p>
+    <svg class="svg-min" viewBox="0 0 1060 420" role="img" aria-label="四列：一次前向起草、逐位采样与置信头、CPU 选验证预算、GPU 变长验证与拒绝采样">
+      <text class="h" x="20" y="24">① 起草：一次前向出 B 个</text>
+      <text class="h" x="280" y="24">② 逐位采样（廉价串行）</text>
+      <text class="h" x="540" y="24">③ 选验证预算 · CPU</text>
+      <text class="h" x="800" y="24">④ 验证 · GPU</text>
+      <g text-anchor="middle">
+        <!-- col1 -->
+        <rect class="sv-box" x="20" y="40" width="240" height="66" rx="2"/>
+        <text class="n" x="140" y="60">上下文来自主模型</text>
+        <text class="s" x="140" y="77">目标层 attn 输入取 HC 均值</text>
+        <text class="s" x="140" y="93">→ main_kv_proj，写进草稿层 SWA</text>
+        <rect class="sv-a" x="33" y="126" width="38" height="30" rx="2"/><text class="n" x="52" y="146">g</text>
+        <rect class="sv-sunk" x="77" y="126" width="38" height="30" rx="2"/><text class="s" x="96" y="145">n</text>
+        <rect class="sv-sunk" x="121" y="126" width="38" height="30" rx="2"/><text class="s" x="140" y="145">n</text>
+        <rect class="sv-sunk" x="165" y="126" width="38" height="30" rx="2"/><text class="s" x="184" y="145">n</text>
+        <rect class="sv-sunk" x="209" y="126" width="38" height="30" rx="2"/><text class="s" x="228" y="145">n</text>
+        <text class="xs" x="140" y="172">golden + 4 × noise（B = nextn = 5）</text>
+        <rect class="sv-p" x="20" y="196" width="240" height="66" rx="2"/>
+        <text class="n" x="140" y="216">DFlash 层（nextn 层）</text>
+        <text class="s" x="140" y="233">非 causal：SWA 窗 + 本块 B 个 key</text>
+        <text class="s" x="140" y="249">各层 MoE 可与主模型规格不同</text>
+        <rect class="sv-box" x="20" y="282" width="240" height="44" rx="2"/>
+        <text class="n" x="140" y="302">logits [req × B, vocab]</text>
+        <text class="s" x="140" y="318">一次 forward</text>
+        <!-- col2 -->
+        <rect class="sv-box" x="280" y="40" width="240" height="66" rx="2"/>
+        <text class="n" x="400" y="60">for i = 0 … B−1</text>
+        <text class="s" x="400" y="77">logits[i] + Markov(d_{i−1})</text>
+        <text class="s" x="400" y="93">低秩 markov_w2 · markov_w1</text>
+        <rect class="sv-a" x="280" y="126" width="240" height="56" rx="2"/>
+        <text class="n" x="400" y="148">用请求自己的采样参数</text>
+        <text class="s" x="400" y="166">T · top-p · top-k → d_i、log q_i</text>
+        <rect class="sv-box" x="280" y="200" width="240" height="56" rx="2"/>
+        <text class="n" x="400" y="222">置信头</text>
+        <text class="s" x="400" y="240">c_i = σ([h ; markov] · w / T)</text>
+        <rect class="sv-box" x="280" y="274" width="240" height="52" rx="2"/>
+        <text class="n" x="400" y="296">写 MTPInfoPool</text>
+        <text class="s" x="400" y="313">d_i · log q_i · c_i，留在 GPU</text>
+        <!-- col3 -->
+        <rect class="sv-box" x="540" y="40" width="240" height="52" rx="2"/>
+        <text class="n" x="660" y="62">r_i = c_0 · c_1 ⋯ c_i</text>
+        <text class="s" x="660" y="80">逐位独立的置信度先累乘</text>
+        <rect class="sv-box" x="540" y="112" width="240" height="52" rx="2"/>
+        <text class="n" x="660" y="134">整批 (r, seq) 降序排</text>
+        <text class="s" x="660" y="152">同分按序列下标</text>
+        <rect class="sv-a" x="540" y="184" width="240" height="70" rx="2"/>
+        <text class="n" x="660" y="206">选 total_q 使</text>
+        <text class="n" x="660" y="224">E[接受数] ÷ t(total_q) 最大</text>
+        <text class="s" x="660" y="243">t = 图基线 + slope·size + sampler</text>
+        <rect class="sv-box" x="540" y="274" width="240" height="52" rx="2"/>
+        <text class="n" x="660" y="296">预算用 N−2 轮的 r</text>
+        <text class="s" x="660" y="313">分配用 N−1 轮，保证无损</text>
+        <!-- col4 -->
+        <rect class="sv-p" x="800" y="40" width="240" height="66" rx="2"/>
+        <text class="n" x="920" y="60">GPU 上按最新 c 重分</text>
+        <text class="s" x="920" y="77">compute_seqlens_q_by_</text>
+        <text class="s" x="920" y="93">confidence_rates</text>
+        <rect class="sv-box" x="800" y="126" width="240" height="56" rx="2"/>
+        <text class="n" x="920" y="148">每请求一段变长行</text>
+        <text class="s" x="920" y="166">[last, d_0 … d_{L−2}]</text>
+        <rect class="sv-a" x="800" y="200" width="240" height="66" rx="2"/>
+        <text class="n" x="920" y="220">fused_sample 拒绝采样</text>
+        <text class="s" x="920" y="237">U &lt; min(1, p / q) 则接受</text>
+        <text class="s" x="920" y="253">否则从 max(p − αq, 0) 重采</text>
+        <rect class="sv-box" x="800" y="282" width="240" height="44" rx="2"/>
+        <text class="n" x="920" y="302">前缀接受 + 1 个 bonus</text>
+        <text class="s" x="920" y="318">KV 计数回退到已接受处</text>
+      </g>
+      <line class="sv-ln" x1="140" y1="106" x2="140" y2="122" marker-end="url(#ar)"/>
+      <line class="sv-ln" x1="140" y1="178" x2="140" y2="192" marker-end="url(#ar)"/>
+      <line class="sv-ln" x1="140" y1="262" x2="140" y2="278" marker-end="url(#ar)"/>
+      <line class="sv-ln" x1="400" y1="106" x2="400" y2="122" marker-end="url(#ar)"/>
+      <line class="sv-ln" x1="400" y1="182" x2="400" y2="196" marker-end="url(#ar)"/>
+      <line class="sv-ln" x1="400" y1="256" x2="400" y2="270" marker-end="url(#ar)"/>
+      <line class="sv-ln" x1="660" y1="92" x2="660" y2="108" marker-end="url(#ar)"/>
+      <line class="sv-ln" x1="660" y1="164" x2="660" y2="180" marker-end="url(#ar)"/>
+      <line class="sv-ln" x1="660" y1="254" x2="660" y2="270" marker-end="url(#ar)"/>
+      <line class="sv-ln" x1="920" y1="106" x2="920" y2="122" marker-end="url(#ar)"/>
+      <line class="sv-ln" x1="920" y1="182" x2="920" y2="196" marker-end="url(#ar)"/>
+      <line class="sv-ln" x1="920" y1="266" x2="920" y2="278" marker-end="url(#ar)"/>
+      <line class="sv-ln" x1="260" y1="304" x2="276" y2="304" marker-end="url(#ar)"/>
+      <line class="sv-ln" x1="520" y1="300" x2="536" y2="300" marker-end="url(#ar)"/>
+      <line class="sv-ln" x1="780" y1="219" x2="796" y2="219" marker-end="url(#ar)"/>
+      <rect class="sv-p" x="20" y="346" width="1020" height="60" rx="2"/>
+      <text class="n" x="530" y="370" text-anchor="middle">为什么分两处算：调度 N+1 时，N 的置信度还在 GPU 上（ZOS）</text>
+      <text class="s" x="530" y="390" text-anchor="middle">CPU 用旧一轮的 r 定总量 total_q，也就决定回放哪张 CUDA Graph；GPU 用最新的 c 把 total_q 分给各请求，结果拷回 pinned 缓冲</text>
+    </svg>
+    <figcaption>
+      ①② 由 <code>DFlashCudaGraphRunner</code> 整体抓成一张图，按请求数分档，草稿层固定产出 B 个，不管最后验证几个。③ 在 <code>csrc/engine/mtp_varlen.hpp</code>，④ 的长度重分与验证在 TileLang 内核里。
+      关掉变长（默认）时 ③④ 退化为每条验证全部 B 个草稿：<code>seqlen_q = 1 + len(draft_tokens)</code>。
+    </figcaption>
+  </figure>
+
+  <div class="grid2">
+    <div class="card">
+      <p class="eyebrow">草稿看到什么</p>
+      <ul class="tight">
+        <li>主模型 <code>dspark_target_layer_ids</code> 那几层的 attention 输入，在 mHC 的 4 路上取均值后拼接，经 <code>projection → projection_norm → main_kv_proj</code> 变成每个草稿层一条 MQA key，写进该草稿层的 SWA 缓存</li>
+        <li>这一步在<strong>主模型 forward 里</strong>完成（<code>update_main_cache</code>），所以在主 CUDA 图内。prefill 时只跑这一路，不做草稿 prefill</li>
+        <li>同一请求的 B 个草稿槽共用一行 <code>kv_index</code>：窗口 <code>[accepted_pos − W + 1, accepted_pos + B]</code>，attention 以 <code>causal=False</code> 调用</li>
+      </ul>
+    </div>
+    <div class="card">
+      <p class="eyebrow">草稿状态只活一步</p>
+      <ul class="tight">
+        <li>草稿 key 只在本步有效，下一步覆盖（<code>attn.py:975-991</code>）</li>
+        <li>被拒位置的主缓存 key 不清除：下一步的写入恰好落在同一批槽上，读之前已覆盖</li>
+        <li><code>MTPInfoPool</code> 有 <code>(max_num_seqs + 1) × nextn</code> 行；0 号槽是填充，内容是 token <code>vocab_size − 1</code> 上的 one-hot。prefill 之后的第一次 decode 验证的就是这些填充草稿</li>
+        <li>草稿采样用的是<strong>请求自己的</strong>温度、top-p、top-k，这样草稿分布 q 与目标分布 p 处在同一组采样参数下</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="varlen">
+  <hr class="rule">
+  <p class="eyebrow">关键 feature · 置信度调度验证</p>
+  <h2>验证多少个草稿，按「期望接受数 ÷ 实测耗时」算</h2>
+  <p>
+    固定验证 5 个是浪费：接受概率随请求、随位置都不同，排在后面的草稿多半会被拒。
+    打开 <code>DEEPINFER_ENABLE_MTP_VARLEN=1</code>（默认关；<code>eval/run_eval.py</code> 打开）后，<code>MTPVarlen::schedule</code>（<code>mtp_varlen.hpp:150-267</code>）每步这样做：
+  </p>
+  <ol class="tight">
+    <li>每个草稿位置的期望接受率取置信度的<strong>累乘</strong>。源码注释：「modeling 返回的 confidence rate 是每个 token 独立的，使用前要做一个累乘」（<code>scheduler.hpp:1248</code>）。</li>
+    <li>全批所有 <code>(累乘率, 序列下标)</code> 放进一个列表，降序排序，同分按下标。</li>
+    <li>从 <code>num_seqs</code> 个必算行（每条的 golden 位，期望产出 1）开始，按顺序逐个加草稿。每个候选总量的耗时估为 <code>baseline(装得下的最小图) + slope × graph_size + sampler_ms</code>，取「期望 token ÷ 耗时」最大的那个总量。</li>
+    <li>每条请求分到 <code>1 + 它落在前 (best_total − num_seqs) 名里的草稿数</code>。</li>
+  </ol>
+  <div class="grid2">
+    <div class="card">
+      <p class="eyebrow">耗时模型是在线拟合的</p>
+      <p>
+        <code>baseline</code> 来自 warm-up 时实测的每张 decode 图耗时（<a href="scheduling.html#cudagraph">第 2 章</a>）。
+        <code>slope</code> 用来补上下文长度的影响：对最近 5000 步的 <code>(forward_ms − baseline) / graph_size</code> 取中位数的中位数，只用样本 ≥ 10 的档位，并截到 ≥ 0。
+        <code>sampler_ms</code> 按 <code>num_seqs</code> 分组，取最近 9 个的中位数。数据来自图内的 CUDA 事件，经 <code>update_mtp_runtime</code> 回灌。
+      </p>
+    </div>
+    <div class="card key">
+      <p class="eyebrow">两轮滞后与无损性</p>
+      <p>
+        总预算用 N−2 轮的置信度，按请求分配用 N−1 轮（<code>schedule_cnt / process_cnt</code> 区分）。注释写的不变量是：
+        「confidence<sub>i+1..nextn</sub> 不能影响 draft<sub>i</sub> 是否被验证」。
+        推断：置信度 i+1 经 Markov 嵌入依赖草稿 i 的取值。如果它能决定 i 验不验，验证的选择就和草稿内容相关，拒绝采样的无偏性会被破坏。累乘率在请求内单调不增，同分按下标，所以全局 top-k 在每条请求内总是一个前缀。
+      </p>
+    </div>
+  </div>
+  <p style="margin-top:20px">
+    ZOS 下 CPU 拿不到第 N 轮的置信度，于是 CPU 只定 <code>total_q</code>。GPU 内核 <code>compute_seqlens_q_by_confidence_rates</code>
+    用 <code>remap</code> 取上一步的原始置信度（新序列取 0），做累乘，再给每个 <code>(seq, pos)</code> 算排名（多少个条目比它高，或同分且下标更小），
+    <code>seqlen_q = 1 + #{rank &lt; total_q − num_seqs}</code>。结果拷回 pinned 缓冲，采样前 CPU 用它修正元数据。
+  </p>
+  <div class="tscroll">
+  <table>
+    <thead><tr><th>并发 / rank（EP64 · DP64）</th><th>变长验证带来的吞吐变化</th><th>部署文档给的绝对值（tok/s/rank）</th></tr></thead>
+    <tbody>
+      <tr><td class="num">16</td><td class="num neg">−1.5%</td><td class="dim">—</td></tr>
+      <tr><td class="num">32</td><td class="num pos">+1.6%</td><td class="dim">—</td></tr>
+      <tr><td class="num">48</td><td class="num pos">+3.6%</td><td class="dim">—</td></tr>
+      <tr><td class="num">60（生产工作点）</td><td class="num pos">+5.4%</td><td class="num">13,730 → 14,466</td></tr>
+      <tr><td class="num">72</td><td class="num pos">+6.7%</td><td class="dim">—</td></tr>
+      <tr><td class="num">96</td><td class="num pos">+11.0%</td><td class="num">16,817 → 18,660</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="note" style="margin-top:12px">
+    文档的解释：每步验证的草稿从 5.00 降到 3.2–4.4（约 −30%），而平均接受长度几乎不变（3.29 对 3.20）。
+    低并发时 GPU 本来就没吃满，少验几个省不下时间，所以是负收益；并发越高，省下的验证算力越值钱。
+  </p>
+</section>
+
+<section id="rejection">
+  <hr class="rule">
+  <p class="eyebrow">关键 feature · 无损验证</p>
+  <h2>验证是真拒绝采样，并给出了误差界</h2>
+  <p>
+    验证行 j 的 logits 用来判第 j 个草稿，最后一行做一次新的采样（bonus）。判定融合在 <code>fused_sample_tl</code> 里：
+    若 <code>U &lt; exp(min(log p(d) − log q(d), 0))</code> 则接受，否则从残差 <code>max(p − α·q, 0)</code> 里重采，残差全为 0 时退到 argmax。
+    <code>α = exp(−DRAFT_PROB_PENALTY)</code>，<code>DRAFT_PROB_PENALTY = 5e-5</code>，注释说是为了「防止 reject sampling 采不出东西」。
+    <code>tilelang_ops/common.py:3-19</code> 给出了由此带来的分布误差上下界：<code>q[j] − ε/(1+ε) ≤ A[j] ≤ (1+ε)·q[j]</code>，其中 <code>ε = 1 − e<sup>−penalty</sup></code>。
+  </p>
+  <div class="grid3">
+    <div class="card">
+      <p class="eyebrow">温度 0 没有特例</p>
+      <p><code>SamplingParams</code> 把小于 1e-5 的温度夹到 1e-5，并关掉 top-p / top-k（<code>sampling_params.py:76-79</code>）。greedy 走的是同一条采样路径。</p>
+    </div>
+    <div class="card">
+      <p class="eyebrow">前缀接受</p>
+      <p><code>get_accept_result</code> 把逐行判定变成「接受到第一个被拒为止」，并处理 golden token 覆盖（teacher forcing）。<code>finalize_verification</code> 写出每步接受数与验证数。</p>
+    </div>
+    <div class="card">
+      <p class="eyebrow">置信头的校准量</p>
+      <p>每步算 <code>Σ|accept_prob − confidence|</code>，其中 accept_prob = 1 − 残差质量。它出现在统计日志里，可以直接看出置信头有没有校准好。</p>
+    </div>
+  </div>
+</section>
+
+<section id="sampler">
+  <hr class="rule">
+  <p class="eyebrow">采样器</p>
+  <h2>一个融合内核，求和顺序与批无关</h2>
+  <p>
+    整批采样是一个 TileLang 内核 <code>fused_sample_tl</code>，分两次发射，用 PDL 串起来。
+    第一次做逐行在线 log-sum-exp，归约布局固定，注释说是「为了和参考交叉熵实现逐位对齐」。
+    第二次做三件事：在保序 uint32 键上用 <strong>radix select</strong> 找 top-p / top-k 阈值；写出 logprob；做新采样，或做上一节的验证与残差重采。
+    阈值搜索时，概率质量按<strong>定点 uint32（scale 2<sup>31</sup>）整数原子加</strong>累计，所以原子加的先后顺序不影响结果。阈值处的平票按列下标切开。
+  </p>
+  <div class="tscroll">
+  <table>
+    <thead><tr><th>支持</th><th>不支持</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>temperature、top-p、top-k；<code>top_logprobs</code>（≤ 1000）、prompt logprobs；<code>first_n_token_no_eos</code>；<code>golden_token_ids</code>（teacher forcing）；全局 token 黑名单 <code>DEEPINFER_DECODE_TOKEN_BLACKLIST</code>；强制 top-k 预筛 <code>DEEPINFER_SAMPLER_FORCE_TOPK</code>（默认 0，示例用 4096，DeepSelect 先缩小 logits，草稿分布 remap 到同一 top-k 空间）</td>
+        <td>min-p（Sampler docstring 提到，但 <code>SamplingParams</code> 没有这个字段）；repetition / presence / frequency penalty；停止字符串；n &gt; 1；beam search</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3 style="margin-top:30px">随机数按「位置」生成，不按「批里第几行」</h3>
+  <p>
+    新采样的随机数来自 <code>T.rng_init(seed, seq)</code>，是计数器式的，不是有状态的生成器。整数均匀数先拒绝采样去掉取模偏差，再在整数 CDF 上搜索。键这样构成：
+  </p>
+  <div class="tscroll">
+  <table>
+    <thead><tr><th>键</th><th>取值</th><th>代码</th></tr></thead>
+    <tbody>
+      <tr><td>seed</td><td>请求的 <code>seq_seed</code>（不传时 <code>random.getrandbits(64)</code>）；草稿采样再加 1,000,000,007</td><td class="k">sampling_params.py:85 · fused_sample.py:15</td></tr>
+      <tr><td>seq</td><td><code>position × 3 + case</code>，case 0 = 新采样，1 = 残差重采，2 = 接受判定</td><td class="k">cuda/fused_sample.py:392, 450, 481</td></tr>
+      <tr><td>position</td><td>token 的绝对位置：prefill 取 seqlen_k，decode 取 seqlen_k − seqlen_q + 1；验证行再加 <code>local_step × 10,000,019</code></td><td class="k">prepare_sample.cpp:198, 206 · tilelang_ops/sampler.py</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="note" style="margin-top:12px">结果与行顺序、批大小都无关；<code>test_random_sampling_batch_invariant</code> 用打乱顺序和单行两种方式对拍。</p>
+</section>
+
+<section id="determinism">
+  <hr class="rule">
+  <p class="eyebrow">关键 feature · 批不变推理</p>
+  <h2>一个开关，覆盖 GEMM、MoE、mHC 和 FlashMLA</h2>
+  <p>
+    <code>DEEPINFER_BATCH_INVARIANT=1</code> 的目标是：同一条请求，不管和谁拼在一个批里，结果逐位相同。它在代码里只出现在四处：
+  </p>
+  <div class="tscroll">
+  <table>
+    <thead><tr><th>位置</th><th>效果</th></tr></thead>
+    <tbody>
+      <tr><td class="k">worker/runtime_config.py:67-69</td><td>进程级打开 <code>deep_gemm.use_deterministic_algorithms(True)</code> 与 <code>tile_kernels.use_deterministic_algorithms(True)</code>：稠密 GEMM、logits GEMM、分组 GEMM 与 mega MoE、MoE gate 与量化、mHC 内核都受影响</td></tr>
+      <tr><td class="k">v4_modules/attn.py:666, 1002</td><td>decode 的稀疏 / 滑窗 attention 和 DFlash 草稿 attention 调 <code>flash_mla_with_kvcache(..., enable_batch_invariant=True)</code></td></tr>
+      <tr><td class="k">v4_modules/attn.py:89</td><td>稠密 packed-KV 层（无 top-k）平时只在 PROMPT 引擎里用融合的 norm + RoPE + attn + cast 内核；开批不变后这里也退回非融合路径。V4.1 的压缩层都带 top-k，推断实际碰不到这条</td></tr>
+      <tr><td class="k">parallel_utils/userbuffer.py:79</td><td>EPLB 重排打开时，DeepEP 设 <code>allow_multiple_reduction=False</code></td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="grid2">
+    <div class="card key">
+      <p class="eyebrow">确定性采样的三个条件</p>
+      <ol class="tight">
+        <li><code>DEEPINFER_BATCH_INVARIANT=1</code></li>
+        <li><code>DEEPINFER_ENABLE_MTP_VARLEN=0</code>：变长验证时每条的验证长度来自全批排序和墙钟耗时估计，验证行的随机数键（local_step）跟着变</li>
+        <li>给 <code>SamplingParams</code> 传固定的 <code>seq_seed</code></li>
+      </ol>
+      <p class="note" style="margin-top:10px">只支持 NVIDIA：NPU 上 <code>runtime_config.py:61-63</code> 直接断言关闭（「待完整支持 batch invariant 后移除」）。NPU 反而总是打开 DeepGEMM / TileKernels 的确定性模式，注释是「防止 CI 数值不稳定」。</p>
+    </div>
+    <div class="card">
+      <p class="eyebrow">怎么测</p>
+      <p>
+        <code>tests/models/test_batch_invariant.py</code>：64 条序列以 nextn=5 批量生成，再把每条单独重放，
+        并用 <code>golden_token_ids</code> 喂入批量的输出，要求 token、logprob、top-logprob 全部相同。
+        <code>test_sampler.py</code> 则用随机化 PIT + KS 检验验证采样分布本身是对的。
+        代价没有给数字，<code>eval/run_eval.py</code> 的帮助文本只写了「slower」。
+      </p>
+    </div>
+  </div>
+</section>
+
+<section id="so">
+  <hr class="rule">
+  <p class="eyebrow">关键 feature · 结构化输出</p>
+  <h2>xgrammar 编译放到后台，掩码与投机解码兼容</h2>
+  <div class="grid2">
+    <div class="card">
+      <p class="eyebrow">编译</p>
+      <ul class="tight">
+        <li>用 xgrammar：<code>so_args = {"schema_type": "json" | "regex" | "ebnf", "schema": ...}</code>，JSON 用 strict 模式</li>
+        <li>在绑核的线程池里异步编译（<code>DEEPINFER_SO_BUILDER_CPUS=4</code>），超时 20 秒，缓存上限 10 GiB</li>
+        <li>扩展：<code>trigger_token_ids</code> 让语法在某个 token 序列出现后才生效（KMP 匹配），<code>bound_token_id</code> 强制把触发序列补完</li>
+        <li>部署文档里，编译在单独的 SO 机器上做，请求进引擎前取编译结果</li>
+      </ul>
+    </div>
+    <div class="card">
+      <p class="eyebrow">掩码与投机解码</p>
+      <ul class="tight">
+        <li>掩码不融合进采样器：CP rank 0 在 CPU 上建每步 bitmask，在侧流上拷到 GPU，与 logits GEMM 重叠；再由 <code>apply_token_bitmask_by_step_inplace</code> 把非法 token 置 −inf</li>
+        <li>matcher 先吃进已提交的 token，填掩码 0；再<strong>试探性地</strong>吃草稿 k、填掩码 k+1，遇到语法拒绝的草稿就停，最后回滚（<code>max_rollback_tokens = nextn + 2</code>）</li>
+        <li>草稿本身不受约束地采。非法草稿在目标分布下概率为 0，拒绝采样会自动拒掉它</li>
+        <li>带 SO 的请求被抢占时无法重算，直接 <code>FINISHED_PREEMPTED</code>；matcher 出错只杀本请求（<code>FINISHED_SO_FAILED</code>）</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<nav class="pager" aria-label="翻页"><a class="prev" href="memory.html"><span>← 上一章</span>3 · KV 缓存与有界重放</a><a class="next" href="parallel.html"><span>下一章 →</span>5 · 并行与算子层</a></nav>
+<footer>
+  <p>
+    源码 <a href="https://github.com/deepseek-ai/DeepInfer/tree/553741557a57df44a46fb3ab72b6aafeaf945337">deepseek-ai/DeepInfer@5537415</a>（2026-10-25）·
+    文中 <code>文件:行号</code> 均指这一提交 · 运行时数字来自仓库自带的 <code>doc/</code> 与 <code>examples/</code>，没有在本地复跑 ·
+    仓库 <a href="https://github.com/PerryZhang01/LLM">PerryZhang01/LLM</a>
+  </p>
+</footer>
+</div>
+</body>
+</html>

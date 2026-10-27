@@ -245,6 +245,7 @@ a.mcard:hover .go{text-decoration:underline}
     <span class="tag">模型结构解剖</span>
     <span class="tag">后端 · ATOM</span>
     <span class="tag hot">5 个模型</span>
+    <span class="tag hot">1 个框架</span>
   </div>
   <h1>LLM 模型结构手册</h1>
   <p class="lede">
@@ -257,6 +258,7 @@ a.mcard:hover .go{text-decoration:underline}
     <div class="stat"><span class="stat-n">3</span><span class="stat-l">模型家族</span></div>
     <div class="stat"><span class="stat-n">40</span><span class="stat-l">结构图</span></div>
     <div class="stat"><span class="stat-n">ATOM</span><span class="stat-l">推理后端</span></div>
+    <div class="stat"><span class="stat-n">1</span><span class="stat-l">推理框架解剖</span></div>
   </div>
 </header>
 
@@ -419,6 +421,36 @@ a.mcard:hover .go{text-decoration:underline}
 
 <section>
   <hr class="rule">
+  <p class="eyebrow">推理框架</p>
+  <h2>不只拆模型，也拆跑模型的框架</h2>
+  <p>
+    框架文档按「整体结构 → 关键模块 → 关键 feature → 优势」组织，一个框架一组多页，
+    每页都能单独打开。DeepInfer 是 DeepSeek 为 V4.1-Flash 写的推理引擎，正好和上面的 V4.1-Flash 解剖页对照着读。
+  </p>
+  <div class="mgrid">
+    <a class="mcard f-p" href="framework/DeepInfer/index.html">
+      <div class="strip"></div>
+      <div class="body">
+        <h3>DeepInfer</h3>
+        <span class="arch">deepseek-ai/DeepInfer@5537415 · 离线推理引擎</span>
+        <p class="blurb">
+          C++ 调度器加零开销异步调度，GPU 不等 CPU；DSpark 块并行草稿，验证长度由置信度调度决定；
+          解码层 prefill 只重放最后 140 个 token；没有 TP，只有 DP、EP 和可选的 CP；同一套代码跑 NVIDIA SM100 和 Ascend 950。
+        </p>
+        <div class="mspecs">
+          <div><b>47.0 k</b><span>Python 行</span></div>
+          <div><b>5.9 k</b><span>C++ 调度核心行</span></div>
+          <div><b>43</b><span>TileLang 内核</span></div>
+          <div><b>6 章</b><span>10 张图</span></div>
+        </div>
+        <div class="mfoot"><span>framework/DeepInfer/</span><span class="go">进入 →</span></div>
+      </div>
+    </a>
+  </div>
+</section>
+
+<section>
+  <hr class="rule">
   <p class="eyebrow">横向对照</p>
   <h2>五份结构放在一起看</h2>
   <div class="tscroll">
@@ -469,7 +501,7 @@ a.mcard:hover .go{text-decoration:underline}
 -LLM/models/GLM</pre>
       <p style="margin-top:14px">
         产物是一份自包含的 HTML（无外部依赖，深浅色自适应）。
-        生成后把它加进本页的卡片网格即可。
+        生成后把它加进本页的卡片网格即可。框架解剖同理，由 <code>skills/framework.md</code> 驱动，输出到 <code>framework/</code>。
       </p>
     </div>
     <div class="card">

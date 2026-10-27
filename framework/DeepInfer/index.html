@@ -1,0 +1,565 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DeepInfer 框架解剖 · 总览</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
+<style>
+:root{
+  --bg:#E8EBEA; --surface:#F6F8F7; --surface-2:#DDE3E2; --sunk:#D3DAD9;
+  --ink:#141A1C; --ink-2:#4B5A5C; --ink-3:#75858880;
+  --line:#C3CDCC; --line-soft:#D4DCDB;
+  --amber:#8A5D0C; --amber-mark:#C79433; --amber-bg:#EFE2C2;
+  --petrol:#1D5A74; --petrol-mark:#3D87A6; --petrol-bg:#D3E3EA;
+  --brick:#8E3629; --brick-bg:#F0DAD5;
+  --moss:#3F6034; --moss-mark:#6E9A5C; --moss-bg:#DDE8D6;
+  --mute-mark:#9FADAF;
+  --c1:#1F7AB0; --c2:#B5700F;
+  --shadow:0 1px 2px rgba(20,26,28,.06), 0 8px 24px -14px rgba(20,26,28,.24);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0D1315; --surface:#141C1E; --surface-2:#1C2629; --sunk:#101819;
+    --ink:#E3EAE9; --ink-2:#94A4A6; --ink-3:#6E7E8080;
+    --line:#283437; --line-soft:#1F2B2E;
+    --amber:#E0AB53; --amber-mark:#D69B36; --amber-bg:#3B2E13;
+    --petrol:#6FB6D5; --petrol-mark:#4C93B4; --petrol-bg:#12303D;
+    --brick:#E58472; --brick-bg:#3A1D18;
+    --moss:#A8CE96; --moss-mark:#7FAE6B; --moss-bg:#22301B;
+    --mute-mark:#3C4A4D;
+    --c1:#3A90C8; --c2:#BF7E22;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 30px -18px rgba(0,0,0,.8);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0D1315; --surface:#141C1E; --surface-2:#1C2629; --sunk:#101819;
+  --ink:#E3EAE9; --ink-2:#94A4A6; --ink-3:#6E7E8080;
+  --line:#283437; --line-soft:#1F2B2E;
+  --amber:#E0AB53; --amber-mark:#D69B36; --amber-bg:#3B2E13;
+  --petrol:#6FB6D5; --petrol-mark:#4C93B4; --petrol-bg:#12303D;
+  --brick:#E58472; --brick-bg:#3A1D18;
+  --moss:#A8CE96; --moss-mark:#7FAE6B; --moss-bg:#22301B;
+  --mute-mark:#3C4A4D;
+  --c1:#3A90C8; --c2:#BF7E22;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 30px -18px rgba(0,0,0,.8);
+}
+*{box-sizing:border-box}
+body{margin:0; background:var(--bg); color:var(--ink);
+  font-family:"Source Serif 4", "Songti SC", "Noto Serif CJK SC", "Source Han Serif SC", Georgia, serif;
+  font-size:16.5px; line-height:1.72; -webkit-font-smoothing:antialiased}
+.wrap{max-width:1140px; margin:0 auto; padding:0 28px 96px}
+h1,h2,h3,.eyebrow,.stat-n,.lgd,.tag,th,.chapnav,.pager{font-family:Archivo, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif}
+h1{font-size:clamp(2.2rem,5.2vw,3.6rem); line-height:1.04; letter-spacing:-.028em; font-weight:700; margin:0; text-wrap:balance}
+h2{font-size:clamp(1.3rem,2.5vw,1.68rem); line-height:1.22; letter-spacing:-.014em; font-weight:600; margin:0 0 .3em; text-wrap:balance}
+h3{font-size:1.0rem; letter-spacing:.005em; font-weight:600; margin:0 0 .35em}
+p{margin:0 0 1em; max-width:72ch}
+a{color:var(--petrol)}
+code,.mono{font-family:"IBM Plex Mono", ui-monospace, monospace; font-size:.855em; font-variant-ligatures:none}
+:not(pre) > code{background:var(--surface-2); padding:.1em .38em; border-radius:3px; color:var(--ink); overflow-wrap:anywhere}
+.eyebrow{font-size:.66rem; font-weight:600; letter-spacing:.16em; text-transform:uppercase; color:var(--ink-2); margin:0 0 .55em}
+.lede{font-size:1.1rem; color:var(--ink-2); max-width:70ch}
+.note{font-size:.9rem; color:var(--ink-2)}
+header.mast{border-bottom:1px solid var(--line); margin-bottom:52px; padding:24px 0 34px}
+.mast-id{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:22px}
+.tag{font-size:.68rem; font-weight:600; letter-spacing:.09em; text-transform:uppercase; padding:.32em .7em; border:1px solid var(--line); border-radius:2px; color:var(--ink-2); background:var(--surface)}
+.tag.hot{border-color:var(--amber); color:var(--amber); background:var(--amber-bg)}
+.mast p.lede{margin-top:18px}
+.stats{display:grid; grid-template-columns:repeat(auto-fit,minmax(128px,1fr)); gap:1px; background:var(--line-soft); border:1px solid var(--line-soft); margin-top:34px}
+.stat{background:var(--surface); padding:14px 16px 16px}
+.stat-n{display:block; font-size:1.45rem; font-weight:700; letter-spacing:-.02em; font-variant-numeric:tabular-nums; line-height:1.15}
+.stat-l{display:block; font-size:.74rem; color:var(--ink-2); letter-spacing:.02em; margin-top:3px; font-family:"IBM Plex Mono", monospace}
+section{margin:0 0 68px; scroll-margin-top:20px}
+.rule{border:0; border-top:1px solid var(--line); margin:0 0 34px}
+figure{margin:26px 0 0; background:var(--surface); border:1px solid var(--line); padding:24px 22px 16px; box-shadow:var(--shadow); overflow-x:auto}
+figure svg{max-width:100%; height:auto; display:block; margin:0 auto; color:var(--ink-2); font-family:"IBM Plex Mono", ui-monospace, monospace; font-size:10.5px}
+figure svg text{fill:var(--ink)}
+figure .fignum{font-family:Archivo,sans-serif; font-size:.66rem; font-weight:600; letter-spacing:.16em; text-transform:uppercase; color:var(--ink-2); margin:0 0 14px}
+figcaption{font-size:.86rem; color:var(--ink-2); margin-top:16px; padding-top:12px; border-top:1px solid var(--line-soft); max-width:80ch}
+figcaption strong{color:var(--ink)}
+.svg-min{min-width:760px}
+figure svg.chart{max-width:760px}
+.tscroll{overflow-x:auto; margin-top:22px; border:1px solid var(--line); background:var(--surface); box-shadow:var(--shadow)}
+table{border-collapse:collapse; width:100%; min-width:640px; font-size:.9rem}
+th{text-align:left; font-size:.68rem; letter-spacing:.11em; text-transform:uppercase; font-weight:600; color:var(--ink-2); padding:11px 16px; background:var(--surface-2); border-bottom:1px solid var(--line); white-space:nowrap}
+td{padding:10px 16px; border-bottom:1px solid var(--line-soft); vertical-align:top; line-height:1.55}
+tbody tr:last-child td{border-bottom:0}
+td.num{font-family:"IBM Plex Mono",monospace; font-variant-numeric:tabular-nums; white-space:nowrap}
+td.k{font-family:"IBM Plex Mono",monospace; font-size:.8rem}
+.hl{color:var(--amber); font-weight:600}
+.dim{color:var(--ink-2)}
+.pos{color:var(--moss); font-weight:600}
+.neg{color:var(--brick); font-weight:600}
+.grid2{display:grid; grid-template-columns:repeat(auto-fit,minmax(310px,1fr)); gap:18px; margin-top:24px}
+.grid3{display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:16px; margin-top:24px}
+.card{background:var(--surface); border:1px solid var(--line); padding:18px 20px 16px; box-shadow:var(--shadow)}
+.card h3{color:var(--ink)}
+.card p:last-child{margin-bottom:0}
+.card.warn{border-left:3px solid var(--brick)}
+.card.good{border-left:3px solid var(--petrol)}
+.card.key{border-left:3px solid var(--amber-mark)}
+.card.moss{border-left:3px solid var(--moss-mark)}
+.card .eyebrow{margin-bottom:.4em}
+a.card{display:block; text-decoration:none; color:inherit; transition:transform .12s ease, border-color .12s ease}
+a.card:hover{transform:translateY(-2px); border-color:var(--amber-mark)}
+a.card .go{font-family:"IBM Plex Mono",monospace; font-size:.76rem; color:var(--amber); font-weight:600}
+ul.tight,ol.tight{margin:0; padding-left:1.25em}
+ul.tight li,ol.tight li{margin-bottom:.42em}
+ul.tight li:last-child,ol.tight li:last-child{margin-bottom:0}
+.pathline{font-family:"IBM Plex Mono",monospace; font-size:.76rem; color:var(--ink-2); background:var(--sunk); padding:5px 9px; display:inline-block; margin-top:10px; border-radius:2px; word-break:break-all}
+.callout{background:var(--amber-bg); border:1px solid var(--amber-mark); padding:16px 20px; margin-top:24px}
+.callout .eyebrow{color:var(--amber)}
+.callout p:last-child{margin-bottom:0}
+.callout.p{background:var(--petrol-bg); border-color:var(--petrol-mark)}
+.callout.p .eyebrow{color:var(--petrol)}
+pre.code{background:var(--sunk); border:1px solid var(--line-soft); padding:14px 16px; overflow-x:auto; font-family:"IBM Plex Mono",monospace; font-size:.78rem; line-height:1.6; margin:20px 0 0; color:var(--ink)}
+pre.code .c{color:var(--ink-2)}
+pre.code .h{color:var(--amber); font-weight:600}
+footer{border-top:1px solid var(--line); padding-top:22px; color:var(--ink-2); font-size:.85rem}
+.backnav{padding:22px 0 0; font-family:Archivo,"PingFang SC",system-ui,sans-serif; font-size:.8rem}
+.backnav a{color:var(--ink-2); text-decoration:none}
+.backnav a:hover{color:var(--amber)}
+.chapnav{display:flex; flex-wrap:wrap; gap:6px; margin:14px 0 0; font-size:.74rem}
+.chapnav a{padding:.36em .8em; border:1px solid var(--line); background:var(--surface); color:var(--ink-2); text-decoration:none; border-radius:2px; white-space:nowrap}
+.chapnav a:hover{border-color:var(--amber-mark); color:var(--ink)}
+.chapnav a.on{border-color:var(--amber); color:var(--amber); background:var(--amber-bg); font-weight:600}
+.pager{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin:12px 0 40px}
+.pager a{display:block; text-decoration:none; color:var(--ink); background:var(--surface); border:1px solid var(--line); padding:14px 18px; box-shadow:var(--shadow)}
+.pager a:hover{border-color:var(--amber-mark)}
+.pager a span{display:block; font-size:.66rem; letter-spacing:.14em; text-transform:uppercase; color:var(--ink-2)}
+.pager a.next{text-align:right; grid-column:2}
+/* svg 语义类 */
+.sv-band{fill:var(--surface-2)}
+.sv-box{fill:var(--surface); stroke:var(--line); stroke-width:1.2}
+.sv-a{fill:var(--amber-bg); stroke:var(--amber-mark); stroke-width:1.3}
+.sv-p{fill:var(--petrol-bg); stroke:var(--petrol-mark); stroke-width:1.3}
+.sv-m{fill:var(--moss-bg); stroke:var(--moss-mark); stroke-width:1.3}
+.sv-r{fill:var(--brick-bg); stroke:var(--brick); stroke-width:1.3}
+.sv-sunk{fill:var(--sunk); stroke:var(--line); stroke-width:1}
+.sv-dash{fill:none; stroke:var(--ink-2); stroke-width:1.1; stroke-dasharray:5 4}
+.sv-hatch{fill:url(#hatch); stroke:var(--line); stroke-width:1}
+.sv-ln{stroke:var(--ink-2); stroke-width:1.3; fill:none}
+.sv-ln-d{stroke:var(--ink-2); stroke-width:1.2; fill:none; stroke-dasharray:4 3}
+.sv-ln-a{stroke:var(--amber-mark); stroke-width:1.6; fill:none}
+.sv-ln-p{stroke:var(--petrol-mark); stroke-width:1.6; fill:none}
+.sv-grid{stroke:var(--line-soft); stroke-width:1}
+.sv-axis{stroke:var(--ink-2); stroke-width:1}
+figure svg text.n{font-size:11.5px; font-weight:600}
+figure svg text.s{fill:var(--ink-2); font-size:9.5px}
+figure svg text.xs{fill:var(--ink-2); font-size:9px}
+figure svg text.h{font-family:Archivo,"PingFang SC",system-ui,sans-serif; font-size:12px; font-weight:600}
+figure svg text.am{fill:var(--amber)}
+figure svg text.pe{fill:var(--petrol)}
+.mk{fill:var(--ink-2)} .mka{fill:var(--amber-mark)} .mkp{fill:var(--petrol-mark)}
+.hatch-l{stroke:var(--line); stroke-width:2}
+.c1l{stroke:var(--c1); stroke-width:2; fill:none} .c2l{stroke:var(--c2); stroke-width:2; fill:none}
+.c1d{fill:var(--c1); stroke:var(--surface); stroke-width:2} .c2d{fill:var(--c2); stroke:var(--surface); stroke-width:2}
+.hit{fill:transparent; cursor:default}
+.hit:hover + .c1d, .hit:hover + .c2d{stroke:var(--ink)}
+@media (max-width:640px){ .wrap{padding:0 16px 64px} .pager{grid-template-columns:1fr} .pager a.next{grid-column:1} }
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+:focus-visible{outline:2px solid var(--petrol); outline-offset:2px}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
+<marker id="ar" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path class="mk" d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z"/></marker>
+<marker id="ara" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path class="mka" d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z"/></marker>
+<marker id="arp" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path class="mkp" d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z"/></marker>
+<pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line class="hatch-l" x1="0" y1="0" x2="0" y2="6"/></pattern>
+</defs></svg>
+<div class="wrap">
+<nav class="backnav"><a href="../../index.html">← LLM 模型结构手册</a></nav>
+<nav class="chapnav" aria-label="章节"><a href="index.html" class="on">1 · 总览</a><a href="scheduling.html">2 · 调度与执行</a><a href="memory.html">3 · KV 缓存与有界重放</a><a href="speculative.html">4 · 投机解码与采样</a><a href="parallel.html">5 · 并行与算子层</a><a href="summary.html">6 · 性能与优势</a></nav>
+<header class="mast">
+  <div class="mast-id">
+    <span class="tag">deepseek-ai/DeepInfer</span>
+    <span class="tag">commit 5537415 · 2026-10-25</span>
+    <span class="tag">Apache-2.0</span>
+    <span class="tag hot">DeepSeek-V4.1-Flash</span>
+    <span class="tag hot">NVIDIA SM100 · Ascend 950</span>
+  </div>
+  <h1>DeepInfer 框架解剖</h1>
+  <p class="lede">
+    DeepSeek 开源的推理框架，线上撑着 V4.1-Flash 的大规模服务。开源出来的是一个<strong>离线推理引擎</strong>：
+    Python 管编排，C++ 管调度，两万多行 TileLang 写胶水内核，重算子交给 FlashMLA、DeepGEMM、DeepEP、DeepSelect。
+    它只服务一个模型，几乎每个设计都为这个模型定做：滑窗加压缩 KV、块并行草稿、四路 mHC 残差。
+    这组页面按「整体结构 → 关键模块 → 关键 feature → 优势」把代码读一遍。
+  </p>
+  <div class="stats">
+    <div class="stat"><span class="stat-n">47.0 k</span><span class="stat-l">Python 行（deepinfer/ + deep_cluster/）</span></div>
+    <div class="stat"><span class="stat-n">23.3 k</span><span class="stat-l">其中 TileLang 算子行</span></div>
+    <div class="stat"><span class="stat-n">5.9 k</span><span class="stat-l">C++ 行（csrc/，调度核心）</span></div>
+    <div class="stat"><span class="stat-n">43</span><span class="stat-l">*_tl 内核工厂（cuda 后端）</span></div>
+    <div class="stat"><span class="stat-n">6</span><span class="stat-l">厂商算子 submodule</span></div>
+    <div class="stat"><span class="stat-n">58</span><span class="stat-l">DEEPINFER_* 环境变量</span></div>
+    <div class="stat"><span class="stat-n">0</span><span class="stat-l">TP：只有 DP / CP / EP</span></div>
+  </div>
+</header>
+
+<section id="chapters">
+  <p class="eyebrow">六章</p>
+  <h2>本页讲整体结构与模块，后五章各讲一类关键 feature</h2>
+  <div class="grid3">
+    <a class="card key" href="#overview">
+      <p class="eyebrow">1 · 总览（本页）</p>
+      <h3>七层结构与进程拓扑</h3>
+      <p>开源的范围、分层结构图、谁在哪个进程里、一个 step 按什么顺序走，以及关键模块清单。</p>
+    </a>
+    <a class="card" href="scheduling.html">
+      <p class="eyebrow">2 · 调度与执行</p>
+      <h3>C++ 调度器与零开销异步调度</h3>
+      <p>一步不混 prefill 和 decode、DP 投票、ZOS 让 GPU 不等 CPU、热路径禁止同步、按 total_q 抓 CUDA Graph。</p>
+      <span class="go">进入 →</span>
+    </a>
+    <a class="card" href="memory.html">
+      <p class="eyebrow">3 · KV 缓存与有界重放</p>
+      <h3>块池 + 状态槽，YOCO 截断</h3>
+      <p>两块裸显存、FP4 / MXFP8 缓存格式、SWA 有界重放如何把 prefill 计算砍掉近一半。</p>
+      <span class="go">进入 →</span>
+    </a>
+    <a class="card" href="speculative.html">
+      <p class="eyebrow">4 · 投机解码与采样</p>
+      <h3>DSpark 与置信度调度验证</h3>
+      <p>块并行草稿、按期望吞吐挑验证长度、无损拒绝采样、批不变与确定性采样、结构化输出。</p>
+      <span class="go">进入 →</span>
+    </a>
+    <a class="card" href="parallel.html">
+      <p class="eyebrow">5 · 并行与算子层</p>
+      <h3>Wide-EP、镜像 CP、双平台</h3>
+      <p>没有 TP 的进程组、zigzag CP、mega MoE 与 DeepEP、EPLB，以及一个文件切换 NVIDIA / Ascend。</p>
+      <span class="go">进入 →</span>
+    </a>
+    <a class="card" href="summary.html">
+      <p class="eyebrow">6 · 性能与优势</p>
+      <h3>曲线、优势、代价</h3>
+      <p>官方 Pareto 数据、框架优势与边界、与 vLLM 系引擎的取舍、代码与注释不一致处、读码路线。</p>
+      <span class="go">进入 →</span>
+    </a>
+  </div>
+</section>
+
+<section id="scope">
+  <hr class="rule">
+  <p class="eyebrow">先划清范围</p>
+  <h2>开源的是引擎，不是整套服务</h2>
+  <p>
+    README 写明完整服务还缺三样：KV cache 系统、VE / Prefill / Decode 拆分、数据并行副本间的负载均衡，
+    并说明「需要的引擎功能大部分已经实现」。代码里对应的是一组空的虚函数和 C++ 侧的 fork、pin、状态清零接口。
+    <code>LLMEngine</code> 的 docstring 也写着「This release does not include an online-serving wrapper」。
+  </p>
+  <div class="grid2">
+    <div class="card good">
+      <p class="eyebrow">开源版里有</p>
+      <ul class="tight">
+        <li>离线入口 <code>LLM.generate()</code>；三种引擎 NORMAL / PROMPT / COMPLETION（后两种是 PD 拆分时的角色）</li>
+        <li>C++ 调度器、块管理器、序列状态机、输入元数据准备</li>
+        <li>零开销异步调度（ZOS），默认打开</li>
+        <li>DSpark 块并行草稿 + 置信度调度验证</li>
+        <li>SWA 有界重放（YOCO prefill 截断）</li>
+        <li>Attention DP、镜像 CP、MoE EP + EPLB</li>
+        <li>批不变推理、确定性采样、结构化输出</li>
+        <li>视觉塔：开源版里和 LLM 跑在同一个引擎内</li>
+      </ul>
+    </div>
+    <div class="card warn">
+      <p class="eyebrow">不在开源版里</p>
+      <ul class="tight">
+        <li>在线 HTTP 服务、Entrypoint、Prefill / Decode / VE 三种负载均衡器</li>
+        <li>自动前缀缓存与 KV 落盘：每次调度都传 <code>num_cached_tokens_gpu=0</code>，只留了 <code>do_save_kvcache</code> 等空钩子</li>
+        <li>PD / VE 拆分的子类实现：<code>init_pd_split</code>、<code>send_processed_prompts</code> 都是空函数</li>
+        <li>协议转换 deepseek-recipe：另一个仓库</li>
+        <li>停止字符串、beam search、n&gt;1、min-p 和各类重复惩罚</li>
+      </ul>
+    </div>
+  </div>
+  <div class="callout">
+    <p class="eyebrow">线上是什么规模</p>
+    <p>
+      仓库自带的 <code>doc/inference_deployment_qa.md</code> 给了背景：单集群每天 155 万亿 token，谷时价每 GPU 小时收入 38 美元。
+      prefill 跑在普通 8 卡机上（EP2–8 / DP2–8，取显存允许的最小值），decode 跑在超节点上（EP64–128 / DP64–128 的 Wide-EP）。
+      KV 保留 72 小时以上。<strong>生产环境不用 TP，也不用 CP。</strong>
+    </p>
+  </div>
+</section>
+
+<section id="overview">
+  <hr class="rule">
+  <p class="eyebrow">整体结构</p>
+  <h2>七层：调度、块管理、输入准备都在 C++ 里</h2>
+  <p>
+    从上往下是调用方向。Python 侧只在 step 之间编排：调哪个 worker 方法、什么时候后处理、什么时候释放。
+    「这一步谁上车、每条序列算多少 token、KV 写到哪个槽」都由 <code>deepinfer._C.engine</code> 决定，
+    并且直接写进 pinned 张量，Python 不逐条遍历序列。
+  </p>
+  <figure>
+    <p class="fignum">图 1 · 分层结构</p>
+    <svg class="svg-min" viewBox="0 0 1060 640" role="img" aria-label="DeepInfer 七层结构：入口、引擎、C++ 调度核心、Worker、模型、算子、平台">
+      <!-- 带 -->
+      <rect class="sv-band" x="150" y="14" width="900" height="72" rx="3"/>
+      <rect class="sv-band" x="150" y="96" width="900" height="72" rx="3"/>
+      <rect class="sv-band" x="150" y="178" width="900" height="72" rx="3"/>
+      <rect class="sv-band" x="150" y="260" width="900" height="72" rx="3"/>
+      <rect class="sv-band" x="150" y="342" width="900" height="72" rx="3"/>
+      <rect class="sv-band" x="150" y="424" width="900" height="72" rx="3"/>
+      <rect class="sv-band" x="150" y="506" width="900" height="72" rx="3"/>
+      <!-- 左侧层名 -->
+      <text class="h" x="18" y="46">入口</text><text class="s" x="18" y="63">用户 API</text>
+      <text class="h" x="18" y="128">引擎 · Python</text><text class="s" x="18" y="145">每步编排</text>
+      <text class="h" x="18" y="210">调度核心 · C++</text><text class="s" x="18" y="227">_C.engine · pybind11</text>
+      <text class="h" x="18" y="292">执行 · Worker</text><text class="s" x="18" y="309">每个 rank 一个</text>
+      <text class="h" x="18" y="374">模型</text><text class="s" x="18" y="391">model_executor/models</text>
+      <text class="h" x="18" y="456">算子</text><text class="s" x="18" y="473">tilelang_ops + vendor</text>
+      <text class="h" x="18" y="538">平台</text><text class="s" x="18" y="555">PLATFORM 单例</text>
+      <g text-anchor="middle">
+      <!-- B1 -->
+      <rect class="sv-box" x="160" y="25" width="200" height="50" rx="2"/><text class="n" x="260" y="47">LLM.generate()</text><text class="s" x="260" y="64">entrypoints/llm.py</text>
+      <rect class="sv-box" x="370" y="25" width="170" height="50" rx="2"/><text class="n" x="455" y="47">EngineArgs</text><text class="s" x="455" y="64">engine/arg_utils.py</text>
+      <rect class="sv-box" x="550" y="25" width="200" height="50" rx="2"/><text class="n" x="650" y="47">SamplingParams · so_args</text><text class="s" x="650" y="64">sampling_params.py</text>
+      <rect class="sv-dash" x="760" y="25" width="280" height="50" rx="2"/><text class="n" x="900" y="47">在线服务 / Entrypoint / LB</text><text class="s" x="900" y="64">未随本次开源</text>
+      <!-- B2 -->
+      <rect class="sv-a" x="160" y="107" width="200" height="50" rx="2"/><text class="n" x="260" y="129">LLMEngine.step()</text><text class="s" x="260" y="146">engine/llm_engine.py</text>
+      <rect class="sv-box" x="370" y="107" width="160" height="50" rx="2"/><text class="n" x="450" y="129">SOMatcherBuilder</text><text class="s" x="450" y="146">xgrammar · 异步编译</text>
+      <rect class="sv-box" x="540" y="107" width="160" height="50" rx="2"/><text class="n" x="620" y="129">MultimodalProcessor</text><text class="s" x="620" y="146">ve/ · fork 预处理进程</text>
+      <rect class="sv-box" x="710" y="107" width="120" height="50" rx="2"/><text class="n" x="770" y="129">StatsLogger</text><text class="s" x="770" y="146">stats_logger.py</text>
+      <rect class="sv-dash" x="840" y="107" width="200" height="50" rx="2"/><text class="n" x="940" y="129">PD 拆分 · KV 落盘钩子</text><text class="s" x="940" y="146">空虚函数，等子类实现</text>
+      <!-- B3 -->
+      <rect class="sv-a" x="160" y="189" width="180" height="50" rx="2"/><text class="n" x="250" y="211">Scheduler</text><text class="s" x="250" y="228">scheduler.hpp · 1329 行</text>
+      <rect class="sv-box" x="350" y="189" width="160" height="50" rx="2"/><text class="n" x="430" y="211">BlockManager × 2</text><text class="s" x="430" y="228">块池 + 状态槽</text>
+      <rect class="sv-box" x="520" y="189" width="140" height="50" rx="2"/><text class="n" x="590" y="211">Sequence</text><text class="s" x="590" y="228">状态机 · sequence.hpp</text>
+      <rect class="sv-a" x="670" y="189" width="150" height="50" rx="2"/><text class="n" x="745" y="211">MTPVarlen</text><text class="s" x="745" y="228">置信度调度验证</text>
+      <rect class="sv-box" x="830" y="189" width="210" height="50" rx="2"/><text class="n" x="935" y="211">prepare_* · process_outputs</text><text class="s" x="935" y="228">input_metadata/ · zos.cpp</text>
+      <!-- B4 -->
+      <rect class="sv-a" x="160" y="271" width="210" height="50" rx="2"/><text class="n" x="265" y="293">Worker.execute_model_step</text><text class="s" x="265" y="310">worker/worker.py</text>
+      <rect class="sv-box" x="380" y="271" width="150" height="50" rx="2"/><text class="n" x="455" y="293">ModelRunner</text><text class="s" x="455" y="310">model_runner.py</text>
+      <rect class="sv-a" x="540" y="271" width="180" height="50" rx="2"/><text class="n" x="630" y="293">CudaGraphRunner</text><text class="s" x="630" y="310">decode 图 · 按 total_q</text>
+      <rect class="sv-box" x="730" y="271" width="150" height="50" rx="2"/><text class="n" x="805" y="293">CacheEngine</text><text class="s" x="805" y="310">cuMemAlloc 裸分配</text>
+      <rect class="sv-box" x="890" y="271" width="150" height="50" rx="2"/><text class="n" x="965" y="293">EPLB</text><text class="s" x="965" y="310">冗余专家 + 搬权重</text>
+      <!-- B5 -->
+      <rect class="sv-box" x="160" y="353" width="150" height="50" rx="2"/><text class="n" x="235" y="375">Builder · 容器</text><text class="s" x="235" y="392">v4_modules/builder.py</text>
+      <rect class="sv-a" x="320" y="353" width="160" height="50" rx="2"/><text class="n" x="400" y="375">V4Attention</text><text class="s" x="400" y="392">SWA + 压缩 + indexer</text>
+      <rect class="sv-box" x="490" y="353" width="150" height="50" rx="2"/><text class="n" x="565" y="375">DeepseekMoE</text><text class="s" x="565" y="392">mega MoE / DeepEP</text>
+      <rect class="sv-box" x="650" y="353" width="120" height="50" rx="2"/><text class="n" x="710" y="375">mHC · Engram</text><text class="s" x="710" y="392">hc.py · engram.py</text>
+      <rect class="sv-a" x="780" y="353" width="130" height="50" rx="2"/><text class="n" x="845" y="375">DFlash 草稿</text><text class="s" x="845" y="392">models/mtp/</text>
+      <rect class="sv-a" x="920" y="353" width="120" height="50" rx="2"/><text class="n" x="980" y="375">Sampler</text><text class="s" x="980" y="392">融合采样</text>
+      <!-- B6 -->
+      <rect class="sv-a" x="160" y="435" width="300" height="50" rx="2"/><text class="n" x="310" y="457">tilelang_ops/ · 43 个 *_tl 内核</text><text class="s" x="310" y="474">ops.py 按平台 import cuda/ 或 asc/</text>
+      <rect class="sv-box" x="470" y="435" width="110" height="50" rx="2"/><text class="n" x="525" y="457">FlashMLA</text><text class="s" x="525" y="474">稀疏 MLA</text>
+      <rect class="sv-box" x="590" y="435" width="110" height="50" rx="2"/><text class="n" x="645" y="457">DeepGEMM</text><text class="s" x="645" y="474">FP8 × FP4 GEMM</text>
+      <rect class="sv-box" x="710" y="435" width="100" height="50" rx="2"/><text class="n" x="760" y="457">DeepEP</text><text class="s" x="760" y="474">EP 通信</text>
+      <rect class="sv-box" x="820" y="435" width="110" height="50" rx="2"/><text class="n" x="875" y="457">DeepSelect</text><text class="s" x="875" y="474">top-k</text>
+      <rect class="sv-box" x="940" y="435" width="100" height="50" rx="2"/><text class="n" x="990" y="457">TileKernels</text><text class="s" x="990" y="474">mHC / Engram</text>
+      <!-- B7 -->
+      <rect class="sv-box" x="160" y="517" width="220" height="50" rx="2"/><text class="n" x="270" y="539">PlatformGPU · SM100</text><text class="s" x="270" y="556">nccl · tilelang cuda</text>
+      <rect class="sv-box" x="390" y="517" width="220" height="50" rx="2"/><text class="n" x="500" y="539">PlatformNPU · Ascend 950</text><text class="s" x="500" y="556">hccl · tilelang asc</text>
+      <rect class="sv-box" x="620" y="517" width="190" height="50" rx="2"/><text class="n" x="715" y="539">deep_cluster</text><text class="s" x="715" y="556">NUMA / CPU 绑核</text>
+      <rect class="sv-box" x="820" y="517" width="220" height="50" rx="2"/><text class="n" x="930" y="539">_C.cuda_utils · graph_timer</text><text class="s" x="930" y="556">IPC 张量 · 图内计时</text>
+      </g>
+      <!-- 图例 -->
+      <rect class="sv-a" x="160" y="600" width="14" height="14"/><text class="s" x="182" y="611">后几章详细讲的落点</text>
+      <rect class="sv-box" x="330" y="600" width="14" height="14"/><text class="s" x="352" y="611">其余模块</text>
+      <rect class="sv-dash" x="440" y="600" width="14" height="14"/><text class="s" x="462" y="611">不在开源版里</text>
+    </svg>
+    <figcaption>
+      <strong>读法：</strong>第二层 <code>LLMEngine.step()</code> 每次只调一次 C++ <code>schedule()</code> 和一次 worker 的
+      <code>execute_model_step</code>，中间不碰序列列表。第六层的 TileLang 内核大多是「胶水」：索引展开、缓存读写、元数据准备、采样。
+      它们让这些工作留在 GPU 上，CPU 不用同步。重计算交给 vendor 库。
+    </figcaption>
+  </figure>
+</section>
+
+<section id="topology">
+  <hr class="rule">
+  <p class="eyebrow">进程拓扑</p>
+  <h2>一个 DP rank 就是一个引擎进程，没有中心调度器</h2>
+  <p>
+    引擎进程自己就是 driver worker（<code>cp_rank 0</code>），不为本卡另起进程（<code>llm_engine.py:368-414</code>）。
+    只有 CP&gt;1 时才 spawn <code>cp_size−1</code> 个从进程。从进程阻塞在 <code>start_slave_worker_loop</code> 里，
+    从共享内存队列收 <code>(method, kwargs)</code> 再执行。调度结果不发给从进程：driver 把它变成 <code>InputMetadata</code>，
+    非张量字段走 shm 队列，CUDA 张量走 NCCL broadcast。
+  </p>
+  <p>
+    各 DP rank 的 C++ <code>Scheduler</code> 各排各的，只在两处同步。一处是投票决定这一步全组做 prefill 还是 decode（ZOS 打开时走 gloo CPU 组）；
+    另一处是 MoE 层的 EP 通信。<code>model_parallel_size</code> 直接等于 <code>cp_size</code>（<code>config.py:171</code>），
+    所有稠密投影都是 <code>ReplicatedLinear</code>。部署文档的说法是沿用 V3/R1：attention 走 DP，DP 数等于 EP 数。
+  </p>
+  <figure>
+    <p class="fignum">图 2 · 进程与通信组</p>
+    <svg class="svg-min" viewBox="0 0 1060 404" role="img" aria-label="每个 DP rank 一个引擎进程，三条横向通信组">
+      <g>
+        <rect class="sv-box" x="20" y="16" width="300" height="222" rx="3"/>
+        <text class="h" x="36" y="40">引擎进程 · DP rank 0</text>
+        <rect class="sv-sunk" x="34" y="54" width="272" height="46" rx="2"/>
+        <text class="n" x="170" y="74" text-anchor="middle">LLMEngine + C++ Scheduler</text>
+        <text class="s" x="170" y="90" text-anchor="middle">调度 · 后处理 · 统计 · SO 编译线程</text>
+        <rect class="sv-a" x="34" y="108" width="272" height="46" rx="2"/>
+        <text class="n" x="170" y="128" text-anchor="middle">Worker · driver（cp_rank 0）</text>
+        <text class="s" x="170" y="144" text-anchor="middle">与引擎同进程：forward / sample</text>
+        <rect class="sv-dash" x="34" y="162" width="272" height="64" rx="2"/>
+        <text class="n" x="170" y="183" text-anchor="middle">CP&gt;1 时另起 cp_size−1 个从进程</text>
+        <text class="s" x="170" y="200" text-anchor="middle">shm 队列收 (method, kwargs)</text>
+        <text class="s" x="170" y="216" text-anchor="middle">张量走 NCCL broadcast</text>
+      </g>
+      <g>
+        <rect class="sv-box" x="345" y="16" width="300" height="222" rx="3"/>
+        <text class="h" x="361" y="40">引擎进程 · DP rank 1</text>
+        <rect class="sv-sunk" x="359" y="54" width="272" height="46" rx="2"/>
+        <text class="n" x="495" y="74" text-anchor="middle">LLMEngine + C++ Scheduler</text>
+        <text class="s" x="495" y="90" text-anchor="middle">各排各的，不共享队列</text>
+        <rect class="sv-a" x="359" y="108" width="272" height="46" rx="2"/>
+        <text class="n" x="495" y="128" text-anchor="middle">Worker · driver（cp_rank 0）</text>
+        <text class="s" x="495" y="144" text-anchor="middle">完整的 attention / embedding 权重</text>
+        <rect class="sv-dash" x="359" y="162" width="272" height="64" rx="2"/>
+        <text class="n" x="495" y="183" text-anchor="middle">CP 从进程（可选）</text>
+        <text class="s" x="495" y="200" text-anchor="middle">PR_SET_PDEATHSIG = SIGKILL</text>
+        <text class="s" x="495" y="216" text-anchor="middle">父进程一死就跟着退</text>
+      </g>
+      <text class="h" x="692" y="132" text-anchor="middle">…</text>
+      <g>
+        <rect class="sv-box" x="740" y="16" width="300" height="222" rx="3"/>
+        <text class="h" x="756" y="40">引擎进程 · DP rank D−1</text>
+        <rect class="sv-sunk" x="754" y="54" width="272" height="46" rx="2"/>
+        <text class="n" x="890" y="74" text-anchor="middle">LLMEngine + C++ Scheduler</text>
+        <text class="s" x="890" y="90" text-anchor="middle">由用户脚本 spawn，engine_rank = dp_rank</text>
+        <rect class="sv-a" x="754" y="108" width="272" height="46" rx="2"/>
+        <text class="n" x="890" y="128" text-anchor="middle">Worker · driver（cp_rank 0）</text>
+        <text class="s" x="890" y="144" text-anchor="middle">global_rank = engine_rank·cp + cp_rank</text>
+        <rect class="sv-dash" x="754" y="162" width="272" height="64" rx="2"/>
+        <text class="n" x="890" y="183" text-anchor="middle">CP 从进程（可选）</text>
+        <text class="s" x="890" y="200" text-anchor="middle">只有 prefill 用 CP</text>
+        <text class="s" x="890" y="216" text-anchor="middle">COMPLETION 引擎禁止 CP&gt;1</text>
+      </g>
+      <line class="sv-ln" x1="170" y1="238" x2="170" y2="262"/>
+      <line class="sv-ln" x1="495" y1="238" x2="495" y2="262"/>
+      <line class="sv-ln" x1="890" y1="238" x2="890" y2="262"/>
+      <rect class="sv-p" x="20" y="262" width="1020" height="36" rx="2"/>
+      <text class="n" x="530" y="285" text-anchor="middle">gloo DP 组（CPU 侧）· 每 70 / 100 个 decode step 投一次票：这一步全组做 prefill 还是 decode</text>
+      <rect class="sv-a" x="20" y="308" width="1020" height="36" rx="2"/>
+      <text class="n" x="530" y="331" text-anchor="middle">EP 组：连续 ep_size 个 rank（dp 缺省 = ep / cp，即覆盖全部 rank）· MoE dispatch / combine · EPLB 搬权重</text>
+      <rect class="sv-box" x="20" y="354" width="1020" height="36" rx="2"/>
+      <text class="n" x="530" y="377" text-anchor="middle">没有 TP：attention、embedding、lm_head 每个 rank 一份完整权重，只有路由专家按 EP 切</text>
+    </svg>
+    <figcaption>
+      默认进程组是 gloo（<code>base.py:334-340</code>），NCCL 子组按需惰性创建。DP / CP 组各有一份 gloo「CPU 孪生组」，
+      投票和对象广播走它们，不碰 GPU 流。ZOS 关闭时 DP 投票改走 NCCL 组（<code>llm_engine.py:313</code>）。
+    </figcaption>
+  </figure>
+</section>
+
+<section id="step">
+  <hr class="rule">
+  <p class="eyebrow">一个 step</p>
+  <h2>「forward 当前步 → 后处理上一步 → 采样当前步」</h2>
+  <p>
+    <code>Worker.execute_model_step</code> 是唯一的执行入口：prefill、decode、ZOS 开或关、占位空步，都走同一轮。
+    顺序上的关键是第 2 步：<strong>上一步的后处理被夹在本步 forward 和本步采样之间</strong>，
+    这样 CPU 后处理和 GPU forward 并行。详见<a href="scheduling.html#zos">第 2 章 ZOS</a>。
+  </p>
+  <div class="tscroll">
+  <table>
+    <thead><tr><th>#</th><th>在哪</th><th>做什么</th><th>代码</th></tr></thead>
+    <tbody>
+      <tr><td class="num">1</td><td>引擎 · C++</td><td><code>scheduler.schedule(pool)</code>：决定本步是 prefill 还是 decode，挑序列、切块、算 seqlen，返回池化的 <code>SequenceMetadata</code></td><td class="k">scheduler.hpp:667</td></tr>
+      <tr><td class="num">2</td><td>引擎</td><td>fork 出来的序列要拷贝或清零状态槽和块时，先发一次 <code>clone_and_zero_states_and_blocks</code></td><td class="k">llm_engine.py:889</td></tr>
+      <tr><td class="num">3</td><td>Worker</td><td><b>forward N</b>：ZOS 下先在 GPU 上修正 seqlens，再准备输入，decode 回放 CUDA Graph、prefill 走 eager，全程在 <code>forbid_cuda_sync()</code> 里</td><td class="k">worker.py:113 · model_runner.py:308</td></tr>
+      <tr><td class="num">4</td><td>Worker → 引擎</td><td><b>后处理 N−1</b>：等 N−1 的 <code>sample_end_evt</code>，C++ <code>process_MTPInfo</code> → <code>process_outputs</code>（追加 token、判停、提交 KV 计数）→ <code>build_request_outputs</code></td><td class="k">worker.py:143 · llm_engine.py:984</td></tr>
+      <tr><td class="num">5</td><td>Worker</td><td><b>采样 N</b>：用 GPU 回传的 seqlens_q 修正 CPU 元数据，C++ 准备采样输入，发射融合采样、DSpark 起草和 EPLB 计数</td><td class="k">worker.py:146-160</td></tr>
+      <tr><td class="num">6</td><td>引擎</td><td><code>pre_sampler_sync</code>：延迟释放上一步的池化对象、推进 SO 编译、回收已完成序列</td><td class="k">llm_engine.py:830</td></tr>
+      <tr><td class="num">7</td><td>Worker</td><td>prefill 步或关 ZOS：当场后处理 N；ZOS decode 步：留到下一步，与 forward N+1 重叠</td><td class="k">worker.py:182-187</td></tr>
+      <tr><td class="num">8</td><td>入口</td><td><code>RequestOutput</code> 以 <code>uint64</code> 指针返回，入口 clone 后保留；全部完成时 <code>flush_inflight_reqs</code> 收尾，最后整段 detokenize</td><td class="k">llm.py:168-190</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section id="modules">
+  <hr class="rule">
+  <p class="eyebrow">关键模块</p>
+  <h2>十四个模块，算子占了一半代码</h2>
+  <p>
+    行数按 <code>wc -l</code> 统计，含注释与内核内测试。TileLang 算子目录 23.3k 行，
+    几乎是 Python 总量的一半：每个算子都有接口、PyTorch 参考实现、pytest 测试，再加 <code>cuda/</code> 与 <code>asc/</code> 两份实现。
+  </p>
+  <div class="tscroll">
+  <table>
+    <thead><tr><th>模块</th><th>路径</th><th>行数</th><th>职责</th></tr></thead>
+    <tbody>
+      <tr><td>入口</td><td class="k">deepinfer/entrypoints/llm.py</td><td class="num">198</td><td><code>LLM.generate()</code>：离线批量入口。默认关统计，被抢占的请求重算而不是终止</td></tr>
+      <tr><td>引擎</td><td class="k">deepinfer/engine/</td><td class="num">1,957</td><td><code>LLMEngine.step</code>、PD 拆分虚函数钩子、统计日志、HTTP 触发的 torch profiler</td></tr>
+      <tr><td class="hl">调度核心</td><td class="k">csrc/engine/</td><td class="num">5,216</td><td><code>Scheduler</code>、<code>BlockManager</code>、<code>Sequence</code>、<code>MTPVarlen</code>、<code>FlopsEstimator</code>、输入元数据准备、ZOS remap</td></tr>
+      <tr><td class="hl">执行</td><td class="k">deepinfer/worker/</td><td class="num">2,805</td><td>Worker 生命周期、<code>ModelRunner</code>、<code>CacheEngine</code>、两套 CUDA Graph runner、decode 性能曲线缓存</td></tr>
+      <tr><td>输入元数据</td><td class="k">model_executor/input_metadata/</td><td class="num">1,151</td><td><code>InputMetadata</code> 在图内展开索引；ZOS decode 输入；YOCO consumer 视图；DFlash 元数据</td></tr>
+      <tr><td class="hl">模型</td><td class="k">model_executor/models/</td><td class="num">7,051</td><td>V4.1 的参数容器（只管 HF 名字与形状）+ 运行时适配器（重排权重、持有 forward）；attention、MoE、mHC、Engram、DFlash、视觉塔</td></tr>
+      <tr><td>层</td><td class="k">model_executor/layers/*.py</td><td class="num">1,665</td><td><code>Sampler</code>、FlashMLA 封装、Linear、RoPE、MTP 信息池</td></tr>
+      <tr><td class="hl">TileLang 算子</td><td class="k">layers/tilelang_ops/</td><td class="num">23,331</td><td>43 个 <code>*_tl</code> 内核：顶层是接口 + 参考实现 + 测试，<code>cuda/</code>（4,968 行）与 <code>asc/</code>（7,418 行）是两套后端</td></tr>
+      <tr><td>并行与 EPLB</td><td class="k">parallel_utils/ · eplb/</td><td class="num">1,498</td><td>进程组、CP 管理、userbuffer（DeepEP buffer 与 DeepGEMM SymmBuffer 的持有者）、专家重排策略与搬运</td></tr>
+      <tr><td>权重加载</td><td class="k">deepinfer/hugging_face/</td><td class="num">1,375</td><td>自写 safetensors 读取：只读本 rank 的专家，Engram 表按 256 MiB 分块读，30 分钟看门狗</td></tr>
+      <tr><td>结构化输出</td><td class="k">deepinfer/structure_output/</td><td class="num">595</td><td>xgrammar 编译、触发词 KMP 匹配、绑核的异步编译线程池</td></tr>
+      <tr><td>视觉</td><td class="k">deepinfer/ve/ · vision_encoder/</td><td class="num">1,373</td><td>fork 出的图像预处理进程、跨进程 pinned 池、图像 token 展开、ViT + 下采样 + 对齐层</td></tr>
+      <tr><td>平台</td><td class="k">platform.py · deep_cluster/ · npu_ops/</td><td class="num">1,094</td><td><code>PlatformGPU</code> / <code>PlatformNPU</code>、NUMA 与 CPU 绑核、NPU 的 import 补丁</td></tr>
+      <tr><td>CP 广播</td><td class="k">distributed/shm_broadcast.py</td><td class="num">461</td><td>源自 vLLM 的共享内存环形广播，单写多读，超 1 MiB 走 ZMQ</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <pre class="code"><span class="c"># 目录骨架（只列关键文件）</span>
+DeepInfer/
+├── deepinfer/
+│   ├── entrypoints/llm.py          <span class="c"># LLM.generate()</span>
+│   ├── engine/llm_engine.py        <span class="c"># step()、虚函数钩子</span>
+│   ├── worker/                     <span class="c"># worker.py · model_runner.py · cache_engine.py · cuda_graph_runner.py</span>
+│   ├── model_executor/
+│   │   ├── models/deepseek.py      <span class="c"># DeepseekForCausalLM：整网 forward、YOCO 视图切换</span>
+│   │   ├── models/v4_modules/      <span class="c"># attn · index_attn · compress · mlp · hc · engram · cross_layer · builder</span>
+│   │   ├── models/mtp/dflash.py    <span class="c"># DSpark 草稿</span>
+│   │   ├── layers/sampler.py       <span class="c"># 融合采样、验证、SO 掩码</span>
+│   │   ├── layers/tilelang_ops/    <span class="c"># ops.py 分发 → cuda/ | asc/</span>
+│   │   ├── input_metadata/         <span class="c"># InputMetadata、ZOS、YOCO</span>
+│   │   ├── parallel_utils/ · eplb/
+│   ├── structure_output/ · ve/ · hugging_face/
+│   ├── platform.py · environ.py    <span class="c"># 58 个 DEEPINFER_* 都在 environ.py</span>
+│   └── _C/engine.pyi               <span class="c"># C++ 扩展的类型桩，735 行，读 C++ 接口的捷径</span>
+├── csrc/engine/                    <span class="c"># scheduler.hpp · sequence.hpp · block_manager.hpp · mtp_varlen.hpp · zos.cpp</span>
+├── deep_cluster/                   <span class="c"># 硬件探测、NUMA / CPU 绑定</span>
+├── vendor/                         <span class="c"># FlashMLA · DeepGEMM · DeepEP · DeepSelect（+ Ascend 版 DeepEP / DeepGEMM）</span>
+├── doc/inference_deployment_qa.md  <span class="c"># 部署问答：设计动机的主要来源</span>
+├── examples/ · eval/ · tests/</pre>
+</section>
+
+<section id="advantages-brief">
+  <hr class="rule">
+  <p class="eyebrow">先给结论</p>
+  <h2>它的优势来自「只服务一个模型」</h2>
+  <div class="grid2">
+    <div class="card key">
+      <p class="eyebrow">热路径上没有 CPU 气泡</p>
+      <p>调度在 C++、释放 GIL；ZOS 让 CPU 永远领先 GPU 一步；<code>forbid_cuda_sync</code> 把「热路径不准同步」变成运行时报错。</p>
+    </div>
+    <div class="card key">
+      <p class="eyebrow">模型结构直接变成引擎能力</p>
+      <p>压缩 KV + 滑窗让 KV 小到可以跨机房搬；YOCO 结构让解码层只重放最后 140 个 token；DSpark 的置信头直接喂调度器。</p>
+    </div>
+    <div class="card key">
+      <p class="eyebrow">投机解码是无损的，且可调度</p>
+      <p>真拒绝采样（带误差界证明），草稿长度由「期望接受数 ÷ 实测图耗时」逐步优化，不是固定 5 个。</p>
+    </div>
+    <div class="card key">
+      <p class="eyebrow">确定性是一等公民</p>
+      <p>采样器用定点原子和计数器 RNG，批不变开关覆盖 GEMM / MoE / mHC / FlashMLA，并有「批量跑 vs 单条跑逐位相同」的测试。</p>
+    </div>
+  </div>
+  <p class="note" style="margin-top:16px">完整的优势、代价与对照在 <a href="summary.html">第 6 章</a>。</p>
+</section>
+
+<nav class="pager" aria-label="翻页"><a class="next" href="scheduling.html"><span>下一章 →</span>2 · 调度与执行</a></nav>
+<footer>
+  <p>
+    源码 <a href="https://github.com/deepseek-ai/DeepInfer/tree/553741557a57df44a46fb3ab72b6aafeaf945337">deepseek-ai/DeepInfer@5537415</a>（2026-10-25）·
+    文中 <code>文件:行号</code> 均指这一提交 · 运行时数字来自仓库自带的 <code>doc/</code> 与 <code>examples/</code>，没有在本地复跑 ·
+    仓库 <a href="https://github.com/PerryZhang01/LLM">PerryZhang01/LLM</a>
+  </p>
+</footer>
+</div>
+</body>
+</html>

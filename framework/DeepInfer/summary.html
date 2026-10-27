@@ -1,0 +1,483 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DeepInfer · 性能与优势</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
+<style>
+:root{
+  --bg:#E8EBEA; --surface:#F6F8F7; --surface-2:#DDE3E2; --sunk:#D3DAD9;
+  --ink:#141A1C; --ink-2:#4B5A5C; --ink-3:#75858880;
+  --line:#C3CDCC; --line-soft:#D4DCDB;
+  --amber:#8A5D0C; --amber-mark:#C79433; --amber-bg:#EFE2C2;
+  --petrol:#1D5A74; --petrol-mark:#3D87A6; --petrol-bg:#D3E3EA;
+  --brick:#8E3629; --brick-bg:#F0DAD5;
+  --moss:#3F6034; --moss-mark:#6E9A5C; --moss-bg:#DDE8D6;
+  --mute-mark:#9FADAF;
+  --c1:#1F7AB0; --c2:#B5700F;
+  --shadow:0 1px 2px rgba(20,26,28,.06), 0 8px 24px -14px rgba(20,26,28,.24);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0D1315; --surface:#141C1E; --surface-2:#1C2629; --sunk:#101819;
+    --ink:#E3EAE9; --ink-2:#94A4A6; --ink-3:#6E7E8080;
+    --line:#283437; --line-soft:#1F2B2E;
+    --amber:#E0AB53; --amber-mark:#D69B36; --amber-bg:#3B2E13;
+    --petrol:#6FB6D5; --petrol-mark:#4C93B4; --petrol-bg:#12303D;
+    --brick:#E58472; --brick-bg:#3A1D18;
+    --moss:#A8CE96; --moss-mark:#7FAE6B; --moss-bg:#22301B;
+    --mute-mark:#3C4A4D;
+    --c1:#3A90C8; --c2:#BF7E22;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 30px -18px rgba(0,0,0,.8);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0D1315; --surface:#141C1E; --surface-2:#1C2629; --sunk:#101819;
+  --ink:#E3EAE9; --ink-2:#94A4A6; --ink-3:#6E7E8080;
+  --line:#283437; --line-soft:#1F2B2E;
+  --amber:#E0AB53; --amber-mark:#D69B36; --amber-bg:#3B2E13;
+  --petrol:#6FB6D5; --petrol-mark:#4C93B4; --petrol-bg:#12303D;
+  --brick:#E58472; --brick-bg:#3A1D18;
+  --moss:#A8CE96; --moss-mark:#7FAE6B; --moss-bg:#22301B;
+  --mute-mark:#3C4A4D;
+  --c1:#3A90C8; --c2:#BF7E22;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 30px -18px rgba(0,0,0,.8);
+}
+*{box-sizing:border-box}
+body{margin:0; background:var(--bg); color:var(--ink);
+  font-family:"Source Serif 4", "Songti SC", "Noto Serif CJK SC", "Source Han Serif SC", Georgia, serif;
+  font-size:16.5px; line-height:1.72; -webkit-font-smoothing:antialiased}
+.wrap{max-width:1140px; margin:0 auto; padding:0 28px 96px}
+h1,h2,h3,.eyebrow,.stat-n,.lgd,.tag,th,.chapnav,.pager{font-family:Archivo, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif}
+h1{font-size:clamp(2.2rem,5.2vw,3.6rem); line-height:1.04; letter-spacing:-.028em; font-weight:700; margin:0; text-wrap:balance}
+h2{font-size:clamp(1.3rem,2.5vw,1.68rem); line-height:1.22; letter-spacing:-.014em; font-weight:600; margin:0 0 .3em; text-wrap:balance}
+h3{font-size:1.0rem; letter-spacing:.005em; font-weight:600; margin:0 0 .35em}
+p{margin:0 0 1em; max-width:72ch}
+a{color:var(--petrol)}
+code,.mono{font-family:"IBM Plex Mono", ui-monospace, monospace; font-size:.855em; font-variant-ligatures:none}
+:not(pre) > code{background:var(--surface-2); padding:.1em .38em; border-radius:3px; color:var(--ink); overflow-wrap:anywhere}
+.eyebrow{font-size:.66rem; font-weight:600; letter-spacing:.16em; text-transform:uppercase; color:var(--ink-2); margin:0 0 .55em}
+.lede{font-size:1.1rem; color:var(--ink-2); max-width:70ch}
+.note{font-size:.9rem; color:var(--ink-2)}
+header.mast{border-bottom:1px solid var(--line); margin-bottom:52px; padding:24px 0 34px}
+.mast-id{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:22px}
+.tag{font-size:.68rem; font-weight:600; letter-spacing:.09em; text-transform:uppercase; padding:.32em .7em; border:1px solid var(--line); border-radius:2px; color:var(--ink-2); background:var(--surface)}
+.tag.hot{border-color:var(--amber); color:var(--amber); background:var(--amber-bg)}
+.mast p.lede{margin-top:18px}
+.stats{display:grid; grid-template-columns:repeat(auto-fit,minmax(128px,1fr)); gap:1px; background:var(--line-soft); border:1px solid var(--line-soft); margin-top:34px}
+.stat{background:var(--surface); padding:14px 16px 16px}
+.stat-n{display:block; font-size:1.45rem; font-weight:700; letter-spacing:-.02em; font-variant-numeric:tabular-nums; line-height:1.15}
+.stat-l{display:block; font-size:.74rem; color:var(--ink-2); letter-spacing:.02em; margin-top:3px; font-family:"IBM Plex Mono", monospace}
+section{margin:0 0 68px; scroll-margin-top:20px}
+.rule{border:0; border-top:1px solid var(--line); margin:0 0 34px}
+figure{margin:26px 0 0; background:var(--surface); border:1px solid var(--line); padding:24px 22px 16px; box-shadow:var(--shadow); overflow-x:auto}
+figure svg{max-width:100%; height:auto; display:block; margin:0 auto; color:var(--ink-2); font-family:"IBM Plex Mono", ui-monospace, monospace; font-size:10.5px}
+figure svg text{fill:var(--ink)}
+figure .fignum{font-family:Archivo,sans-serif; font-size:.66rem; font-weight:600; letter-spacing:.16em; text-transform:uppercase; color:var(--ink-2); margin:0 0 14px}
+figcaption{font-size:.86rem; color:var(--ink-2); margin-top:16px; padding-top:12px; border-top:1px solid var(--line-soft); max-width:80ch}
+figcaption strong{color:var(--ink)}
+.svg-min{min-width:760px}
+figure svg.chart{max-width:760px}
+.tscroll{overflow-x:auto; margin-top:22px; border:1px solid var(--line); background:var(--surface); box-shadow:var(--shadow)}
+table{border-collapse:collapse; width:100%; min-width:640px; font-size:.9rem}
+th{text-align:left; font-size:.68rem; letter-spacing:.11em; text-transform:uppercase; font-weight:600; color:var(--ink-2); padding:11px 16px; background:var(--surface-2); border-bottom:1px solid var(--line); white-space:nowrap}
+td{padding:10px 16px; border-bottom:1px solid var(--line-soft); vertical-align:top; line-height:1.55}
+tbody tr:last-child td{border-bottom:0}
+td.num{font-family:"IBM Plex Mono",monospace; font-variant-numeric:tabular-nums; white-space:nowrap}
+td.k{font-family:"IBM Plex Mono",monospace; font-size:.8rem}
+.hl{color:var(--amber); font-weight:600}
+.dim{color:var(--ink-2)}
+.pos{color:var(--moss); font-weight:600}
+.neg{color:var(--brick); font-weight:600}
+.grid2{display:grid; grid-template-columns:repeat(auto-fit,minmax(310px,1fr)); gap:18px; margin-top:24px}
+.grid3{display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:16px; margin-top:24px}
+.card{background:var(--surface); border:1px solid var(--line); padding:18px 20px 16px; box-shadow:var(--shadow)}
+.card h3{color:var(--ink)}
+.card p:last-child{margin-bottom:0}
+.card.warn{border-left:3px solid var(--brick)}
+.card.good{border-left:3px solid var(--petrol)}
+.card.key{border-left:3px solid var(--amber-mark)}
+.card.moss{border-left:3px solid var(--moss-mark)}
+.card .eyebrow{margin-bottom:.4em}
+a.card{display:block; text-decoration:none; color:inherit; transition:transform .12s ease, border-color .12s ease}
+a.card:hover{transform:translateY(-2px); border-color:var(--amber-mark)}
+a.card .go{font-family:"IBM Plex Mono",monospace; font-size:.76rem; color:var(--amber); font-weight:600}
+ul.tight,ol.tight{margin:0; padding-left:1.25em}
+ul.tight li,ol.tight li{margin-bottom:.42em}
+ul.tight li:last-child,ol.tight li:last-child{margin-bottom:0}
+.pathline{font-family:"IBM Plex Mono",monospace; font-size:.76rem; color:var(--ink-2); background:var(--sunk); padding:5px 9px; display:inline-block; margin-top:10px; border-radius:2px; word-break:break-all}
+.callout{background:var(--amber-bg); border:1px solid var(--amber-mark); padding:16px 20px; margin-top:24px}
+.callout .eyebrow{color:var(--amber)}
+.callout p:last-child{margin-bottom:0}
+.callout.p{background:var(--petrol-bg); border-color:var(--petrol-mark)}
+.callout.p .eyebrow{color:var(--petrol)}
+pre.code{background:var(--sunk); border:1px solid var(--line-soft); padding:14px 16px; overflow-x:auto; font-family:"IBM Plex Mono",monospace; font-size:.78rem; line-height:1.6; margin:20px 0 0; color:var(--ink)}
+pre.code .c{color:var(--ink-2)}
+pre.code .h{color:var(--amber); font-weight:600}
+footer{border-top:1px solid var(--line); padding-top:22px; color:var(--ink-2); font-size:.85rem}
+.backnav{padding:22px 0 0; font-family:Archivo,"PingFang SC",system-ui,sans-serif; font-size:.8rem}
+.backnav a{color:var(--ink-2); text-decoration:none}
+.backnav a:hover{color:var(--amber)}
+.chapnav{display:flex; flex-wrap:wrap; gap:6px; margin:14px 0 0; font-size:.74rem}
+.chapnav a{padding:.36em .8em; border:1px solid var(--line); background:var(--surface); color:var(--ink-2); text-decoration:none; border-radius:2px; white-space:nowrap}
+.chapnav a:hover{border-color:var(--amber-mark); color:var(--ink)}
+.chapnav a.on{border-color:var(--amber); color:var(--amber); background:var(--amber-bg); font-weight:600}
+.pager{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin:12px 0 40px}
+.pager a{display:block; text-decoration:none; color:var(--ink); background:var(--surface); border:1px solid var(--line); padding:14px 18px; box-shadow:var(--shadow)}
+.pager a:hover{border-color:var(--amber-mark)}
+.pager a span{display:block; font-size:.66rem; letter-spacing:.14em; text-transform:uppercase; color:var(--ink-2)}
+.pager a.next{text-align:right; grid-column:2}
+/* svg 语义类 */
+.sv-band{fill:var(--surface-2)}
+.sv-box{fill:var(--surface); stroke:var(--line); stroke-width:1.2}
+.sv-a{fill:var(--amber-bg); stroke:var(--amber-mark); stroke-width:1.3}
+.sv-p{fill:var(--petrol-bg); stroke:var(--petrol-mark); stroke-width:1.3}
+.sv-m{fill:var(--moss-bg); stroke:var(--moss-mark); stroke-width:1.3}
+.sv-r{fill:var(--brick-bg); stroke:var(--brick); stroke-width:1.3}
+.sv-sunk{fill:var(--sunk); stroke:var(--line); stroke-width:1}
+.sv-dash{fill:none; stroke:var(--ink-2); stroke-width:1.1; stroke-dasharray:5 4}
+.sv-hatch{fill:url(#hatch); stroke:var(--line); stroke-width:1}
+.sv-ln{stroke:var(--ink-2); stroke-width:1.3; fill:none}
+.sv-ln-d{stroke:var(--ink-2); stroke-width:1.2; fill:none; stroke-dasharray:4 3}
+.sv-ln-a{stroke:var(--amber-mark); stroke-width:1.6; fill:none}
+.sv-ln-p{stroke:var(--petrol-mark); stroke-width:1.6; fill:none}
+.sv-grid{stroke:var(--line-soft); stroke-width:1}
+.sv-axis{stroke:var(--ink-2); stroke-width:1}
+figure svg text.n{font-size:11.5px; font-weight:600}
+figure svg text.s{fill:var(--ink-2); font-size:9.5px}
+figure svg text.xs{fill:var(--ink-2); font-size:9px}
+figure svg text.h{font-family:Archivo,"PingFang SC",system-ui,sans-serif; font-size:12px; font-weight:600}
+figure svg text.am{fill:var(--amber)}
+figure svg text.pe{fill:var(--petrol)}
+.mk{fill:var(--ink-2)} .mka{fill:var(--amber-mark)} .mkp{fill:var(--petrol-mark)}
+.hatch-l{stroke:var(--line); stroke-width:2}
+.c1l{stroke:var(--c1); stroke-width:2; fill:none} .c2l{stroke:var(--c2); stroke-width:2; fill:none}
+.c1d{fill:var(--c1); stroke:var(--surface); stroke-width:2} .c2d{fill:var(--c2); stroke:var(--surface); stroke-width:2}
+.hit{fill:transparent; cursor:default}
+.hit:hover + .c1d, .hit:hover + .c2d{stroke:var(--ink)}
+@media (max-width:640px){ .wrap{padding:0 16px 64px} .pager{grid-template-columns:1fr} .pager a.next{grid-column:1} }
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+:focus-visible{outline:2px solid var(--petrol); outline-offset:2px}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
+<marker id="ar" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path class="mk" d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z"/></marker>
+<marker id="ara" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path class="mka" d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z"/></marker>
+<marker id="arp" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path class="mkp" d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z"/></marker>
+<pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line class="hatch-l" x1="0" y1="0" x2="0" y2="6"/></pattern>
+</defs></svg>
+<div class="wrap">
+<nav class="backnav"><a href="../../index.html">← LLM 模型结构手册</a></nav>
+<nav class="chapnav" aria-label="章节"><a href="index.html">1 · 总览</a><a href="scheduling.html">2 · 调度与执行</a><a href="memory.html">3 · KV 缓存与有界重放</a><a href="speculative.html">4 · 投机解码与采样</a><a href="parallel.html">5 · 并行与算子层</a><a href="summary.html" class="on">6 · 性能与优势</a></nav>
+<header class="mast">
+  <div class="mast-id">
+    <span class="tag">第 6 章</span>
+    <span class="tag hot">性能</span>
+    <span class="tag hot">优势</span>
+    <span class="tag">代价</span>
+    <span class="tag">读码路线</span>
+  </div>
+  <h1>性能与优势</h1>
+  <p class="lede">
+    前四章讲机制，这一章收尾。先看仓库自带的性能曲线和精度参考值，再总结 DeepInfer 的优势和代价，
+    和 vLLM 一类通用引擎对照，列出读代码时遇到的注释与代码不一致之处，最后给一条读码路线。
+  </p>
+</header>
+
+<section id="perf">
+  <p class="eyebrow">性能数据</p>
+  <h2>官方 Pareto 曲线（读图重绘）</h2>
+  <p>
+    README 的两张图分别在 4 张 SM100 上测 prefill、64 张上测 decode，都在一个 scale-up 域内，由 <code>examples/sweep/run_sweep.sh</code> 生成。
+    下面按原图读点重绘：数值是读图近似值，不是原始数据。下方表格列出全部读数。
+  </p>
+  <div>
+    <figure>
+      <p class="fignum">图 9 · decode：吞吐 vs 每用户速度</p>
+      <svg class="chart" viewBox="0 0 640 400" role="img" aria-label="decode Pareto：EP64DP64 全面优于 EP8DP8">
+        <g>
+          <line class="sv-grid" x1="70" y1="320" x2="610" y2="320"/><line class="sv-grid" x1="70" y1="273.3" x2="610" y2="273.3"/>
+          <line class="sv-grid" x1="70" y1="226.7" x2="610" y2="226.7"/><line class="sv-grid" x1="70" y1="180" x2="610" y2="180"/>
+          <line class="sv-grid" x1="70" y1="133.3" x2="610" y2="133.3"/><line class="sv-grid" x1="70" y1="86.7" x2="610" y2="86.7"/>
+          <line class="sv-grid" x1="70" y1="40" x2="610" y2="40"/>
+          <line class="sv-axis" x1="70" y1="320" x2="610" y2="320"/>
+        </g>
+        <g text-anchor="end">
+          <text class="xs" x="62" y="323">0</text><text class="xs" x="62" y="276">5k</text><text class="xs" x="62" y="230">10k</text>
+          <text class="xs" x="62" y="183">15k</text><text class="xs" x="62" y="136">20k</text><text class="xs" x="62" y="90">25k</text><text class="xs" x="62" y="43">30k</text>
+        </g>
+        <g text-anchor="middle">
+          <text class="xs" x="70" y="338">0</text><text class="xs" x="147.1" y="338">50</text><text class="xs" x="224.3" y="338">100</text>
+          <text class="xs" x="301.4" y="338">150</text><text class="xs" x="378.6" y="338">200</text><text class="xs" x="455.7" y="338">250</text>
+          <text class="xs" x="532.9" y="338">300</text><text class="xs" x="610" y="338">350</text>
+          <text class="s" x="340" y="366">每用户速度（tok/s/user）</text>
+        </g>
+        <text class="s" transform="translate(18,180) rotate(-90)" text-anchor="middle">输出吞吐（tok/s/GPU）</text>
+        <!-- 图例 -->
+        <line class="c1l" x1="70" y1="16" x2="92" y2="16"/><circle class="c1d" cx="81" cy="16" r="4.5"/>
+        <text class="s" x="98" y="20">EP64 · DP64 · 384+64 专家</text>
+        <line class="c2l" x1="300" y1="16" x2="322" y2="16"/><circle class="c2d" cx="311" cy="16" r="4.5"/>
+        <text class="s" x="328" y="20">EP8 · DP8 · 384+32 专家</text>
+        <!-- 线 -->
+        <polyline class="c2l" points="437.2,302.3 424.9,285.5 409.4,254.2 375.5,201.9 301.4,140.8 221.2,87.6"/>
+        <polyline class="c1l" points="571.4,295.7 556.0,272.9 528.2,231.3 449.5,173.0 346.2,107.2 228.9,74.5"/>
+        <!-- 点 + 悬停 -->
+        <circle class="hit" cx="437.2" cy="302.3" r="11"><title>EP8 · 8 并发/rank：≈238 tok/s/user，≈1.9k tok/s/GPU</title></circle><circle class="c2d" cx="437.2" cy="302.3" r="4.5"/>
+        <circle class="hit" cx="424.9" cy="285.5" r="11"><title>EP8 · 16 并发/rank：≈230 tok/s/user，≈3.7k tok/s/GPU</title></circle><circle class="c2d" cx="424.9" cy="285.5" r="4.5"/>
+        <circle class="hit" cx="409.4" cy="254.2" r="11"><title>EP8 · 32 并发/rank：≈220 tok/s/user，≈7.1k tok/s/GPU</title></circle><circle class="c2d" cx="409.4" cy="254.2" r="4.5"/>
+        <circle class="hit" cx="375.5" cy="201.9" r="11"><title>EP8 · 64 并发/rank：≈198 tok/s/user，≈12.7k tok/s/GPU</title></circle><circle class="c2d" cx="375.5" cy="201.9" r="4.5"/>
+        <circle class="hit" cx="301.4" cy="140.8" r="11"><title>EP8 · 128 并发/rank：≈150 tok/s/user，≈19.2k tok/s/GPU</title></circle><circle class="c2d" cx="301.4" cy="140.8" r="4.5"/>
+        <circle class="hit" cx="221.2" cy="87.6" r="11"><title>EP8 · 256 并发/rank：≈98 tok/s/user，≈24.9k tok/s/GPU</title></circle><circle class="c2d" cx="221.2" cy="87.6" r="4.5"/>
+        <circle class="hit" cx="571.4" cy="295.7" r="11"><title>EP64 · 8 并发/rank：≈325 tok/s/user，≈2.6k tok/s/GPU</title></circle><circle class="c1d" cx="571.4" cy="295.7" r="4.5"/>
+        <circle class="hit" cx="556.0" cy="272.9" r="11"><title>EP64 · 16 并发/rank：≈315 tok/s/user，≈5.1k tok/s/GPU</title></circle><circle class="c1d" cx="556.0" cy="272.9" r="4.5"/>
+        <circle class="hit" cx="528.2" cy="231.3" r="11"><title>EP64 · 32 并发/rank：≈297 tok/s/user，≈9.5k tok/s/GPU</title></circle><circle class="c1d" cx="528.2" cy="231.3" r="4.5"/>
+        <circle class="hit" cx="449.5" cy="173.0" r="11"><title>EP64 · 64 并发/rank：≈246 tok/s/user，≈15.8k tok/s/GPU</title></circle><circle class="c1d" cx="449.5" cy="173.0" r="4.5"/>
+        <circle class="hit" cx="346.2" cy="107.2" r="11"><title>EP64 · 128 并发/rank：≈179 tok/s/user，≈22.8k tok/s/GPU</title></circle><circle class="c1d" cx="346.2" cy="107.2" r="4.5"/>
+        <circle class="hit" cx="228.9" cy="74.5" r="11"><title>EP64 · 256 并发/rank：≈103 tok/s/user，≈26.3k tok/s/GPU</title></circle><circle class="c1d" cx="228.9" cy="74.5" r="4.5"/>
+        <!-- 选择性标签 -->
+        <text class="xs" x="238" y="68">EP64 · 256 并发</text>
+        <text class="xs" x="212" y="104" text-anchor="end">EP8 · 256</text>
+        <text class="xs" x="458" y="167">64</text>
+        <text class="xs" x="367" y="216" text-anchor="end">64</text>
+        <text class="xs" x="580" y="293">8</text>
+        <text class="xs" x="446" y="312">8</text>
+      </svg>
+      <figcaption>
+        上下文 131,072，nextn = 3，单 token 接受率 75%，τ = 1 + 3 × 0.75 = 3.25。两轴同乘 τ（<code>plot_pareto.py:58-67</code>），
+        按「全部草稿以固定接受率接受」计，并要求关闭变长验证。点旁数字是每个 DP rank 的并发请求数。悬停数据点可看读数。
+      </figcaption>
+    </figure>
+    <figure>
+      <p class="fignum">图 10 · prefill：吞吐 vs 单步延迟</p>
+      <svg class="chart" viewBox="0 0 640 400" role="img" aria-label="prefill Pareto：EP4DP4，批越大吞吐越接近 9 万 tok/s/GPU">
+        <g>
+          <line class="sv-grid" x1="70" y1="320" x2="610" y2="320"/><line class="sv-grid" x1="70" y1="264" x2="610" y2="264"/>
+          <line class="sv-grid" x1="70" y1="208" x2="610" y2="208"/><line class="sv-grid" x1="70" y1="152" x2="610" y2="152"/>
+          <line class="sv-grid" x1="70" y1="96" x2="610" y2="96"/><line class="sv-grid" x1="70" y1="40" x2="610" y2="40"/>
+          <line class="sv-axis" x1="70" y1="320" x2="610" y2="320"/>
+        </g>
+        <g text-anchor="end">
+          <text class="xs" x="62" y="323">0</text><text class="xs" x="62" y="267">20k</text><text class="xs" x="62" y="211">40k</text>
+          <text class="xs" x="62" y="155">60k</text><text class="xs" x="62" y="99">80k</text><text class="xs" x="62" y="43">100k</text>
+        </g>
+        <g text-anchor="middle">
+          <text class="xs" x="70" y="338">0</text><text class="xs" x="137.5" y="338">100</text><text class="xs" x="205" y="338">200</text>
+          <text class="xs" x="272.5" y="338">300</text><text class="xs" x="340" y="338">400</text><text class="xs" x="407.5" y="338">500</text>
+          <text class="xs" x="475" y="338">600</text><text class="xs" x="542.5" y="338">700</text><text class="xs" x="610" y="338">800</text>
+          <text class="s" x="340" y="366">每个 prefill 步的延迟（ms）</text>
+        </g>
+        <text class="s" transform="translate(18,180) rotate(-90)" text-anchor="middle">非缓存输入吞吐（tok/s/GPU）</text>
+        <text class="s" x="70" y="20">EP4 · DP4 · 384+32 专家 · 解码层有界重放 140 token</text>
+        <polyline class="c1l" points="115.9,152 147.0,119.5 205.0,91.2 323.8,76.4 563.4,69.4"/>
+        <circle class="hit" cx="115.9" cy="152" r="11"><title>每 rank 4,096 token/步：≈68 ms，≈60.0k tok/s/GPU</title></circle><circle class="c1d" cx="115.9" cy="152" r="4.5"/>
+        <circle class="hit" cx="147.0" cy="119.5" r="11"><title>每 rank 8,192 token/步：≈114 ms，≈71.6k tok/s/GPU</title></circle><circle class="c1d" cx="147.0" cy="119.5" r="4.5"/>
+        <circle class="hit" cx="205.0" cy="91.2" r="11"><title>每 rank 16,384 token/步：≈200 ms，≈81.7k tok/s/GPU</title></circle><circle class="c1d" cx="205.0" cy="91.2" r="4.5"/>
+        <circle class="hit" cx="323.8" cy="76.4" r="11"><title>每 rank 32,768 token/步：≈376 ms，≈87.0k tok/s/GPU</title></circle><circle class="c1d" cx="323.8" cy="76.4" r="4.5"/>
+        <circle class="hit" cx="563.4" cy="69.4" r="11"><title>每 rank 65,536 token/步：≈731 ms，≈89.5k tok/s/GPU</title></circle><circle class="c1d" cx="563.4" cy="69.4" r="4.5"/>
+        <text class="xs" x="124" y="168">4,096</text>
+        <text class="xs" x="205" y="80" text-anchor="middle">16,384</text>
+        <text class="xs" x="563" y="58" text-anchor="middle">65,536</text>
+      </svg>
+      <figcaption>
+        上下文 131,072。x 轴是实测窗口内每步的平均耗时，作者特意<strong>不用</strong>「batch ÷ 吞吐」，因为那等于假设每步都满。
+        批从 4k 加到 64k，吞吐只多约 50%，延迟却涨了约 10 倍。
+      </figcaption>
+    </figure>
+  </div>
+  <div class="tscroll">
+  <table>
+    <thead><tr><th>decode 并发 / rank</th><th>EP64：tok/s/user</th><th>EP64：tok/s/GPU</th><th>EP8：tok/s/user</th><th>EP8：tok/s/GPU</th><th>prefill token / 步</th><th>ms / 步</th><th>tok/s/GPU</th></tr></thead>
+    <tbody>
+      <tr><td class="num">8</td><td class="num">≈325</td><td class="num">≈2.6k</td><td class="num">≈238</td><td class="num">≈1.9k</td><td class="num">4,096</td><td class="num">≈68</td><td class="num">≈60.0k</td></tr>
+      <tr><td class="num">16</td><td class="num">≈315</td><td class="num">≈5.1k</td><td class="num">≈230</td><td class="num">≈3.7k</td><td class="num">8,192</td><td class="num">≈114</td><td class="num">≈71.6k</td></tr>
+      <tr><td class="num">32</td><td class="num">≈297</td><td class="num">≈9.5k</td><td class="num">≈220</td><td class="num">≈7.1k</td><td class="num">16,384</td><td class="num">≈200</td><td class="num">≈81.7k</td></tr>
+      <tr><td class="num">64</td><td class="num">≈246</td><td class="num">≈15.8k</td><td class="num">≈198</td><td class="num">≈12.7k</td><td class="num">32,768</td><td class="num">≈376</td><td class="num">≈87.0k</td></tr>
+      <tr><td class="num">128</td><td class="num">≈179</td><td class="num">≈22.8k</td><td class="num">≈150</td><td class="num">≈19.2k</td><td class="num">65,536</td><td class="num">≈731</td><td class="num">≈89.5k</td></tr>
+      <tr><td class="num">256</td><td class="num">≈103</td><td class="num">≈26.3k</td><td class="num">≈98</td><td class="num">≈24.9k</td><td class="dim">—</td><td class="dim">—</td><td class="dim">—</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="grid2">
+    <div class="card key">
+      <p class="eyebrow">Wide-EP 买到了什么</p>
+      <p>同为每 rank 64 并发，EP64 比 EP8 的每卡吞吐高约 24%（15.8k 对 12.7k），每用户速度也高约 24%（246 对 198）。到 256 并发两者趋近（26.3k 对 24.9k）。部署文档的解释是：EP 越宽，每张卡每步要读的专家权重越少。</p>
+    </div>
+    <div class="card">
+      <p class="eyebrow">精度参考值（eval/README.md）</p>
+      <p>默认配置下 Pass@1：AIME 2026 <b>99.9%</b>（30 题 × 32 样本），GPQA Diamond <b>93.4%</b>（198 题 × 8），HLE-Full <b>42.6%</b>（2,500 题，其中 342 道带图）。生成与打分分两步，HLE 不允许规则打分，因为一半以上是自由文本答案。</p>
+    </div>
+  </div>
+</section>
+
+<section id="advantages">
+  <hr class="rule">
+  <p class="eyebrow">优势</p>
+  <h2>八条优势，前四条是这个框架独有的</h2>
+  <div class="grid2">
+    <div class="card key">
+      <p class="eyebrow">1 · 热路径上没有 CPU 气泡</p>
+      <p>调度、块管理、输入准备都在 C++ 里并释放 GIL；输出走对象池和指针。ZOS 让 CPU 领先 GPU 一步，下一步的 input_ids、seqlens 和 decode 元数据都在 GPU 上算。<code>forbid_cuda_sync</code> 把「热路径不准同步」变成运行时报错。<a href="scheduling.html">第 2 章</a></p>
+    </div>
+    <div class="card key">
+      <p class="eyebrow">2 · 投机解码可调度，且无损</p>
+      <p>DSpark 一次 forward 出整块草稿。置信头把「这个草稿会不会被接受」直接交给调度器，调度器按实测的图耗时挑出期望吞吐最高的验证量。验证是带误差界证明的拒绝采样。生产工作点 +5.4%。<a href="speculative.html">第 4 章</a></p>
+    </div>
+    <div class="card key">
+      <p class="eyebrow">3 · 模型结构直接变成引擎能力</p>
+      <p>MLA 单头 + FP4 压缩 KV，主 KV 每 token 288 B。状态槽按「可落盘 / 丢弃」分区，配合 YOCO 让解码层只重放最后 140 个 token，部署文档称这几乎砍掉一半 prefill 计算。KV 小到能跨机房做 PD 拆分（文档估算每 8 卡约 400 Gbps）。<a href="memory.html">第 3 章</a></p>
+    </div>
+    <div class="card key">
+      <p class="eyebrow">4 · 确定性是设计目标，不是补丁</p>
+      <p>采样器用保序键 radix select、定点整数原子累加、按位置生成的计数器随机数；批不变开关覆盖 GEMM、MoE、mHC、FlashMLA。测试要求批量跑和单条跑的 token 与 logprob 逐位一致。<a href="speculative.html#determinism">第 4 章</a></p>
+    </div>
+    <div class="card">
+      <p class="eyebrow">5 · Wide-EP 与融合 MoE</p>
+      <p>没有 TP，attention 全 DP；NVLink 域内一个 <code>mega_moe</code> 内核做完 dispatch 到 combine；EPLB 在域内用 symm_mem 直接拉权重。生产 decode 跑 EP64–128，moe_lb 1.09。<a href="parallel.html">第 5 章</a></p>
+    </div>
+    <div class="card">
+      <p class="eyebrow">6 · 一套代码两种硬件</p>
+      <p>后端选择只在 <code>ops.py</code> 一个文件里。43 个 TileLang 内核在 cuda 和 asc 上各有一份（缺一个调试内核）；两个平台的构建产物可以共存在同一棵源码树里。</p>
+    </div>
+    <div class="card">
+      <p class="eyebrow">7 · 可测、可对拍</p>
+      <p>每个 TileLang 算子都带 PyTorch 参考实现和 pytest；YOCO 的 mask / compact 两级对拍；采样器用 KS + PIT 检验分布；同步守卫有交错退出与并发压力测试。</p>
+    </div>
+    <div class="card">
+      <p class="eyebrow">8 · 生产验证过</p>
+      <p>部署文档给出单集群每天 155 万亿 token、谷时每 GPU 小时 38 美元收入；整体负载均衡达到完美均衡离线基准的约 80%。开源版的内核与内部版端到端差距 ≤ 5%。</p>
+    </div>
+  </div>
+</section>
+
+<section id="limits">
+  <hr class="rule">
+  <p class="eyebrow">代价与边界</p>
+  <h2>这些优势都以「只服务一个模型」为前提</h2>
+  <div class="grid2">
+    <div class="card warn">
+      <p class="eyebrow">模型绑定很深</p>
+      <p>只支持 DeepSeek-V4.1-Flash。压缩比只允许 0 / 1 / 2，代码明确报错「C4 and C128 have been removed」；KV 格式、状态槽分区、YOCO 边界、DSpark 都按这个模型写死。换模型基本等于重写模型层和一半的元数据内核。</p>
+    </div>
+    <div class="card warn">
+      <p class="eyebrow">离线引擎，不是服务</p>
+      <p>没有 HTTP 服务、自动前缀缓存、PD 拆分实现和负载均衡器。生产里真正决定命中率和尾延迟的那部分（3FS KV 存储、三种 LB）不在仓库里。</p>
+    </div>
+    <div class="card warn">
+      <p class="eyebrow">不混批的代价</p>
+      <p>decode 要定期停下来给 prefill 让路。推断：在 NORMAL 引擎里，一条新请求可能要等到下一个 ALL / ANY 投票点（最多 70 / 100 个 decode 步）才开始 prefill。生产上靠 PD 拆分避开这个问题，开源版没有拆分。</p>
+    </div>
+    <div class="card warn">
+      <p class="eyebrow">功能面窄、硬件门槛高</p>
+      <p>采样没有 min-p、重复惩罚、停止字符串、n &gt; 1。硬件只支持 SM100 和 Ascend 950；要 CUDA 13、GCC ≥ 13、Python 3.12。批不变只在 NVIDIA 上可用，NPU 侧还有多处 <code>TODO(NPU)</code> 临时补丁。</p>
+    </div>
+  </div>
+</section>
+
+<section id="vs-vllm">
+  <hr class="rule">
+  <p class="eyebrow">取舍对照</p>
+  <h2>和 vLLM 一类通用引擎比，选择都反过来</h2>
+  <p>README 致谢里说 DeepInfer「最初主要基于 vLLM 构建」，并参考了 SGLang 与 TensorRT-LLM。<code>shm_broadcast.py</code> 等文件仍能看出出处。但几个关键取舍都和通用引擎相反：</p>
+  <div class="tscroll">
+  <table>
+    <thead><tr><th>维度</th><th>DeepInfer</th><th>vLLM（V1 引擎）的常见做法</th></tr></thead>
+    <tbody>
+      <tr><td>调度器</td><td>C++，释放 GIL</td><td>Python</td></tr>
+      <tr><td>批组成</td><td>每步只做 prefill 或只做 decode，DP 组投票统一</td><td>prefill 与 decode 混在同一批（chunked prefill）</td></tr>
+      <tr><td>模型并行</td><td>没有 TP；attention DP + 专家 EP，prefill 可选 CP</td><td>以 TP 为主，另有 DP / EP / PP</td></tr>
+      <tr><td>前缀缓存</td><td>开源版没有；生产用外置 3FS 集群 + 主存里的 SWA 目录</td><td>内置的按块哈希自动前缀缓存</td></tr>
+      <tr><td>投机解码</td><td>块并行草稿 + 置信度驱动的变长验证</td><td>EAGLE、MTP、n-gram 等，验证长度按配置固定</td></tr>
+      <tr><td>异步调度</td><td>默认打开，下一步的 input_ids 在 GPU 上 gather</td><td>可选项</td></tr>
+      <tr><td>确定性</td><td>采样器按位置生成随机数，批不变开关覆盖到 attention 与 MoE</td><td>依赖具体后端与配置</td></tr>
+      <tr><td>模型覆盖</td><td>1 个</td><td>数百个架构</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section id="mismatch">
+  <hr class="rule">
+  <p class="eyebrow">读代码时的坑</p>
+  <h2>注释与代码不一致的七处</h2>
+  <p>以下都以代码行为为准。对改代码的人来说，相信注释就会出错。</p>
+  <div class="tscroll">
+  <table>
+    <thead><tr><th>位置</th><th>注释或文档说</th><th>代码实际</th></tr></thead>
+    <tbody>
+      <tr><td class="k">scheduler.hpp:556</td><td>block 不足时「抢占 output 最短的 seq」</td><td>running 按输出长度降序排，牺牲者取 <code>running[l]</code>，即<strong>输出最长</strong>的。<code>FINISHED_PREEMPTED</code> 的注释「终止占用 KV 最多的任务」与代码一致</td></tr>
+      <tr><td class="k">llm_engine.py:427</td><td>「take the minimum number of blocks across all workers」</td><td><code>base.py:264-266</code> 是 SUM ÷ world size 再向下取偶，即<strong>平均值</strong></td></tr>
+      <tr><td class="k">hugging_face/config.py:159</td><td>第一个 ratio == 1 的层「和它之前的层构成 prefill 侧」</td><td>返回的是该层下标；<code>layer_id ≥ n_prefill_layer</code> 才是解码层，所以这一层本身属于解码层（它也是第一个解码层里的 KV owner）</td></tr>
+      <tr><td class="k">layers/sampler.py:65</td><td>应用「temperature、top-k / top-p / min-p」</td><td>没有 min-p，<code>SamplingParams</code> 也没有这个字段</td></tr>
+      <tr><td class="k">README.md:26</td><td>异步调度「Enabled by default」</td><td>环境变量默认 False；只有经 <code>EngineArgs</code> 时才对 NORMAL / COMPLETION 设为 1。走 <code>LLM()</code> 时确实默认开</td></tr>
+      <tr><td class="k">worker/base.py:242</td><td>「state store &amp; copy buffer，所以要开两倍大小」</td><td>预算扣了两倍，<code>CacheEngine</code> 只分配一份；另一份的用途在开源代码里看不到</td></tr>
+      <tr><td class="k">v4_modules/heads.py:86</td><td>config 里有 <code>dspark_block_size</code></td><td>运行时草稿块大小取 <code>DEEPINFER_USE_NEXTN_DECODE</code>，没看到与 config 值的校验</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section id="reading">
+  <hr class="rule">
+  <p class="eyebrow">读码路线</p>
+  <h2>按数据流读，十二站</h2>
+  <ol class="tight">
+    <li><code>README.md</code> + <code>doc/inference_deployment_qa.md</code>：先知道每个设计为什么存在</li>
+    <li><code>deepinfer/_C/engine.pyi</code>：735 行的类型桩，一眼看清 C++ 暴露了什么</li>
+    <li><code>engine/llm_engine.py</code>：<code>step()</code>、<code>_process_model_outputs</code>、<code>post_process</code>、虚函数钩子</li>
+    <li><code>worker/worker.py</code>：<code>execute_model_step</code> 的四步，和 <code>_correct_seqlens_qk</code></li>
+    <li><code>csrc/engine/scheduler.hpp</code>：<code>_schedule</code>（投票）、<code>_schedule_prefill</code>、<code>_schedule_decode</code>、<code>process_outputs</code></li>
+    <li><code>csrc/engine/zos.cpp</code> + <code>input_metadata/prepare_tensor_input_zos.py</code>：ZOS 的 remap 与 GPU 侧输入</li>
+    <li><code>worker/model_runner.py</code> + <code>cuda_graph_runner.py</code>：发射、图的分档与回放</li>
+    <li><code>models/deepseek.py</code> → <code>decoder_layer.py</code> → <code>v4_modules/attn.py</code>：整网 forward、YOCO 视图切换、四种 attention</li>
+    <li><code>models/mtp/dflash.py</code> + <code>layers/sampler.py</code> + <code>csrc/engine/mtp_varlen.hpp</code>：DSpark 全链路</li>
+    <li><code>worker/cache_engine.py</code>：先读 <code>KVCache</code> 与 <code>StateBlock</code> 的 docstring</li>
+    <li><code>v4_modules/mlp.py</code> + <code>model_executor/eplb/</code>：两条 MoE 路径与专家重排</li>
+    <li><code>tilelang_ops/ops.py</code>，再挑一个算子的顶层文件，看参考实现与测试怎么写</li>
+  </ol>
+</section>
+
+<section id="env">
+  <hr class="rule">
+  <p class="eyebrow">速查</p>
+  <h2>最常用的十六个环境变量</h2>
+  <p>全部 58 个定义在 <code>deepinfer/environ.py</code>，首次访问时解析并缓存；布尔值只接受 <code>0 / 1 / true / false</code>，否则报错。</p>
+  <div class="tscroll">
+  <table>
+    <thead><tr><th>变量</th><th>默认</th><th>作用</th></tr></thead>
+    <tbody>
+      <tr><td class="k">DEEPINFER_ACCELERATOR</td><td class="num">nvidia</td><td>构建与运行的平台</td></tr>
+      <tr><td class="k">DEEPINFER_USE_NEXTN_DECODE</td><td class="num">5</td><td>每步草稿数，0 关闭投机解码</td></tr>
+      <tr><td class="k">DEEPINFER_ENABLE_MTP_VARLEN</td><td class="num">0</td><td>置信度调度验证</td></tr>
+      <tr><td class="k">DEEPINFER_ZERO_OVERHEAD_SCHEDULING</td><td class="num">0*</td><td>ZOS；*经 <code>EngineArgs</code> 时 NORMAL / COMPLETION 设为 1</td></tr>
+      <tr><td class="k">DEEPINFER_YOCO_PREFILL_TRUNCATION_MODE</td><td class="num">off</td><td>off / mask / compact</td></tr>
+      <tr><td class="k">DEEPINFER_YOCO_PREFILL_KEEP_TOKENS</td><td class="num">0</td><td>开截断时必须设，≥ W + B；V4.1 推荐 140</td></tr>
+      <tr><td class="k">DEEPINFER_BATCH_INVARIANT</td><td class="num">0</td><td>批不变推理（仅 NVIDIA）</td></tr>
+      <tr><td class="k">DEEPINFER_SAMPLER_FORCE_TOPK</td><td class="num">0</td><td>采样前先取 top-k（示例 4096）</td></tr>
+      <tr><td class="k">DEEPINFER_PREFILL_ATTEMPT_INTERVAL</td><td class="num">70</td><td>ALL 投票点间隔</td></tr>
+      <tr><td class="k">DEEPINFER_PREFILL_ANY_ATTEMPT_INTERVAL</td><td class="num">100</td><td>ANY 投票点间隔</td></tr>
+      <tr><td class="k">DEEPINFER_OVERRIDE_NUM_EXTRA_EXPERTS</td><td class="num">0</td><td>冗余专家下限，向上取整到 ep_size 的倍数</td></tr>
+      <tr><td class="k">DEEPINFER_EXPERT_REARRANGEMENT_STEP_INTERVAL</td><td class="num">0</td><td>EPLB 重排间隔，0 = 关</td></tr>
+      <tr><td class="k">DEEPINFER_CUDAGRAPH_BATCH_SIZE_INTERVAL</td><td class="num">8</td><td>decode 图的分档间隔</td></tr>
+      <tr><td class="k">DEEPINFER_NUM_STATE_SLOTS_RATIO</td><td class="num">1.2</td><td>状态槽数 = max_num_seqs × 它 + 1</td></tr>
+      <tr><td class="k">DEEPINFER_DISABLE_SYNC_GUARD</td><td class="num">0</td><td>关掉热路径同步守卫（调试用）</td></tr>
+      <tr><td class="k">DEEPINFER_PROFILE_HTTP_ENABLE</td><td class="num">0</td><td>按需 torch profiler 的 HTTP 入口</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<nav class="pager" aria-label="翻页"><a class="prev" href="parallel.html"><span>← 上一章</span>5 · 并行与算子层</a></nav>
+<footer>
+  <p>
+    源码 <a href="https://github.com/deepseek-ai/DeepInfer/tree/553741557a57df44a46fb3ab72b6aafeaf945337">deepseek-ai/DeepInfer@5537415</a>（2026-10-25）·
+    文中 <code>文件:行号</code> 均指这一提交 · 运行时数字来自仓库自带的 <code>doc/</code> 与 <code>examples/</code>，没有在本地复跑 ·
+    仓库 <a href="https://github.com/PerryZhang01/LLM">PerryZhang01/LLM</a>
+  </p>
+</footer>
+</div>
+</body>
+</html>

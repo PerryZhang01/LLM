@@ -1,0 +1,514 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DeepInfer · 并行与算子层</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
+<style>
+:root{
+  --bg:#E8EBEA; --surface:#F6F8F7; --surface-2:#DDE3E2; --sunk:#D3DAD9;
+  --ink:#141A1C; --ink-2:#4B5A5C; --ink-3:#75858880;
+  --line:#C3CDCC; --line-soft:#D4DCDB;
+  --amber:#8A5D0C; --amber-mark:#C79433; --amber-bg:#EFE2C2;
+  --petrol:#1D5A74; --petrol-mark:#3D87A6; --petrol-bg:#D3E3EA;
+  --brick:#8E3629; --brick-bg:#F0DAD5;
+  --moss:#3F6034; --moss-mark:#6E9A5C; --moss-bg:#DDE8D6;
+  --mute-mark:#9FADAF;
+  --c1:#1F7AB0; --c2:#B5700F;
+  --shadow:0 1px 2px rgba(20,26,28,.06), 0 8px 24px -14px rgba(20,26,28,.24);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0D1315; --surface:#141C1E; --surface-2:#1C2629; --sunk:#101819;
+    --ink:#E3EAE9; --ink-2:#94A4A6; --ink-3:#6E7E8080;
+    --line:#283437; --line-soft:#1F2B2E;
+    --amber:#E0AB53; --amber-mark:#D69B36; --amber-bg:#3B2E13;
+    --petrol:#6FB6D5; --petrol-mark:#4C93B4; --petrol-bg:#12303D;
+    --brick:#E58472; --brick-bg:#3A1D18;
+    --moss:#A8CE96; --moss-mark:#7FAE6B; --moss-bg:#22301B;
+    --mute-mark:#3C4A4D;
+    --c1:#3A90C8; --c2:#BF7E22;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 30px -18px rgba(0,0,0,.8);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0D1315; --surface:#141C1E; --surface-2:#1C2629; --sunk:#101819;
+  --ink:#E3EAE9; --ink-2:#94A4A6; --ink-3:#6E7E8080;
+  --line:#283437; --line-soft:#1F2B2E;
+  --amber:#E0AB53; --amber-mark:#D69B36; --amber-bg:#3B2E13;
+  --petrol:#6FB6D5; --petrol-mark:#4C93B4; --petrol-bg:#12303D;
+  --brick:#E58472; --brick-bg:#3A1D18;
+  --moss:#A8CE96; --moss-mark:#7FAE6B; --moss-bg:#22301B;
+  --mute-mark:#3C4A4D;
+  --c1:#3A90C8; --c2:#BF7E22;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 30px -18px rgba(0,0,0,.8);
+}
+*{box-sizing:border-box}
+body{margin:0; background:var(--bg); color:var(--ink);
+  font-family:"Source Serif 4", "Songti SC", "Noto Serif CJK SC", "Source Han Serif SC", Georgia, serif;
+  font-size:16.5px; line-height:1.72; -webkit-font-smoothing:antialiased}
+.wrap{max-width:1140px; margin:0 auto; padding:0 28px 96px}
+h1,h2,h3,.eyebrow,.stat-n,.lgd,.tag,th,.chapnav,.pager{font-family:Archivo, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif}
+h1{font-size:clamp(2.2rem,5.2vw,3.6rem); line-height:1.04; letter-spacing:-.028em; font-weight:700; margin:0; text-wrap:balance}
+h2{font-size:clamp(1.3rem,2.5vw,1.68rem); line-height:1.22; letter-spacing:-.014em; font-weight:600; margin:0 0 .3em; text-wrap:balance}
+h3{font-size:1.0rem; letter-spacing:.005em; font-weight:600; margin:0 0 .35em}
+p{margin:0 0 1em; max-width:72ch}
+a{color:var(--petrol)}
+code,.mono{font-family:"IBM Plex Mono", ui-monospace, monospace; font-size:.855em; font-variant-ligatures:none}
+:not(pre) > code{background:var(--surface-2); padding:.1em .38em; border-radius:3px; color:var(--ink); overflow-wrap:anywhere}
+.eyebrow{font-size:.66rem; font-weight:600; letter-spacing:.16em; text-transform:uppercase; color:var(--ink-2); margin:0 0 .55em}
+.lede{font-size:1.1rem; color:var(--ink-2); max-width:70ch}
+.note{font-size:.9rem; color:var(--ink-2)}
+header.mast{border-bottom:1px solid var(--line); margin-bottom:52px; padding:24px 0 34px}
+.mast-id{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:22px}
+.tag{font-size:.68rem; font-weight:600; letter-spacing:.09em; text-transform:uppercase; padding:.32em .7em; border:1px solid var(--line); border-radius:2px; color:var(--ink-2); background:var(--surface)}
+.tag.hot{border-color:var(--amber); color:var(--amber); background:var(--amber-bg)}
+.mast p.lede{margin-top:18px}
+.stats{display:grid; grid-template-columns:repeat(auto-fit,minmax(128px,1fr)); gap:1px; background:var(--line-soft); border:1px solid var(--line-soft); margin-top:34px}
+.stat{background:var(--surface); padding:14px 16px 16px}
+.stat-n{display:block; font-size:1.45rem; font-weight:700; letter-spacing:-.02em; font-variant-numeric:tabular-nums; line-height:1.15}
+.stat-l{display:block; font-size:.74rem; color:var(--ink-2); letter-spacing:.02em; margin-top:3px; font-family:"IBM Plex Mono", monospace}
+section{margin:0 0 68px; scroll-margin-top:20px}
+.rule{border:0; border-top:1px solid var(--line); margin:0 0 34px}
+figure{margin:26px 0 0; background:var(--surface); border:1px solid var(--line); padding:24px 22px 16px; box-shadow:var(--shadow); overflow-x:auto}
+figure svg{max-width:100%; height:auto; display:block; margin:0 auto; color:var(--ink-2); font-family:"IBM Plex Mono", ui-monospace, monospace; font-size:10.5px}
+figure svg text{fill:var(--ink)}
+figure .fignum{font-family:Archivo,sans-serif; font-size:.66rem; font-weight:600; letter-spacing:.16em; text-transform:uppercase; color:var(--ink-2); margin:0 0 14px}
+figcaption{font-size:.86rem; color:var(--ink-2); margin-top:16px; padding-top:12px; border-top:1px solid var(--line-soft); max-width:80ch}
+figcaption strong{color:var(--ink)}
+.svg-min{min-width:760px}
+figure svg.chart{max-width:760px}
+.tscroll{overflow-x:auto; margin-top:22px; border:1px solid var(--line); background:var(--surface); box-shadow:var(--shadow)}
+table{border-collapse:collapse; width:100%; min-width:640px; font-size:.9rem}
+th{text-align:left; font-size:.68rem; letter-spacing:.11em; text-transform:uppercase; font-weight:600; color:var(--ink-2); padding:11px 16px; background:var(--surface-2); border-bottom:1px solid var(--line); white-space:nowrap}
+td{padding:10px 16px; border-bottom:1px solid var(--line-soft); vertical-align:top; line-height:1.55}
+tbody tr:last-child td{border-bottom:0}
+td.num{font-family:"IBM Plex Mono",monospace; font-variant-numeric:tabular-nums; white-space:nowrap}
+td.k{font-family:"IBM Plex Mono",monospace; font-size:.8rem}
+.hl{color:var(--amber); font-weight:600}
+.dim{color:var(--ink-2)}
+.pos{color:var(--moss); font-weight:600}
+.neg{color:var(--brick); font-weight:600}
+.grid2{display:grid; grid-template-columns:repeat(auto-fit,minmax(310px,1fr)); gap:18px; margin-top:24px}
+.grid3{display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:16px; margin-top:24px}
+.card{background:var(--surface); border:1px solid var(--line); padding:18px 20px 16px; box-shadow:var(--shadow)}
+.card h3{color:var(--ink)}
+.card p:last-child{margin-bottom:0}
+.card.warn{border-left:3px solid var(--brick)}
+.card.good{border-left:3px solid var(--petrol)}
+.card.key{border-left:3px solid var(--amber-mark)}
+.card.moss{border-left:3px solid var(--moss-mark)}
+.card .eyebrow{margin-bottom:.4em}
+a.card{display:block; text-decoration:none; color:inherit; transition:transform .12s ease, border-color .12s ease}
+a.card:hover{transform:translateY(-2px); border-color:var(--amber-mark)}
+a.card .go{font-family:"IBM Plex Mono",monospace; font-size:.76rem; color:var(--amber); font-weight:600}
+ul.tight,ol.tight{margin:0; padding-left:1.25em}
+ul.tight li,ol.tight li{margin-bottom:.42em}
+ul.tight li:last-child,ol.tight li:last-child{margin-bottom:0}
+.pathline{font-family:"IBM Plex Mono",monospace; font-size:.76rem; color:var(--ink-2); background:var(--sunk); padding:5px 9px; display:inline-block; margin-top:10px; border-radius:2px; word-break:break-all}
+.callout{background:var(--amber-bg); border:1px solid var(--amber-mark); padding:16px 20px; margin-top:24px}
+.callout .eyebrow{color:var(--amber)}
+.callout p:last-child{margin-bottom:0}
+.callout.p{background:var(--petrol-bg); border-color:var(--petrol-mark)}
+.callout.p .eyebrow{color:var(--petrol)}
+pre.code{background:var(--sunk); border:1px solid var(--line-soft); padding:14px 16px; overflow-x:auto; font-family:"IBM Plex Mono",monospace; font-size:.78rem; line-height:1.6; margin:20px 0 0; color:var(--ink)}
+pre.code .c{color:var(--ink-2)}
+pre.code .h{color:var(--amber); font-weight:600}
+footer{border-top:1px solid var(--line); padding-top:22px; color:var(--ink-2); font-size:.85rem}
+.backnav{padding:22px 0 0; font-family:Archivo,"PingFang SC",system-ui,sans-serif; font-size:.8rem}
+.backnav a{color:var(--ink-2); text-decoration:none}
+.backnav a:hover{color:var(--amber)}
+.chapnav{display:flex; flex-wrap:wrap; gap:6px; margin:14px 0 0; font-size:.74rem}
+.chapnav a{padding:.36em .8em; border:1px solid var(--line); background:var(--surface); color:var(--ink-2); text-decoration:none; border-radius:2px; white-space:nowrap}
+.chapnav a:hover{border-color:var(--amber-mark); color:var(--ink)}
+.chapnav a.on{border-color:var(--amber); color:var(--amber); background:var(--amber-bg); font-weight:600}
+.pager{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin:12px 0 40px}
+.pager a{display:block; text-decoration:none; color:var(--ink); background:var(--surface); border:1px solid var(--line); padding:14px 18px; box-shadow:var(--shadow)}
+.pager a:hover{border-color:var(--amber-mark)}
+.pager a span{display:block; font-size:.66rem; letter-spacing:.14em; text-transform:uppercase; color:var(--ink-2)}
+.pager a.next{text-align:right; grid-column:2}
+/* svg 语义类 */
+.sv-band{fill:var(--surface-2)}
+.sv-box{fill:var(--surface); stroke:var(--line); stroke-width:1.2}
+.sv-a{fill:var(--amber-bg); stroke:var(--amber-mark); stroke-width:1.3}
+.sv-p{fill:var(--petrol-bg); stroke:var(--petrol-mark); stroke-width:1.3}
+.sv-m{fill:var(--moss-bg); stroke:var(--moss-mark); stroke-width:1.3}
+.sv-r{fill:var(--brick-bg); stroke:var(--brick); stroke-width:1.3}
+.sv-sunk{fill:var(--sunk); stroke:var(--line); stroke-width:1}
+.sv-dash{fill:none; stroke:var(--ink-2); stroke-width:1.1; stroke-dasharray:5 4}
+.sv-hatch{fill:url(#hatch); stroke:var(--line); stroke-width:1}
+.sv-ln{stroke:var(--ink-2); stroke-width:1.3; fill:none}
+.sv-ln-d{stroke:var(--ink-2); stroke-width:1.2; fill:none; stroke-dasharray:4 3}
+.sv-ln-a{stroke:var(--amber-mark); stroke-width:1.6; fill:none}
+.sv-ln-p{stroke:var(--petrol-mark); stroke-width:1.6; fill:none}
+.sv-grid{stroke:var(--line-soft); stroke-width:1}
+.sv-axis{stroke:var(--ink-2); stroke-width:1}
+figure svg text.n{font-size:11.5px; font-weight:600}
+figure svg text.s{fill:var(--ink-2); font-size:9.5px}
+figure svg text.xs{fill:var(--ink-2); font-size:9px}
+figure svg text.h{font-family:Archivo,"PingFang SC",system-ui,sans-serif; font-size:12px; font-weight:600}
+figure svg text.am{fill:var(--amber)}
+figure svg text.pe{fill:var(--petrol)}
+.mk{fill:var(--ink-2)} .mka{fill:var(--amber-mark)} .mkp{fill:var(--petrol-mark)}
+.hatch-l{stroke:var(--line); stroke-width:2}
+.c1l{stroke:var(--c1); stroke-width:2; fill:none} .c2l{stroke:var(--c2); stroke-width:2; fill:none}
+.c1d{fill:var(--c1); stroke:var(--surface); stroke-width:2} .c2d{fill:var(--c2); stroke:var(--surface); stroke-width:2}
+.hit{fill:transparent; cursor:default}
+.hit:hover + .c1d, .hit:hover + .c2d{stroke:var(--ink)}
+@media (max-width:640px){ .wrap{padding:0 16px 64px} .pager{grid-template-columns:1fr} .pager a.next{grid-column:1} }
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+:focus-visible{outline:2px solid var(--petrol); outline-offset:2px}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
+<marker id="ar" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path class="mk" d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z"/></marker>
+<marker id="ara" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path class="mka" d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z"/></marker>
+<marker id="arp" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path class="mkp" d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z"/></marker>
+<pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line class="hatch-l" x1="0" y1="0" x2="0" y2="6"/></pattern>
+</defs></svg>
+<div class="wrap">
+<nav class="backnav"><a href="../../index.html">← LLM 模型结构手册</a></nav>
+<nav class="chapnav" aria-label="章节"><a href="index.html">1 · 总览</a><a href="scheduling.html">2 · 调度与执行</a><a href="memory.html">3 · KV 缓存与有界重放</a><a href="speculative.html">4 · 投机解码与采样</a><a href="parallel.html" class="on">5 · 并行与算子层</a><a href="summary.html">6 · 性能与优势</a></nav>
+<header class="mast">
+  <div class="mast-id">
+    <span class="tag">第 5 章</span>
+    <span class="tag hot">Attention DP</span>
+    <span class="tag hot">Wide-EP</span>
+    <span class="tag">镜像 CP</span>
+    <span class="tag">EPLB</span>
+    <span class="tag">NVIDIA / Ascend</span>
+  </div>
+  <h1>并行与算子层</h1>
+  <p class="lede">
+    DeepInfer 只用三种并行：attention 和稠密层走 DP，路由专家走 EP，长 prompt 的 prefill 可选 CP。
+    没有 TP。MoE 在 NVLink 域内是一个融合到底的 mega 内核，跨域才走 DeepEP。
+    跨平台靠一个 30 行的分发文件：同一套 Python 接口，后端在 <code>cuda/</code> 和 <code>asc/</code> 之间切。
+  </p>
+  <div class="stats">
+    <div class="stat"><span class="stat-n">0</span><span class="stat-l">TP 组</span></div>
+    <div class="stat"><span class="stat-n">EP64–128</span><span class="stat-l">生产 decode（Wide-EP）</span></div>
+    <div class="stat"><span class="stat-n">EP2–8</span><span class="stat-l">生产 prefill</span></div>
+    <div class="stat"><span class="stat-n">1.045–1.09</span><span class="stat-l">EPLB 后 moe_lb（最慢 / 平均）</span></div>
+    <div class="stat"><span class="stat-n">43 / 42</span><span class="stat-l">TileLang 内核：cuda / asc</span></div>
+  </div>
+</header>
+
+<section id="groups">
+  <p class="eyebrow">进程组</p>
+  <h2>没有 TP，DP 数缺省等于 EP 数</h2>
+  <p>
+    <code>ParallelConfig</code> 里 <code>data_parallel_size</code> 缺省取 <code>ep // cp</code>，<code>model_parallel_size = cp</code>，
+    <code>world = max(dp × cp, engram_parallel)</code>（<code>config.py:150-182</code>）。
+    所有稠密投影都是 <code>ReplicatedLinear</code>，embedding 与 lm_head 也是整份复制；只有路由专家按 EP 切，Engram 表按 Engram 并行组切行。
+  </p>
+  <div class="tscroll">
+  <table>
+    <thead><tr><th>组</th><th>成员</th><th>用途</th></tr></thead>
+    <tbody>
+      <tr><td class="k">dp</td><td>各引擎里 cp_rank 相同的 rank</td><td>投票决定步型；另有 gloo CPU 孪生组</td></tr>
+      <tr><td class="k">cp</td><td>连续 cp_size 个 rank</td><td>镜像 CP 的 all-gather、调度结果广播；另有 gloo 孪生组和 shm 消息队列</td></tr>
+      <tr><td class="k">ep</td><td>连续 ep_size 个 rank（ep = world 时就是全体）</td><td>MoE dispatch / combine、EPLB 统计与搬运</td></tr>
+      <tr><td class="k">enp</td><td>Engram 并行组</td><td>Engram 表按行分片，经 DeepEP <code>EngramBuffer</code> 读</td></tr>
+      <tr><td class="k">ep_in_dp</td><td>—</td><td>EP 内的辅助组（另有 gloo 版）</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="note" style="margin-top:12px">
+    NCCL 通信器按需惰性创建，<code>init_device_groups()</code> 用一次 dummy all-reduce 强制建好。worker 启动时设
+    <code>NCCL_CUMEM_ENABLE=1</code>、<code>NCCL_PXN_DISABLE=1</code>（注释：为专家重排），删掉 <code>NCCL_NVLS_ENABLE</code>，NCCL 的 CTA 数钉在 32（<code>DEEPINFER_NCCL_NUM_SMS</code>）。
+  </p>
+  <div class="tscroll">
+  <table>
+    <thead><tr><th>部署文档里的形状</th><th>并行</th><th>取值原则</th></tr></thead>
+    <tbody>
+      <tr><td>Prefill</td><td class="num">EP2–8 / DP2–8</td><td>显存允许的最小值，跑在普通 8 卡机上</td></tr>
+      <tr><td>Decode</td><td class="num hl">EP64–128 / DP64–128</td><td>卡允许的最大值（Wide-EP）：降低每步 MoE 的访存量，配合 EPLB 提高 TPS</td></tr>
+      <tr><td>VE（视觉编码）</td><td class="num">单卡 / 实例</td><td>推荐用便宜的卡</td></tr>
+      <tr><td>TP · CP</td><td class="num">不用</td><td>「暂不使用」</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="note" style="margin-top:12px">
+    P 与 D 的卡数比实践中约 1:1。decode 推荐 EP64 以上，所以最小的高效部署单元是 64 卡 prefill + 64 卡 decode。
+  </p>
+</section>
+
+<section id="cp">
+  <hr class="rule">
+  <p class="eyebrow">关键 feature · 镜像 CP</p>
+  <h2>只给 prefill 用的 zigzag 切分</h2>
+  <p>
+    每条序列切成 <code>2·cp</code> 段，每段 <code>ps = ⌈sq / 2cp⌉</code> 个 token。rank r 拿第 r 段和第 2cp−1−r 段，
+    参考实现 <code>prepare_cp_mirror_ref</code> 的 docstring 写的就是「directly expands the zigzag definition」。
+    调度器把分块长度对齐到 <code>2·cp</code>，正是为了这个切法。
+  </p>
+  <figure>
+    <p class="fignum">图 7 · cp = 4 时的镜像切分</p>
+    <svg class="svg-min" viewBox="0 0 1060 206" role="img" aria-label="一条序列切成 8 段，rank r 拿第 r 段和第 7−r 段">
+      <text class="h" x="16" y="62">一条序列</text><text class="s" x="16" y="78">切成 2·cp = 8 段</text>
+      <g text-anchor="middle">
+        <rect class="sv-a" x="140" y="40" width="108" height="40" rx="2"/><text class="n" x="194" y="58">段 0</text><text class="xs" x="194" y="73">rank 0</text>
+        <rect class="sv-p" x="250" y="40" width="108" height="40" rx="2"/><text class="n" x="304" y="58">段 1</text><text class="xs" x="304" y="73">rank 1</text>
+        <rect class="sv-m" x="360" y="40" width="108" height="40" rx="2"/><text class="n" x="414" y="58">段 2</text><text class="xs" x="414" y="73">rank 2</text>
+        <rect class="sv-r" x="470" y="40" width="108" height="40" rx="2"/><text class="n" x="524" y="58">段 3</text><text class="xs" x="524" y="73">rank 3</text>
+        <rect class="sv-r" x="580" y="40" width="108" height="40" rx="2"/><text class="n" x="634" y="58">段 4</text><text class="xs" x="634" y="73">rank 3</text>
+        <rect class="sv-m" x="690" y="40" width="108" height="40" rx="2"/><text class="n" x="744" y="58">段 5</text><text class="xs" x="744" y="73">rank 2</text>
+        <rect class="sv-p" x="800" y="40" width="108" height="40" rx="2"/><text class="n" x="854" y="58">段 6</text><text class="xs" x="854" y="73">rank 1</text>
+        <rect class="sv-a" x="910" y="40" width="108" height="40" rx="2"/><text class="n" x="964" y="58">段 7</text><text class="xs" x="964" y="73">rank 0</text>
+
+        <rect class="sv-a" x="140" y="110" width="100" height="40" rx="2"/><text class="n" x="190" y="135">段 0</text>
+        <rect class="sv-a" x="244" y="110" width="100" height="40" rx="2"/><text class="n" x="294" y="135">段 7</text>
+        <text class="s" x="242" y="168">rank 0</text>
+        <rect class="sv-p" x="362" y="110" width="100" height="40" rx="2"/><text class="n" x="412" y="135">段 1</text>
+        <rect class="sv-p" x="466" y="110" width="100" height="40" rx="2"/><text class="n" x="516" y="135">段 6</text>
+        <text class="s" x="464" y="168">rank 1</text>
+        <rect class="sv-m" x="584" y="110" width="100" height="40" rx="2"/><text class="n" x="634" y="135">段 2</text>
+        <rect class="sv-m" x="688" y="110" width="100" height="40" rx="2"/><text class="n" x="738" y="135">段 5</text>
+        <text class="s" x="686" y="168">rank 2</text>
+        <rect class="sv-r" x="806" y="110" width="100" height="40" rx="2"/><text class="n" x="856" y="135">段 3</text>
+        <rect class="sv-r" x="910" y="110" width="100" height="40" rx="2"/><text class="n" x="960" y="135">段 4</text>
+        <text class="s" x="908" y="168">rank 3</text>
+      </g>
+      <text class="h" x="16" y="132">每个 rank</text><text class="s" x="16" y="148">首尾配对两段</text>
+      <text class="s" x="140" y="196">因果注意力里越靠后的段越贵；首尾配对后每个 rank 的计算量相等。索引由 prepare_cp_mirror_tl 在 GPU 上算</text>
+    </svg>
+    <figcaption>
+      每一层里，新的 SWA KV、压缩主 K 和投影后的 KV 经 <code>userbuffer.cp</code>（DeepEP V2 的 <code>BucketBuffer</code>）<strong>all-gather</strong>，
+      再用 <code>mirror_cp_reverse_index</code> 还原顺序（<code>attn.py:411-450</code>）。各 rank 只为自己的 query 行算 attention，对着完整的 KV。
+      最后 hidden 再 all-gather 一次并还原，只有 CP rank 0 做采样。decode 不切 CP：解码 SWA 路径里有 <code>assert not use_cp</code>，COMPLETION 引擎禁止 CP&gt;1。
+    </figcaption>
+  </figure>
+</section>
+
+<section id="moe">
+  <hr class="rule">
+  <p class="eyebrow">关键 feature · MoE</p>
+  <h2>NVLink 域内一个 mega 内核，跨域走 DeepEP</h2>
+  <p>
+    路由打分是 <code>sqrtsoftplus</code>，top-k 方法 <code>noaux_tc</code> 带 <code>e_score_correction_bias</code>，图像 token 另有一份 <code>bias_vl</code>。
+    GPU 上 gate 是融合的 <code>deep_gemm.bf16_mega_gate</code>，EPLB 的逻辑到物理专家映射和专家计数都在里面。
+    格式固定：激活 FP8 e4m3，每 32 个一个 ue8m0 scale；路由专家权重 MXFP4（<code>mma_type = fp8xfp4</code>）；shared expert 是一个 FP8 MLP。
+  </p>
+  <figure>
+    <p class="fignum">图 8 · MoE 的两条执行路径与 EPLB</p>
+    <svg class="svg-min" viewBox="0 0 1060 300" role="img" aria-label="路径 A mega MoE 一个内核；路径 B DeepEP 五步；EPLB 统计、策略、搬运">
+      <text class="h" x="16" y="58">路径 A · mega MoE</text><text class="s" x="16" y="74">EP 组在 NVLink 域内</text>
+      <text class="h" x="16" y="158">路径 B · DeepEP</text><text class="s" x="16" y="174">跨 NVLink 域时</text>
+      <text class="h" x="16" y="266">EPLB</text><text class="s" x="16" y="282">默认关，示例每 30 步</text>
+      <g text-anchor="middle">
+        <rect class="sv-box" x="200" y="36" width="230" height="50" rx="2"/><text class="n" x="315" y="57">deep_gemm.mega_mhc</text><text class="s" x="315" y="74">mHC 混合 + RMSNorm + FP8 量化</text>
+        <rect class="sv-a" x="470" y="36" width="380" height="50" rx="2"/><text class="n" x="660" y="57">deep_gemm.fp8_fp4_mega_moe</text><text class="s" x="660" y="74">dispatch + GEMM1 + SwiGLU + GEMM2 + combine，含 shared expert</text>
+        <rect class="sv-box" x="890" y="36" width="150" height="50" rx="2"/><text class="n" x="965" y="57">输出 [T, H]</text><text class="s" x="965" y="74">回到 mHC 残差</text>
+        <text class="xs" x="450" y="104">FP8 激活与 scale 直接写进 SymmBuffer</text>
+
+        <rect class="sv-box" x="200" y="136" width="150" height="50" rx="2"/><text class="n" x="275" y="157">EPBuffer.dispatch</text><text class="s" x="275" y="174">FP8，按专家展开</text>
+        <rect class="sv-a" x="370" y="136" width="150" height="50" rx="2"/><text class="n" x="445" y="157">分组 GEMM</text><text class="s" x="445" y="174">FP8 × MXFP4</text>
+        <rect class="sv-box" x="540" y="136" width="150" height="50" rx="2"/><text class="n" x="615" y="157">SwiGLU + 量化</text><text class="s" x="615" y="174">顺带乘 top-k 权重</text>
+        <rect class="sv-a" x="710" y="136" width="150" height="50" rx="2"/><text class="n" x="785" y="157">分组 GEMM</text><text class="s" x="785" y="174">FP8 × MXFP4</text>
+        <rect class="sv-box" x="880" y="136" width="160" height="50" rx="2"/><text class="n" x="960" y="157">EPBuffer.combine</text><text class="s" x="960" y="174">bias = shared 输出</text>
+        <rect class="sv-dash" x="540" y="198" width="500" height="30" rx="2"/><text class="s" x="790" y="217">shared expert 用 limit_num_sms 与 combine 通信重叠，结果作为 bias 加回</text>
+
+        <rect class="sv-p" x="200" y="244" width="266" height="44" rx="2"/><text class="n" x="333" y="263">统计</text><text class="s" x="333" y="279">物理专家计数 · 滑窗 100 步</text>
+        <rect class="sv-p" x="486" y="244" width="266" height="44" rx="2"/><text class="n" x="619" y="263">策略（GPU 上算）</text><text class="s" x="619" y="279">贪心分冗余槽 + 按负载放置</text>
+        <rect class="sv-p" x="772" y="244" width="266" height="44" rx="2"/><text class="n" x="905" y="263">搬运</text><text class="s" x="905" y="279">NVLink 内 symm_mem 拉取 / NCCL P2P</text>
+      </g>
+      <line class="sv-ln" x1="430" y1="61" x2="466" y2="61" marker-end="url(#ar)"/>
+      <line class="sv-ln" x1="850" y1="61" x2="886" y2="61" marker-end="url(#ar)"/>
+      <line class="sv-ln" x1="350" y1="161" x2="366" y2="161" marker-end="url(#ar)"/>
+      <line class="sv-ln" x1="520" y1="161" x2="536" y2="161" marker-end="url(#ar)"/>
+      <line class="sv-ln" x1="690" y1="161" x2="706" y2="161" marker-end="url(#ar)"/>
+      <line class="sv-ln" x1="860" y1="161" x2="876" y2="161" marker-end="url(#ar)"/>
+      <line class="sv-ln" x1="466" y1="266" x2="482" y2="266" marker-end="url(#ar)"/>
+      <line class="sv-ln" x1="752" y1="266" x2="768" y2="266" marker-end="url(#ar)"/>
+    </svg>
+    <figcaption>
+      路径选择（<code>mlp.py:184-188</code>）：<code>(PLATFORM.is_gpu or mma_type == "fp8xfp4") and PG.is_within_nvl_domain(ep_group)</code>。
+      mega_mhc 的输出指针与 MoE 的 SymmBuffer 有约定，<code>mlp.py:543</code> 用断言检查；有 Engram 钩子要插在 post 与 pre 之间时不走 mega_mhc。
+      部署文档的说法：「Mega MoE 是 scale-up 域内的通解：不论 EP 大小或 batch 大小，都显著快于非融合 MoE。」
+    </figcaption>
+  </figure>
+  <div class="grid2">
+    <div class="card">
+      <p class="eyebrow">DeepEP 路径的细节</p>
+      <ul class="tight">
+        <li>一个 <code>EPBuffer</code>，按 <code>is_prompt</code> 切换每 rank 最大 token 数，代码里没有分 normal / low-latency 两种模式</li>
+        <li>标志：<code>allow_hybrid_mode</code>、<code>do_expand</code>、<code>async_with_compute_stream</code>、<code>defer_epilogue</code></li>
+        <li><code>do_cpu_sync</code> 只在 prefill 用，YOCO compact 模式下也关掉</li>
+        <li>通信 SM 数 <code>DEEPINFER_USERBUFFER_COMM_SMS</code> 默认 0 = 自动：<code>min(理论值, SM 数 − min(32, SM 数 / 4))</code></li>
+      </ul>
+    </div>
+    <div class="card">
+      <p class="eyebrow">userbuffer 是什么</p>
+      <p>
+        <code>_UserBufferManager</code> 是进程级的通信缓冲持有者：DeepEP 的 <code>EPBuffer</code>（MoE）、<code>BucketBuffer</code>（CP all-gather）、
+        <code>EngramBuffer</code>（RDMA 上的 Engram 表），以及 DeepGEMM 的 <code>SymmBuffer</code>（第一个规格必须最大，后面的都是它的视图）。
+        它不是 all-reduce 或 NVLS 机制。<code>nccl_memory.py</code> 只是每 1000 步打一次各通信器的显存占用。
+      </p>
+    </div>
+  </div>
+</section>
+
+<section id="eplb">
+  <hr class="rule">
+  <p class="eyebrow">关键 feature · EPLB</p>
+  <h2>冗余专家、滑窗统计、在 NVLink 内直接拉权重</h2>
+  <div class="grid3">
+    <div class="card">
+      <p class="eyebrow">冗余槽</p>
+      <p><code>DEEPINFER_OVERRIDE_NUM_EXTRA_EXPERTS</code> 是下限，引擎把 <code>routed + extra</code> 向上取整到 <code>ep_size</code> 的倍数。初始布局是 <code>[0..n−1, i % n]</code>，权重加载器按同一映射只读本 rank 的专家。</p>
+    </div>
+    <div class="card">
+      <p class="eyebrow">策略</p>
+      <p>先 EP 内 all-reduce 逻辑专家计数，然后在 GPU 上做两步贪心：把每个冗余槽给「使窗口内各步最大副本负载之和最小」的逻辑专家；再按负载降序放置副本，每个副本放到「使各步最大 rank 负载之和最小」的 rank 上，受每 rank 容量约束。同布局的 MoE 层共用一个均衡器，所以主模型和 DFlash 的 MoE 分开均衡。</p>
+    </div>
+    <div class="card">
+      <p class="eyebrow">搬运</p>
+      <p>NVLink 域内（仅 GPU）：每层一块 torch <code>symm_mem</code> 镜像缓冲，barrier → 把自己的权重拷进镜像 → barrier → 直接从对端镜像拉缺的专家。域外：NCCL <code>batch_isend_irecv</code>。两种都在采样阶段同步执行，在 CUDA 图之外。</p>
+    </div>
+  </div>
+  <div class="tscroll">
+  <table>
+    <thead><tr><th></th><th>开源默认</th><th>examples</th><th>生产 prefill（文档）</th><th>生产 decode（文档）</th></tr></thead>
+    <tbody>
+      <tr><td>冗余专家</td><td class="num">0</td><td class="num">≥ 32（向上取整）</td><td class="num">每卡 4 起</td><td class="num">每卡 1 起（EP64 取整后每卡 7 个）</td></tr>
+      <tr><td>统计窗口</td><td class="num">100 步</td><td class="num">3 步</td><td class="num">100 步</td><td class="num">1,000 步</td></tr>
+      <tr><td>重排间隔</td><td class="num">0（关）</td><td class="num">30 步</td><td class="num">1,000 步</td><td class="num">10,000 步</td></tr>
+      <tr><td>moe_lb（最慢 rank / 平均）</td><td class="dim">—</td><td class="dim">—</td><td class="num">1.074（EP4DP4）/ 1.045（EP2DP2）</td><td class="num">1.090</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="note" style="margin-top:12px">
+    NORMAL 引擎默认在 prefill 步之后不重排，要设 <code>DEEPINFER_REARRANGE_AFTER_PREFILL_IN_NORMAL_ENGINE=1</code>（examples 打开），这时会在下一个 decode 步重排。
+    第一次重排发生在间隔的四分之一处。
+  </p>
+</section>
+
+<section id="platform">
+  <hr class="rule">
+  <p class="eyebrow">关键 feature · 双平台</p>
+  <h2>后端选择只发生在一个文件里</h2>
+  <p>
+    <code>deep_cluster.hardware.accelerator_kind()</code> 看设备节点：有 <code>/dev/davinci_manager</code> 就是 Ascend，有 NVIDIA 设备节点就是 NVIDIA。
+    <code>deepinfer.PLATFORM</code> 惰性创建，决定通信后端、TileLang 后端和一堆小差异。
+    所有 TileLang 内核都经过 <code>ops.py</code> 取得：
+  </p>
+  <pre class="code"><span class="c"># deepinfer/model_executor/layers/tilelang_ops/ops.py（全文 32 行，节选）</span>
+<span class="c">"""Kernel dispatcher: interface modules do ``from ... import ops`` and call
+``ops.xxx_tl``; backend selection happens only in this file."""</span>
+_pkg = importlib.import_module(f"{__package__}.{PLATFORM.tilelang_ops_backend}")   <span class="c"># "cuda" | "asc"</span>
+for _info in pkgutil.iter_modules(_pkg.__path__):
+    _mod = importlib.import_module(f"{_pkg.__name__}.{_info.name}")
+    for _name, _obj in vars(_mod).items():
+        if _name.startswith("_") or isinstance(_obj, ModuleType) or not _name.endswith("_tl"):
+            continue
+        assert globals().get(_name, _obj) is _obj, f"backend symbol collision: {_name}"
+        globals()[_name] = _obj
+
+class KernelUnavailableError(AttributeError): ...   <span class="c"># conftest：非 cuda 后端缺内核 → 跳过测试；cuda 上缺 → 必然是拼写错误，报错</span></pre>
+  <div class="tscroll">
+  <table>
+    <thead><tr><th></th><th>PlatformGPU（NVIDIA SM100）</th><th>PlatformNPU（Ascend 950）</th></tr></thead>
+    <tbody>
+      <tr><td>TileLang 后端 / 通信</td><td><code>cuda</code> · nccl</td><td><code>asc</code> · hccl</td></tr>
+      <tr><td>torch 接入</td><td>原生</td><td><code>torch_npu</code> + <code>transfer_to_npu</code>，把 <code>torch.cuda.*</code> 映射到 NPU</td></tr>
+      <tr><td>厂商库</td><td>FlashMLA · DeepGEMM · DeepEP · DeepSelect</td><td>FlashMLA · DeepGEMM-Ascend · DeepEP-Ascend · DeepSelect（import 名相同）</td></tr>
+      <tr><td>deep_gemm / tile_kernels</td><td>打开 PDL</td><td>总是确定性模式</td></tr>
+      <tr><td>批不变推理</td><td>支持</td><td>断言关闭</td></tr>
+      <tr><td>mega MoE</td><td>所有支持的 dtype</td><td>只有 fp8×fp4</td></tr>
+      <tr><td>EPLB 搬运</td><td>symm_mem 或 P2P</td><td>只有 P2P</td></tr>
+      <tr><td>Engram 表</td><td>默认放 CPU RDMA 内存</td><td>强制放显存</td></tr>
+      <tr><td>图内计时 / FP8_FLOAT32_SF 索引格式</td><td>有</td><td>暂无</td></tr>
+      <tr><td>临时补丁（TODO(NPU)）</td><td>—</td><td><code>npu_ops</code> 打 import 补丁：ViT attention 换成 <code>npu_fusion_attention</code>，采样器的 top-k 退回 <code>torch.topk</code></td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="grid2">
+    <div class="card">
+      <p class="eyebrow">构建</p>
+      <p>
+        必须先 <code>export DEEPINFER_ACCELERATOR=nvidia|ascend</code>，再 <code>./build.sh</code>：装对应 requirements（NVIDIA 还要把 NCCL 钉到 2.32.3），
+        逐个从 <code>vendor/</code> 打 wheel 并安装，最后编出唯一的原生扩展 <code>deepinfer._C</code>（子模块 <code>engine</code>、<code>cuda_utils</code>、<code>graph_timer</code>）。
+        <code>.so</code> 被软链进 <code>deepinfer/_so/&lt;accel&gt;-&lt;arch&gt;/</code>，<code>__init__.py</code> 把它加进 <code>__path__</code>，所以两个平台的构建产物能共存在一棵源码树里。
+      </p>
+    </div>
+    <div class="card">
+      <p class="eyebrow">绑核</p>
+      <p>
+        每个 worker 先按 GPU 所在 NUMA 节点绑 CPU 和内存（NVIDIA 读 sysfs，Ascend 解析 <code>npu-smi</code> 拓扑），
+        再把进程钉到连续的物理核区间 <code>[gpu_id·n, (gpu_id+1)·n)</code>。多模态预处理进程绑在同 NUMA 节点的<strong>超线程兄弟核</strong>上，避开主进程的核。
+      </p>
+    </div>
+  </div>
+</section>
+
+<section id="ops">
+  <hr class="rule">
+  <p class="eyebrow">算子清单</p>
+  <h2>43 个 TileLang 内核，大多是让数据别回 CPU 的胶水</h2>
+  <p>
+    每个算子由三部分组成：顶层文件是接口加 PyTorch 参考实现加测试，<code>cuda/</code> 和 <code>asc/</code> 各有一个返回编译后内核的 <code>*_tl</code> 工厂。
+    cuda 有 43 个，asc 有 42 个，只缺调试用的 <code>detect_outlier_and_abort_tl</code>。Ascend 另有寄存器内 BF16 KV 量化与补偿 RSQRT 两个私有辅助模块。
+  </p>
+  <div class="tscroll">
+  <table>
+    <thead><tr><th>类别</th><th>数</th><th>内核（省略 _tl 后缀）</th></tr></thead>
+    <tbody>
+      <tr><td>KV 缓存读写与索引</td><td class="num">9</td><td class="k">store_kv_cache · load_paged_kv_cache · fused_norm_rope_hadamard_cast_store_kvcache · load_kv_index · convert_kv_index · kv_index_cat · expand_swa_index · select_state_slice · load_state_to_cache</td></tr>
+      <tr><td>元数据准备（不回 CPU）</td><td class="num">9</td><td class="k">prepare_v4_decode_metadata · copy_block_tables · prepare_cp_mirror · yoco_cp_boundary_fused · compute_seqlens_k_zos · gather_input_ids_zos · gather_engram_tokens_zos · gather · map_lookup</td></tr>
+      <tr><td>投机解码</td><td class="num">10</td><td class="k">confidence_head_fused · dflash_input_store · copy_dflash_decode_input · get_fused_dflash_get_input · compute_seqlens_q_by_confidence_rates · prepare_verification_metadata · remap_draft_topk · get_accept_result · finalize_verification · store_mtp_info</td></tr>
+      <tr><td>采样</td><td class="num">5</td><td class="k">fused_sample · random_sampling · sum_smaller_probs · expand_sampling_params · apply_token_bitmask_by_step_inplace</td></tr>
+      <tr><td>压缩与稀疏选择</td><td class="num">5</td><td class="k">compress_and_update_state_prefill · compress_and_update_state_decode · candidate_block_max · get_candidate_compact_lens · restore_candidate_indices_inplace</td></tr>
+      <tr><td>多模态</td><td class="num">3</td><td class="k">rgb_pad_to_patches · batch_downsample · replace_input_embeds</td></tr>
+      <tr><td>归一化</td><td class="num">1</td><td class="k">norm（可融合残差加与 FP8 量化）</td></tr>
+      <tr><td>调试（仅 CUDA）</td><td class="num">1</td><td class="k">detect_outlier_and_abort：遇到 NaN / Inf / |x| &gt; 1e11 时异步 CUDA 断言</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="tscroll">
+  <table>
+    <thead><tr><th>厂商库</th><th>在 DeepInfer 里被谁调用</th></tr></thead>
+    <tbody>
+      <tr><td class="hl">FlashMLA</td><td>prefill 用 <code>flash_mla_sparse_fwd</code>；decode 用 <code>flash_mla_with_kvcache</code>，一次调用同时读 SWA 缓存与压缩缓存（<code>extra_k_cache</code>）；融合的 norm + RoPE + attn + 反 RoPE + FP8 cast。<strong>没有稠密 causal 内核</strong>：注释「sparse attention 只支持非 causal」，滑窗也表示成索引列表</td></tr>
+      <tr><td class="hl">DeepGEMM</td><td>稠密 FP8×FP4 GEMM、分组输出投影 <code>fp8_einsum</code>、indexer 的 <code>*_mqa_logits</code>、<code>mega_mhc</code>、<code>tf32_hc_prenorm_gemm</code>、MoE 分组 GEMM、<code>*_mega_moe</code>、<code>bf16_mega_gate</code>、<code>SymmBuffer</code></td></tr>
+      <tr><td class="hl">DeepEP</td><td><code>EPBuffer</code>（MoE）、<code>EngramBuffer</code>（Engram 表）、<code>BucketBuffer</code>（CP all-gather）</td></tr>
+      <tr><td class="hl">DeepSelect</td><td>indexer 的 top-k 与采样器的强制 top-k</td></tr>
+      <tr><td class="hl">TileKernels（pip 2.1.0）</td><td><code>mhc.*</code>、<code>engram.*</code>、per-token 量化、SwiGLU + 量化、<code>moe_topk_gate</code>、RoPE</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="note" style="margin-top:12px">
+    部署文档说开源版与内部版的 DeepGEMM / FlashMLA 基本相同，indexer 与 mega 系列略有差别。开源 FlashMLA 少一个手调的 SASS 优化，decode 内核慢 5%–10%，端到端差距 ≤ 5%。
+  </p>
+</section>
+
+<section id="model">
+  <hr class="rule">
+  <p class="eyebrow">模型侧的组织方式</p>
+  <h2>参数容器与运行时适配器分开</h2>
+  <p>
+    <code>v4_modules/__init__.py</code> 把文件分成四种角色：<b>参数容器</b>只描述 HF 名字、形状、dtype，没有 forward；
+    <b>运行时适配器</b>包住容器，把权重合并、重排成运行时布局并持有 forward，之后用 <code>untyped_storage().resize_(0)</code> 释放原件；
+    <b>无参数算子</b>；<b>由 config 推出的拓扑与组装</b>（<code>cross_layer</code>、<code>builder</code>）。整棵树先在 meta 设备上建出来，路由专家直接以打包好的 FP4 落盘格式分配。
+  </p>
+  <p>
+    投影按「输入来自哪里」合并：<code>[Wq.A | Wkv.A]</code> 一次 GEMM，<code>[Wq.B | indexer q_B]</code> 一次 GEMM，压缩门、压缩 A 与 indexer 权重一次 GEMM。
+    mHC 的 post 被延迟到下一个子层，与它的 pre 融合成一次 <code>mega_mhc</code>。
+    模型本身的结构（CSA2 四种注意力层、mHC、Engram、DSpark）见 <a href="../../models/DeepSeek/v41_flash_anatomy.html">V4.1-Flash 解剖页</a>。
+  </p>
+</section>
+
+<nav class="pager" aria-label="翻页"><a class="prev" href="speculative.html"><span>← 上一章</span>4 · 投机解码与采样</a><a class="next" href="summary.html"><span>下一章 →</span>6 · 性能与优势</a></nav>
+<footer>
+  <p>
+    源码 <a href="https://github.com/deepseek-ai/DeepInfer/tree/553741557a57df44a46fb3ab72b6aafeaf945337">deepseek-ai/DeepInfer@5537415</a>（2026-10-25）·
+    文中 <code>文件:行号</code> 均指这一提交 · 运行时数字来自仓库自带的 <code>doc/</code> 与 <code>examples/</code>，没有在本地复跑 ·
+    仓库 <a href="https://github.com/PerryZhang01/LLM">PerryZhang01/LLM</a>
+  </p>
+</footer>
+</div>
+</body>
+</html>

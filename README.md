@@ -3,8 +3,8 @@
 大模型**结构解剖**文档集。每个模型一份自包含的 HTML：完整结构图、逐模块的张量形状、
 从 checkpoint 分片头部实读的参数账，以及它在推理后端里究竟落在哪几个文件上。
 
-面向的是要动这段代码的人——不是模型卡，也不是论文摘要。当前全部文档以
-[ATOM](https://github.com/ROCm/ATOM) 为后端。
+面向的是要动这段代码的人——不是模型卡，也不是论文摘要。模型文档以
+[ATOM](https://github.com/ROCm/ATOM) 为后端；另有推理框架本身的解剖（目前是 DeepInfer）。
 
 ---
 
@@ -50,6 +50,16 @@ GLM-5.2 另有一份 Markdown 版，GitHub 可直接阅读：[`models/GLM/model.
 
 ---
 
+## 已收录的推理框架
+
+| 框架 | 源码版本 | 结构要点 | 文档 |
+|---|---|---|---|
+| **[DeepInfer](https://perryzhang01.github.io/LLM/framework/DeepInfer/index.html)** | `deepseek-ai/DeepInfer@5537415` | C++ 调度器 + 零开销异步调度；DSpark 块并行草稿与置信度调度验证；块池 + 状态槽两块裸显存，YOCO 截断让解码层只重放 140 个 token；无 TP，Attention DP + Wide-EP；NVIDIA SM100 / Ascend 950 共用一套代码 | 6 章：总览、调度与执行、KV 缓存与有界重放、投机解码与采样、并行与算子层、性能与优势 |
+
+框架文档由 [`skills/framework.md`](skills/framework.md) 驱动，按「整体结构 → 关键模块 → 关键 feature → 优势」组织，一个框架一组多页 HTML。
+
+---
+
 ## 每份文档包含什么
 
 - **完整模型结构**，每个模块标注张量形状；复杂的 attention 先画成一块
@@ -79,8 +89,17 @@ GLM-5.2 另有一份 Markdown 版，GitHub 可直接阅读：[`models/GLM/model.
 │   └── DeepSeek/
 │       ├── v4_pro_anatomy.html         # DeepSeek-V4-Pro
 │       └── v41_flash_anatomy.html      # DeepSeek-V4.1-Flash
+├── framework/
+│   └── DeepInfer/                      # DeepInfer 框架解剖，六章
+│       ├── index.html                  # 1 总览：范围、分层结构、进程拓扑、关键模块
+│       ├── scheduling.html             # 2 调度与执行：C++ 调度器、ZOS、CUDA Graph
+│       ├── memory.html                 # 3 KV 缓存与有界重放
+│       ├── speculative.html            # 4 投机解码与采样
+│       ├── parallel.html               # 5 并行与算子层
+│       └── summary.html                # 6 性能与优势
 └── skills/                             # 驱动这些文档生成的 skill
     ├── models.md                       # 模型结构解剖
+    ├── framework.md                    # 框架结构解剖
     ├── accuracy.md                     # 精度调查
     ├── atom-ops-debug.md               # 算子调试
     └── vllm_plugin_upgrade.md          # vLLM 插件升级
