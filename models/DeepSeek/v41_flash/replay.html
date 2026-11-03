@@ -1,0 +1,849 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DeepSeek-V4.1-Flash 结构解剖 · 缓存与 Bounded Replay</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
+<style>
+:root{
+  --bg:#E8EBEA; --surface:#F6F8F7; --surface-2:#DDE3E2; --sunk:#D3DAD9;
+  --ink:#141A1C; --ink-2:#4B5A5C; --ink-3:#75858880;
+  --line:#C3CDCC; --line-soft:#D4DCDB;
+  --amber:#8A5D0C; --amber-mark:#C79433; --amber-bg:#EFE2C2;
+  --petrol:#1D5A74; --petrol-mark:#3D87A6; --petrol-bg:#D3E3EA;
+  --brick:#8E3629; --brick-bg:#F0DAD5;
+  --moss:#3F6034; --moss-mark:#6E9A5C; --moss-bg:#DDE8D6;
+  --mute-mark:#9FADAF;
+  --c1:#1F7AB0; --c2:#B5700F;
+  --shadow:0 1px 2px rgba(20,26,28,.06), 0 8px 24px -14px rgba(20,26,28,.24);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0D1315; --surface:#141C1E; --surface-2:#1C2629; --sunk:#101819;
+    --ink:#E3EAE9; --ink-2:#94A4A6; --ink-3:#6E7E8080;
+    --line:#283437; --line-soft:#1F2B2E;
+    --amber:#E0AB53; --amber-mark:#D69B36; --amber-bg:#3B2E13;
+    --petrol:#6FB6D5; --petrol-mark:#4C93B4; --petrol-bg:#12303D;
+    --brick:#E58472; --brick-bg:#3A1D18;
+    --moss:#A8CE96; --moss-mark:#7FAE6B; --moss-bg:#22301B;
+    --mute-mark:#3C4A4D;
+    --c1:#3A90C8; --c2:#BF7E22;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 30px -18px rgba(0,0,0,.8);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0D1315; --surface:#141C1E; --surface-2:#1C2629; --sunk:#101819;
+  --ink:#E3EAE9; --ink-2:#94A4A6; --ink-3:#6E7E8080;
+  --line:#283437; --line-soft:#1F2B2E;
+  --amber:#E0AB53; --amber-mark:#D69B36; --amber-bg:#3B2E13;
+  --petrol:#6FB6D5; --petrol-mark:#4C93B4; --petrol-bg:#12303D;
+  --brick:#E58472; --brick-bg:#3A1D18;
+  --moss:#A8CE96; --moss-mark:#7FAE6B; --moss-bg:#22301B;
+  --mute-mark:#3C4A4D;
+  --c1:#3A90C8; --c2:#BF7E22;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 30px -18px rgba(0,0,0,.8);
+}
+*{box-sizing:border-box}
+body{margin:0; background:var(--bg); color:var(--ink);
+  font-family:"Source Serif 4", "Songti SC", "Noto Serif CJK SC", "Source Han Serif SC", Georgia, serif;
+  font-size:16.5px; line-height:1.72; -webkit-font-smoothing:antialiased}
+.wrap{max-width:1140px; margin:0 auto; padding:0 28px 96px}
+h1,h2,h3,.eyebrow,.stat-n,.lgd,.tag,th,.chapnav,.pager{font-family:Archivo, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif}
+h1{font-size:clamp(2.2rem,5.2vw,3.6rem); line-height:1.04; letter-spacing:-.028em; font-weight:700; margin:0; text-wrap:balance}
+h2{font-size:clamp(1.3rem,2.5vw,1.68rem); line-height:1.22; letter-spacing:-.014em; font-weight:600; margin:0 0 .3em; text-wrap:balance}
+h3{font-size:1.0rem; letter-spacing:.005em; font-weight:600; margin:0 0 .35em}
+p{margin:0 0 1em; max-width:72ch}
+a{color:var(--petrol)}
+code,.mono{font-family:"IBM Plex Mono", ui-monospace, monospace; font-size:.855em; font-variant-ligatures:none}
+:not(pre) > code{background:var(--surface-2); padding:.1em .38em; border-radius:3px; color:var(--ink); overflow-wrap:anywhere}
+.eyebrow{font-size:.66rem; font-weight:600; letter-spacing:.16em; text-transform:uppercase; color:var(--ink-2); margin:0 0 .55em}
+.lede{font-size:1.1rem; color:var(--ink-2); max-width:70ch}
+.note{font-size:.9rem; color:var(--ink-2)}
+header.mast{border-bottom:1px solid var(--line); margin-bottom:52px; padding:24px 0 34px}
+.mast-id{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:22px}
+.tag{font-size:.68rem; font-weight:600; letter-spacing:.09em; text-transform:uppercase; padding:.32em .7em; border:1px solid var(--line); border-radius:2px; color:var(--ink-2); background:var(--surface)}
+.tag.hot{border-color:var(--amber); color:var(--amber); background:var(--amber-bg)}
+.mast p.lede{margin-top:18px}
+.stats{display:grid; grid-template-columns:repeat(auto-fit,minmax(128px,1fr)); gap:1px; background:var(--line-soft); border:1px solid var(--line-soft); margin-top:34px}
+.stat{background:var(--surface); padding:14px 16px 16px}
+.stat-n{display:block; font-size:1.45rem; font-weight:700; letter-spacing:-.02em; font-variant-numeric:tabular-nums; line-height:1.15}
+.stat-l{display:block; font-size:.74rem; color:var(--ink-2); letter-spacing:.02em; margin-top:3px; font-family:"IBM Plex Mono", monospace}
+section{margin:0 0 68px; scroll-margin-top:20px}
+.rule{border:0; border-top:1px solid var(--line); margin:0 0 34px}
+figure{margin:26px 0 0; background:var(--surface); border:1px solid var(--line); padding:24px 22px 16px; box-shadow:var(--shadow); overflow-x:auto}
+figure svg{max-width:100%; height:auto; display:block; margin:0 auto; color:var(--ink-2); font-family:"IBM Plex Mono", ui-monospace, monospace; font-size:10.5px}
+figure svg text{fill:var(--ink)}
+figure .fignum{font-family:Archivo,sans-serif; font-size:.66rem; font-weight:600; letter-spacing:.16em; text-transform:uppercase; color:var(--ink-2); margin:0 0 14px}
+figcaption{font-size:.86rem; color:var(--ink-2); margin-top:16px; padding-top:12px; border-top:1px solid var(--line-soft); max-width:80ch}
+figcaption strong{color:var(--ink)}
+.svg-min{min-width:760px}
+figure svg.chart{max-width:760px}
+.tscroll{overflow-x:auto; margin-top:22px; border:1px solid var(--line); background:var(--surface); box-shadow:var(--shadow)}
+table{border-collapse:collapse; width:100%; min-width:640px; font-size:.9rem}
+th{text-align:left; font-size:.68rem; letter-spacing:.11em; text-transform:uppercase; font-weight:600; color:var(--ink-2); padding:11px 16px; background:var(--surface-2); border-bottom:1px solid var(--line); white-space:nowrap}
+td{padding:10px 16px; border-bottom:1px solid var(--line-soft); vertical-align:top; line-height:1.55}
+tbody tr:last-child td{border-bottom:0}
+td.num{font-family:"IBM Plex Mono",monospace; font-variant-numeric:tabular-nums; white-space:nowrap}
+td.k{font-family:"IBM Plex Mono",monospace; font-size:.8rem}
+.hl{color:var(--amber); font-weight:600}
+.dim{color:var(--ink-2)}
+.pos{color:var(--moss); font-weight:600}
+.neg{color:var(--brick); font-weight:600}
+.grid2{display:grid; grid-template-columns:repeat(auto-fit,minmax(310px,1fr)); gap:18px; margin-top:24px}
+.grid3{display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:16px; margin-top:24px}
+.card{background:var(--surface); border:1px solid var(--line); padding:18px 20px 16px; box-shadow:var(--shadow)}
+.card h3{color:var(--ink)}
+.card p:last-child{margin-bottom:0}
+.card.warn{border-left:3px solid var(--brick)}
+.card.good{border-left:3px solid var(--petrol)}
+.card.key{border-left:3px solid var(--amber-mark)}
+.card.moss{border-left:3px solid var(--moss-mark)}
+.card .eyebrow{margin-bottom:.4em}
+a.card{display:block; text-decoration:none; color:inherit; transition:transform .12s ease, border-color .12s ease}
+a.card:hover{transform:translateY(-2px); border-color:var(--amber-mark)}
+a.card .go{font-family:"IBM Plex Mono",monospace; font-size:.76rem; color:var(--amber); font-weight:600}
+ul.tight,ol.tight{margin:0; padding-left:1.25em}
+ul.tight li,ol.tight li{margin-bottom:.42em}
+ul.tight li:last-child,ol.tight li:last-child{margin-bottom:0}
+.pathline{font-family:"IBM Plex Mono",monospace; font-size:.76rem; color:var(--ink-2); background:var(--sunk); padding:5px 9px; display:inline-block; margin-top:10px; border-radius:2px; word-break:break-all}
+.callout{background:var(--amber-bg); border:1px solid var(--amber-mark); padding:16px 20px; margin-top:24px}
+.callout .eyebrow{color:var(--amber)}
+.callout p:last-child{margin-bottom:0}
+.callout.p{background:var(--petrol-bg); border-color:var(--petrol-mark)}
+.callout.p .eyebrow{color:var(--petrol)}
+pre.code{background:var(--sunk); border:1px solid var(--line-soft); padding:14px 16px; overflow-x:auto; font-family:"IBM Plex Mono",monospace; font-size:.78rem; line-height:1.6; margin:20px 0 0; color:var(--ink)}
+pre.code .c{color:var(--ink-2)}
+pre.code .h{color:var(--amber); font-weight:600}
+footer{border-top:1px solid var(--line); padding-top:22px; color:var(--ink-2); font-size:.85rem}
+.backnav{padding:22px 0 0; font-family:Archivo,"PingFang SC",system-ui,sans-serif; font-size:.8rem}
+.backnav a{color:var(--ink-2); text-decoration:none}
+.backnav a:hover{color:var(--amber)}
+.chapnav{display:flex; flex-wrap:wrap; gap:6px; margin:14px 0 0; font-size:.74rem}
+.chapnav a{padding:.36em .8em; border:1px solid var(--line); background:var(--surface); color:var(--ink-2); text-decoration:none; border-radius:2px; white-space:nowrap}
+.chapnav a:hover{border-color:var(--amber-mark); color:var(--ink)}
+.chapnav a.on{border-color:var(--amber); color:var(--amber); background:var(--amber-bg); font-weight:600}
+.pager{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin:12px 0 40px}
+.pager a{display:block; text-decoration:none; color:var(--ink); background:var(--surface); border:1px solid var(--line); padding:14px 18px; box-shadow:var(--shadow)}
+.pager a:hover{border-color:var(--amber-mark)}
+.pager a span{display:block; font-size:.66rem; letter-spacing:.14em; text-transform:uppercase; color:var(--ink-2)}
+.pager a.next{text-align:right; grid-column:2}
+/* svg 语义类 */
+.sv-band{fill:var(--surface-2)}
+.sv-box{fill:var(--surface); stroke:var(--line); stroke-width:1.2}
+.sv-a{fill:var(--amber-bg); stroke:var(--amber-mark); stroke-width:1.3}
+.sv-p{fill:var(--petrol-bg); stroke:var(--petrol-mark); stroke-width:1.3}
+.sv-m{fill:var(--moss-bg); stroke:var(--moss-mark); stroke-width:1.3}
+.sv-r{fill:var(--brick-bg); stroke:var(--brick); stroke-width:1.3}
+.sv-sunk{fill:var(--sunk); stroke:var(--line); stroke-width:1}
+.sv-dash{fill:none; stroke:var(--ink-2); stroke-width:1.1; stroke-dasharray:5 4}
+.sv-hatch{fill:url(#hatch); stroke:var(--line); stroke-width:1}
+.sv-ln{stroke:var(--ink-2); stroke-width:1.3; fill:none}
+.sv-ln-d{stroke:var(--ink-2); stroke-width:1.2; fill:none; stroke-dasharray:4 3}
+.sv-ln-a{stroke:var(--amber-mark); stroke-width:1.6; fill:none}
+.sv-ln-p{stroke:var(--petrol-mark); stroke-width:1.6; fill:none}
+.sv-grid{stroke:var(--line-soft); stroke-width:1}
+.sv-axis{stroke:var(--ink-2); stroke-width:1}
+figure svg text.n{font-size:11.5px; font-weight:600}
+figure svg text.s{fill:var(--ink-2); font-size:9.5px}
+figure svg text.xs{fill:var(--ink-2); font-size:9px}
+figure svg text.h{font-family:Archivo,"PingFang SC",system-ui,sans-serif; font-size:12px; font-weight:600}
+figure svg text.am{fill:var(--amber)}
+figure svg text.pe{fill:var(--petrol)}
+.mk{fill:var(--ink-2)} .mka{fill:var(--amber-mark)} .mkp{fill:var(--petrol-mark)}
+.hatch-l{stroke:var(--line); stroke-width:2}
+.c1l{stroke:var(--c1); stroke-width:2; fill:none} .c2l{stroke:var(--c2); stroke-width:2; fill:none}
+.c1d{fill:var(--c1); stroke:var(--surface); stroke-width:2} .c2d{fill:var(--c2); stroke:var(--surface); stroke-width:2}
+.hit{fill:transparent; cursor:default}
+.hit:hover + .c1d, .hit:hover + .c2d{stroke:var(--ink)}
+@media (max-width:640px){ .wrap{padding:0 16px 64px} .pager{grid-template-columns:1fr} .pager a.next{grid-column:1} }
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+:focus-visible{outline:2px solid var(--petrol); outline-offset:2px}
+/* ===== V4.1 章节扩展：配色 ===== */
+:root{
+  --plum:#5E3C78; --plum-mark:#9A72B8; --plum-bg:#E9E0F0;
+  --s0:#C79433; --s1:#3D87A6; --s2:#6E9A5C; --s3:#B0584A;
+  --enc:#D3E3EA; --dec:#EFE2C2;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --plum:#CDAEE6; --plum-mark:#9C78BA; --plum-bg:#2A1F35;
+    --s0:#D69B36; --s1:#4C93B4; --s2:#7FAE6B; --s3:#D17562;
+    --enc:#12303D; --dec:#3B2E13;
+  }
+}
+:root[data-theme="dark"]{
+  --plum:#CDAEE6; --plum-mark:#9C78BA; --plum-bg:#2A1F35;
+  --s0:#D69B36; --s1:#4C93B4; --s2:#7FAE6B; --s3:#D17562;
+  --enc:#12303D; --dec:#3B2E13;
+}
+/* ===== 页面小件 ===== */
+.toc{display:flex; flex-wrap:wrap; gap:6px 14px; margin:18px 0 0; font-family:Archivo,"PingFang SC",system-ui,sans-serif; font-size:.78rem}
+.toc a{color:var(--ink-2); text-decoration:none; border-bottom:1px dotted var(--line)}
+.toc a:hover{color:var(--amber)}
+.kv{display:grid; grid-template-columns:max-content 1fr; gap:4px 16px; font-size:.9rem; margin:10px 0 0}
+.kv dt{font-family:"IBM Plex Mono",monospace; font-size:.8rem; color:var(--ink-2)}
+.kv dd{margin:0}
+.step{counter-increment:st; position:relative; padding-left:2.1em; margin:0 0 .8em}
+.step::before{content:counter(st); position:absolute; left:0; top:.1em; width:1.45em; height:1.45em; border-radius:50%;
+  background:var(--amber-bg); color:var(--amber); border:1px solid var(--amber-mark);
+  font:600 .72rem/1.45em Archivo,system-ui,sans-serif; text-align:center}
+.steps{counter-reset:st; margin:16px 0 0; padding:0; list-style:none}
+.ex{background:var(--surface); border:1px dashed var(--amber-mark); padding:16px 20px; margin-top:22px}
+.ex .eyebrow{color:var(--amber)}
+.ex p:last-child{margin-bottom:0}
+td.on{color:var(--moss); font-weight:600} td.off{color:var(--ink-3)}
+/* ===== SVG 图元：在 sv-* 之外新增 ===== */
+.sv-v{fill:var(--plum-bg); stroke:var(--plum-mark); stroke-width:1.3}
+.sv-ln-m{stroke:var(--moss-mark); stroke-width:1.6; fill:none}
+.sv-ln-r{stroke:var(--brick); stroke-width:1.6; fill:none}
+.sv-ln-v{stroke:var(--plum-mark); stroke-width:1.6; fill:none}
+.sv-flow{stroke:var(--ink-2); stroke-width:2.2; fill:none; stroke-linecap:round}
+.sv-enc{fill:var(--enc)} .sv-dec{fill:var(--dec)}
+/* 四路残差的四条泳道 */
+.ln0,.ln1,.ln2,.ln3{fill:none; stroke-width:3.2; stroke-linecap:round}
+.ln0{stroke:var(--s0)} .ln1{stroke:var(--s1)} .ln2{stroke:var(--s2)} .ln3{stroke:var(--s3)}
+.lf0{fill:var(--s0)} .lf1{fill:var(--s1)} .lf2{fill:var(--s2)} .lf3{fill:var(--s3)}
+/* 形状标签（贴在箭头上的 [T, 5120]） */
+.pill{fill:var(--surface); stroke:var(--line); stroke-width:1}
+.pill-a{fill:var(--amber-bg); stroke:var(--amber-mark); stroke-width:1}
+.pill-p{fill:var(--petrol-bg); stroke:var(--petrol-mark); stroke-width:1}
+.pill-m{fill:var(--moss-bg); stroke:var(--moss-mark); stroke-width:1}
+.pill-v{fill:var(--plum-bg); stroke:var(--plum-mark); stroke-width:1}
+figure svg text.pt{font-size:9.5px; fill:var(--ink-2)}
+figure svg text.t{font-family:Archivo,"PingFang SC",system-ui,sans-serif; font-size:13.5px; font-weight:700}
+figure svg text.sub{font-family:Archivo,"PingFang SC",system-ui,sans-serif; font-size:10px; font-weight:600; letter-spacing:.14em; fill:var(--ink-2)}
+figure svg text.big{font-family:Archivo,system-ui,sans-serif; font-size:20px; font-weight:700}
+figure svg text.sym{font-family:"Source Serif 4",Georgia,serif; font-size:15px; font-weight:600}
+figure svg text.pl{fill:var(--plum)} figure svg text.mo{fill:var(--moss)} figure svg text.br{fill:var(--brick)} figure svg text.dm{fill:var(--ink-2)}
+/* 运算节点（∑ σ ⊙ 之类） */
+.op{fill:var(--surface); stroke:var(--ink-2); stroke-width:1.3}
+.op-a{fill:var(--amber-bg); stroke:var(--amber-mark); stroke-width:1.4}
+.op-p{fill:var(--petrol-bg); stroke:var(--petrol-mark); stroke-width:1.4}
+/* 立体张量块：front / top / side 三个面，配色由外层 class 决定 */
+.slab .sf{stroke-width:1.2} .slab .st{stroke-width:1} .slab .ss{stroke-width:1}
+.slab.a .sf{fill:var(--amber-bg); stroke:var(--amber-mark)} .slab.a .st{fill:var(--surface); stroke:var(--amber-mark)} .slab.a .ss{fill:var(--amber-mark); fill-opacity:.38; stroke:var(--amber-mark)}
+.slab.p .sf{fill:var(--petrol-bg); stroke:var(--petrol-mark)} .slab.p .st{fill:var(--surface); stroke:var(--petrol-mark)} .slab.p .ss{fill:var(--petrol-mark); fill-opacity:.38; stroke:var(--petrol-mark)}
+.slab.m .sf{fill:var(--moss-bg); stroke:var(--moss-mark)} .slab.m .st{fill:var(--surface); stroke:var(--moss-mark)} .slab.m .ss{fill:var(--moss-mark); fill-opacity:.38; stroke:var(--moss-mark)}
+.slab.v .sf{fill:var(--plum-bg); stroke:var(--plum-mark)} .slab.v .st{fill:var(--surface); stroke:var(--plum-mark)} .slab.v .ss{fill:var(--plum-mark); fill-opacity:.38; stroke:var(--plum-mark)}
+.slab.r .sf{fill:var(--brick-bg); stroke:var(--brick)} .slab.r .st{fill:var(--surface); stroke:var(--brick)} .slab.r .ss{fill:var(--brick); fill-opacity:.32; stroke:var(--brick)}
+.slab.n .sf{fill:var(--surface-2); stroke:var(--ink-2)} .slab.n .st{fill:var(--surface); stroke:var(--ink-2)} .slab.n .ss{fill:var(--ink-2); fill-opacity:.25; stroke:var(--ink-2)}
+/* 网格单元：PAGE / tile / 候选块 / top-k 位图 */
+.cell{fill:var(--surface); stroke:var(--line); stroke-width:.8}
+.cell-a{fill:var(--amber-mark); fill-opacity:.85; stroke:var(--surface); stroke-width:.8}
+.cell-p{fill:var(--petrol-mark); fill-opacity:.85; stroke:var(--surface); stroke-width:.8}
+.cell-m{fill:var(--moss-mark); fill-opacity:.85; stroke:var(--surface); stroke-width:.8}
+.cell-v{fill:var(--plum-mark); fill-opacity:.85; stroke:var(--surface); stroke-width:.8}
+.cell-r{fill:var(--brick); fill-opacity:.75; stroke:var(--surface); stroke-width:.8}
+.cell-d{fill:var(--sunk); stroke:var(--line-soft); stroke-width:.8}
+
+</style>
+
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
+<marker id="ar" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path class="mk" d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z"/></marker>
+<marker id="ara" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path class="mka" d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z"/></marker>
+<marker id="arp" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path class="mkp" d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z"/></marker>
+<marker id="arm" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z" fill="var(--moss-mark)"/></marker>
+<marker id="arr" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z" fill="var(--brick)"/></marker>
+<marker id="arv" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z" fill="var(--plum-mark)"/></marker>
+<linearGradient id="gn" x1="0" y1="0" x2=".4" y2="1"><stop offset="0%" stop-color="var(--surface)"/><stop offset="100%" stop-color="var(--surface-2)"/></linearGradient>
+<linearGradient id="ga" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--amber-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+<linearGradient id="gp" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--petrol-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+<linearGradient id="gm" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--moss-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+<linearGradient id="gr" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--brick-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+<linearGradient id="gv" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--plum-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+<linearGradient id="genc" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="var(--petrol-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+<linearGradient id="gdec" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="var(--surface)"/><stop offset="100%" stop-color="var(--amber-bg)"/></linearGradient>
+<filter id="sh" x="-8%" y="-12%" width="116%" height="140%"><feDropShadow dx="0" dy="1.4" stdDeviation="2.2" flood-opacity=".14"/></filter>
+<pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line class="hatch-l" x1="0" y1="0" x2="0" y2="6"/></pattern>
+<pattern id="dots" width="8" height="8" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1" fill="var(--line)"/></pattern>
+</defs></svg>
+<div class="wrap">
+<nav class="backnav"><a href="../../../index.html">← LLM 模型与框架结构手册</a> · <a href="../v41_flash_anatomy.html">单页速览版</a></nav>
+<nav class="chapnav" aria-label="章节"><a href="index.html">1 · 总览</a><a href="residual.html">2 · 四路残差 mHC</a><a href="engram.html">3 · Engram</a><a href="csa2.html">4 · CSA2 注意力骨架</a><a href="window.html">5 · Window 层</a><a href="full.html">6 · Full 层</a><a href="layer20.html">7 · 第 20 层</a><a href="reuse.html">8 · Reuse 层</a><a href="reindex.html">9 · Reindex 层</a><a href="replay.html" class="on">10 · 缓存与 Bounded Replay</a></nav>
+<header class="mast">
+  <div class="mast-id">
+    <span class="tag">deepseek-ai/DeepSeek-V4.1-Flash</span>
+    <span class="tag">PAGE · STATE · prefill · 前缀命中</span>
+    <span class="tag hot">decoder SWA bounded replay</span>
+    <span class="tag hot">encoder SWA bounded replay</span>
+  </div>
+  <h1>缓存与 Bounded Replay</h1>
+  <p class="lede">
+    V4.1 的缓存分两种货币：随历史增长的 PAGE（4 份全局 KV 与 index key），随并发增长的 STATE（40 层窗口、compressor 半成品、Engram 游标）。
+    两种 bounded replay 都建立在同一个观察上——<strong>后续步骤会读到的才去算</strong>：decoder replay 让 prefill 只在每个请求的最后 128 行跑 decoder，
+    encoder replay 让前缀命中时不存状态、退一个 hash 块把它重算出来。这一章把两者的做法、例子和代价算清楚，再看关掉之后的 checkpoint 方案。
+  </p>
+  <div class="stats">
+    <div class="stat"><span class="stat-n">128</span><span class="stat-l">PAGE token 数 = 窗口 = 退回行数</span></div>
+    <div class="stat"><span class="stat-n">≈ 206 KiB</span><span class="stat-l">每 PAGE（估算）</span></div>
+    <div class="stat"><span class="stat-n">≈ 2.6 MiB</span><span class="stat-l">每条 STATE（估算）</span></div>
+    <div class="stat"><span class="stat-n">≈ ½</span><span class="stat-l">长 prompt prefill 计算（估算）</span></div>
+    <div class="stat"><span class="stat-n">8,192</span><span class="stat-l">关掉 replay 后的镜像间隔</span></div>
+    <div class="stat"><span class="stat-n">≈ 13</span><span class="stat-l">每个镜像占的 PAGE 单元（估算）</span></div>
+  </div>
+  <nav class="toc" aria-label="本页目录">
+    <a href="#pool">两种货币</a><a href="#reads">谁还会被读</a><a href="#decoder">decoder replay</a>
+    <a href="#backoff">最后一段太短</a><a href="#encoder">encoder replay</a><a href="#both">叠加</a>
+    <a href="#noreplay">没有 replay 时</a><a href="#plugin">插件路径</a><a href="#read">读码路线</a>
+  </nav>
+</header>
+
+<section id="pool">
+  <p class="eyebrow">存储</p>
+  <h2>一块连续的池，前半按页买、后半按请求买</h2>
+  <p>
+    <code>V41PoolGeometry</code> 的模块文档开宗明义：除了 STATE 条目，其余都随缓存的历史增长，所以区域按「主 latent 页 | index 平面 | STATE」排，两种货币之间只有一条分界
+    （<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/model_ops/attentions/pool_layout/v41_pool_geometry.py"><code>atom/model_ops/attentions/pool_layout/v41_pool_geometry.py</code></a>）。PAGE 的字段由 <code>page_fields</code> 列出（<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/model_ops/attentions/pool_layout/v41_pool_geometry.py#L266"><code>atom/model_ops/attentions/pool_layout/v41_pool_geometry.py:266</code></a>），
+    STATE 的字段由 <code>state_fields</code> 列出（<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/model_ops/attentions/pool_layout/v41_pool_geometry.py#L334"><code>atom/model_ops/attentions/pool_layout/v41_pool_geometry.py:334</code></a>）。
+  </p>
+  <figure>
+    <p class="fignum">图 1 · 池的分区，一页与一条 STATE 的展开</p>
+    <svg viewBox="0 0 1060 560" class="svg-min" role="img" aria-label="V4.1 KV 池的分区：PAGE 与 STATE 两种货币，以及一页和一条 STATE 的展开">
+<text x="20" y="30" class="sub">一块连续的池：两种货币，一条分界</text>
+<rect x="20" y="50" width="470" height="40" rx="5" fill="var(--petrol-bg)" stroke="var(--petrol-mark)" stroke-width="1.3"/>
+<text x="255" y="68" class="n" text-anchor="middle">main pages × N</text>
+<text x="255" y="83" class="pt" text-anchor="middle">每页：4 个 owner 的主 latent</text>
+<rect x="494" y="50" width="186" height="40" rx="5" fill="var(--plum-bg)" stroke="var(--plum-mark)" stroke-width="1.3"/>
+<text x="587" y="68" class="n" text-anchor="middle">index planes</text>
+<text x="587" y="83" class="pt" text-anchor="middle">按 owner 分 4 块，同一 block id</text>
+<rect x="684" y="50" width="356" height="40" rx="5" fill="var(--sunk)" stroke="var(--ink-2)" stroke-width="1.3"/>
+<text x="862" y="68" class="n" text-anchor="middle">STATE × slots</text>
+<text x="862" y="83" class="pt" text-anchor="middle">每个在途请求一条</text>
+<path d="M20 102 V110 H680 V102" class="sv-ln"/>
+<text x="350" y="126" class="s pe" text-anchor="middle">PAGE 货币：随缓存的历史增长（paged_bytes / 页）</text>
+<path d="M684 102 V110 H1040 V102" class="sv-ln"/>
+<text x="862" y="126" class="s" text-anchor="middle">STATE 货币：随并发增长（state_bytes / 槽）</text>
+<rect x="20" y="150" width="520" height="380" rx="10" fill="url(#gp)" stroke="var(--petrol-mark)" filter="url(#sh)"/>
+<text x="36" y="174" class="n">一个 PAGE = 128 个 token（FP8 主池 + FP8 index）</text>
+<g class="slab p"><path class="st" d="M36 202 l6 -6 h200 l-6 6 z"/><path class="ss" d="M236 202 l6 -6 v18 l-6 6 z"/><path class="sf" d="M36 202 h200 v18 h-200 z"/></g>
+<text x="136" y="215" class="pt" text-anchor="middle">main_2</text>
+<text x="256" y="215" class="pt">64 行 × 528 B = 33,792 B</text>
+<g class="slab p"><path class="st" d="M36 236 l6 -6 h200 l-6 6 z"/><path class="ss" d="M236 236 l6 -6 v18 l-6 6 z"/><path class="sf" d="M36 236 h200 v18 h-200 z"/></g>
+<text x="136" y="249" class="pt" text-anchor="middle">main_8</text>
+<text x="256" y="249" class="pt">64 行 × 528 B = 33,792 B</text>
+<g class="slab p"><path class="st" d="M36 270 l6 -6 h200 l-6 6 z"/><path class="ss" d="M236 270 l6 -6 v18 l-6 6 z"/><path class="sf" d="M36 270 h200 v18 h-200 z"/></g>
+<text x="136" y="283" class="pt" text-anchor="middle">main_14</text>
+<text x="256" y="283" class="pt">64 行 × 528 B = 33,792 B</text>
+<g class="slab a"><path class="st" d="M36 304 l6 -6 h200 l-6 6 z"/><path class="ss" d="M236 304 l6 -6 v36 l-6 6 z"/><path class="sf" d="M36 304 h200 v36 h-200 z"/></g>
+<text x="136" y="326" class="pt" text-anchor="middle">main_20</text>
+<text x="256" y="326" class="pt">128 行 × 528 B = 67,584 B</text>
+<text x="36" y="358" class="pt pe">主 latent 合计 320 行 × 528 B = 168,960 B</text>
+<g class="slab v"><path class="st" d="M36 386 l6 -6 h200 l-6 6 z"/><path class="ss" d="M236 386 l6 -6 v22 l-6 6 z"/><path class="sf" d="M36 386 h200 v22 h-200 z"/></g>
+<text x="136" y="402" class="pt" text-anchor="middle">index rows</text>
+<text x="256" y="402" class="pt">320 行 × 132 B = 42,240 B</text>
+<text x="256" y="418" class="xs">在 index 区，按 owner 分开</text>
+<text x="36" y="442" class="n pe">≈ 211,200 B ≈ 206 KiB / PAGE（估算，不计对齐）</text>
+<text x="36" y="462" class="xs">ratio 2 owner 每页 64 行，第 20 层每页 128 行：</text>
+<text x="36" y="476" class="xs">第 20 层一家占全局 KV 的 40%。</text>
+<rect x="560" y="150" width="480" height="380" rx="10" fill="url(#gn)" stroke="var(--line)" filter="url(#sh)"/>
+<text x="576" y="174" class="n">一个 STATE 条目（一个在途请求）</text>
+<g class="slab n"><path class="st" d="M576 204 l8 -8 h160 l-8 8 z"/><path class="ss" d="M736 204 l8 -8 v120 l-8 8 z"/><path class="sf" d="M576 204 h160 v120 h-160 z"/></g>
+<path d="M576 224 h160" stroke="var(--line)" stroke-width="1"/>
+<path d="M576 244 h160" stroke="var(--line)" stroke-width="1"/>
+<path d="M576 264 h160" stroke="var(--line)" stroke-width="1"/>
+<path d="M576 284 h160" stroke="var(--line)" stroke-width="1"/>
+<path d="M576 304 h160" stroke="var(--line)" stroke-width="1"/>
+<path d="M576 324 h160" stroke="var(--line)" stroke-width="1"/>
+<text x="656" y="268" class="pt" text-anchor="middle">window × 40 层</text>
+<text x="752" y="226" class="pt">40 × ring_slots × 528 B</text>
+<text x="752" y="244" class="pt">ring_slots = 128 + 投机数</text>
+<text x="752" y="262" class="pt">= 2,703,360 B ≈ 2.58 MiB</text>
+<text x="752" y="280" class="xs">（不开投机）</text>
+<text x="752" y="302" class="pt mo">✓ 进 checkpoint 镜像</text>
+<g class="slab r"><path class="st" d="M576 352 l6 -6 h160 l-6 6 z"/><path class="ss" d="M736 352 l6 -6 v30 l-6 6 z"/><path class="sf" d="M576 352 h160 v30 h-160 z"/></g>
+<text x="656" y="370" class="pt" text-anchor="middle">compress_kv / score</text>
+<text x="752" y="360" class="pt">4 owner × 2 槽 × 512 × FP32 × 2</text>
+<text x="752" y="376" class="pt">= 32 KiB，没凑满的组</text>
+<text x="752" y="394" class="pt br">✕ in_checkpoint=False</text>
+<g class="slab a"><path class="st" d="M576 421 l5 -5 h160 l-5 5 z"/><path class="ss" d="M736 421 l5 -5 v18 l-5 5 z"/><path class="sf" d="M576 421 h160 v18 h-160 z"/></g>
+<text x="656" y="433" class="pt" text-anchor="middle">cursor</text>
+<text x="752" y="428" class="pt">[位置, h₃, h₂, h₁] int64 = 32 B</text>
+<text x="752" y="444" class="pt mo">✓ 进镜像（Engram 历史在这里）</text>
+<text x="576" y="516" class="n">≈ 2.6 MiB / 请求（估算），与上下文长度无关</text>
+</svg>
+    <figcaption>
+      字节数按 FP8 主池（每行 512 + 16 = 528 B）、FP8 index（每行约 132 B）、不开投机（<code>ring_slots = 128</code>）估算，不计对齐。
+      compressor 的两个环带 <code>in_checkpoint=False</code>：checkpoint 只打在 PAGE 边界，128 是 ratio 1 和 2 的公倍数，边界处没有半组可存。
+    </figcaption>
+  </figure>
+  <div class="grid3">
+    <div class="card good"><p class="eyebrow">为什么 PAGE = 128</p><h3>块表要小</h3><p>块表是 <code>[max_num_seqs, max_model_len / block]</code> 的 int32，存两份、每个 forward 拷到显卡：百万上下文下 block 16 是 134 MB，128 是 16.8 MB（几何文件的模块文档）。</p></div>
+    <div class="card key"><p class="eyebrow">也不能更大</p><h3>它同时是复用粒度</h3><p>一个 PAGE 就是前缀缓存的一个 hash 块：命中只能落在 PAGE 边界上，encoder replay 每次也要重算一个 PAGE。128 恰好等于窗口，两者都控制在窗口大小（<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/config.py#L2776"><code>atom/config.py:2776</code></a>）。</p></div>
+    <div class="card warn"><p class="eyebrow">硬约束</p><h3>PAGE ≥ window − 1</h3><p>encoder replay 靠退一个 PAGE 重建窗口，PAGE 短于 127 就盖不住；<code>validate_runtime_config</code> 直接拒绝（<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/models/deepseek_v41/config.py#L414"><code>atom/models/deepseek_v41/config.py:414</code></a>）。插件路径的 PAGE 是 256，见文末。</p></div>
+  </div>
+</section>
+
+<section id="reads">
+  <hr class="rule">
+  <p class="eyebrow">出发点</p>
+  <h2>一次 prefill 结束后，只有四样东西还会被读</h2>
+  <div class="tscroll"><table>
+    <thead><tr><th>#</th><th>谁</th><th>要多少行</th><th>存在哪</th><th>谁会读</th></tr></thead>
+    <tbody>
+      <tr><td class="num">1</td><td>4 个 owner 的全局 KV 与 index key</td><td><strong>全部行</strong></td><td>PAGE</td><td>之后任何 token 的打分和注意力</td></tr>
+      <tr><td class="num">2</td><td>每一层的窗口 ring</td><td>最后 128 行</td><td>STATE</td><td>下一步 decode 的窗口</td></tr>
+      <tr><td class="num">3</td><td>最后一行的 logits</td><td>1 行</td><td>—</td><td>采样</td></tr>
+      <tr><td class="num">4</td><td>compressor 半成品、Engram 历史</td><td>≤ 1 行 / ≤ 3 个 id</td><td>STATE</td><td>下一个组、下一次哈希</td></tr>
+    </tbody>
+  </table></div>
+  <p style="margin-top:16px">
+    第 21–39 层在别的行上的输出，以后没人读：decoder 没有自己的全局 KV，它的远程信息全部来自第 20 层压缩的 encoder 输出（总览图 4）。
+    这就是两种 replay 能省的地方。<code>decoder_replay_unsupported</code> 守着这个前提：第 20 层之后不许再有 KV source，也不许有 Engram（<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/models/deepseek_v41/bounded_replay.py#L68"><code>atom/models/deepseek_v41/bounded_replay.py:68</code></a>）。
+  </p>
+</section>
+
+<section id="decoder">
+  <hr class="rule">
+  <p class="eyebrow">decoder SWA bounded replay</p>
+  <h2>完成 prompt 的那次 forward，decoder 只在最后 128 行上跑</h2>
+  <p>
+    默认开启（<code>enable_decoder_swa_bounded_replay</code>，<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/config.py#L2021"><code>atom/config.py:2021</code></a>；<code>--no-decoder-swa-bounded-replay</code> 关闭）。
+    对一个完成 prompt 的 forward，每个请求按下表分工；不是最后一个 chunk 的 forward 只跑 encoder 和第 20 层的压缩，decoder 一个 kernel 都不跑。
+  </p>
+  <div class="tscroll"><table>
+    <thead><tr><th>计算</th><th>在哪些行上跑</th><th>原因</th></tr></thead>
+    <tbody>
+      <tr><td>第 0–19 层（encoder）</td><td class="on">全部行</td><td>它们写 <code>main_2/8/14</code>，并产出第 20 层压缩的输入</td></tr>
+      <tr><td>第 20 层的压缩（<code>main_20</code> + index key）</td><td class="on">全部行</td><td>decode 时任何 token 都可能检索到任何位置</td></tr>
+      <tr><td>第 20–38 层 attention 与 FFN（含写各层 ring）</td><td>tail：最后 W = 128 行</td><td>以后只读 ring 的最后 128 行</td></tr>
+      <tr><td>第 39 层 KV（写 ring）</td><td>tail</td><td>同上</td></tr>
+      <tr><td>第 39 层 query、attention、FFN；LM head</td><td>最后一行</td><td>只有它要采样</td></tr>
+    </tbody>
+  </table></div>
+  <figure>
+    <p class="fignum">图 2 · 一条 1000 token 的 prompt，各层实际计算的区域</p>
+    <svg viewBox="0 0 1060 560" class="svg-min" role="img" aria-label="一条 1000 token 的 prompt 在各层实际计算的区域：默认与关闭 decoder replay 对比">
+<text x="20" y="36" class="sub">默认：decoder SWA bounded replay（chunk 512，tail = 872–999）</text>
+<path d="M210.0 54 V226" stroke="var(--line-soft)" stroke-width="1"/>
+<text x="210" y="52" class="xs" text-anchor="middle">0</text>
+<path d="M315.0 54 V226" stroke="var(--line-soft)" stroke-width="1"/>
+<text x="314.96" y="52" class="xs" text-anchor="middle">128</text>
+<path d="M419.9 54 V226" stroke="var(--line-soft)" stroke-width="1"/>
+<text x="419.92" y="52" class="xs" text-anchor="middle">256</text>
+<path d="M524.9 54 V226" stroke="var(--line-soft)" stroke-width="1"/>
+<text x="524.88" y="52" class="xs" text-anchor="middle">384</text>
+<path d="M629.8 54 V226" stroke="var(--line-soft)" stroke-width="1"/>
+<text x="629.84" y="52" class="xs" text-anchor="middle">512</text>
+<path d="M734.8 54 V226" stroke="var(--line-soft)" stroke-width="1"/>
+<text x="734.8" y="52" class="xs" text-anchor="middle">640</text>
+<path d="M839.8 54 V226" stroke="var(--line-soft)" stroke-width="1"/>
+<text x="839.76" y="52" class="xs" text-anchor="middle">768</text>
+<path d="M944.7 54 V226" stroke="var(--line-soft)" stroke-width="1"/>
+<text x="944.72" y="52" class="xs" text-anchor="middle">896</text>
+<path d="M1030.0 54 V226" stroke="var(--line-soft)" stroke-width="1"/>
+<text x="1030" y="52" class="xs" text-anchor="middle">1000</text>
+<path d="M629.8 54 V228" stroke="var(--ink-2)" stroke-width="1.4" stroke-dasharray="5 3"/>
+<text x="20" y="74" class="pt">第 0–19 层 encoder</text>
+<rect x="210" y="60" width="820" height="18" rx="2" fill="var(--sunk)" fill-opacity=".55"/>
+<rect x="210.0" y="60" width="419.8" height="18" rx="2" fill="var(--petrol-mark)" fill-opacity=".9"/>
+<rect x="629.8" y="60" width="400.2" height="18" rx="2" fill="var(--petrol-mark)" fill-opacity=".9"/>
+<text x="20" y="98" class="pt">第 20 层 压缩</text>
+<rect x="210" y="84" width="820" height="18" rx="2" fill="var(--sunk)" fill-opacity=".55"/>
+<rect x="210.0" y="84" width="419.8" height="18" rx="2" fill="var(--amber-mark)" fill-opacity=".9"/>
+<rect x="629.8" y="84" width="400.2" height="18" rx="2" fill="var(--amber-mark)" fill-opacity=".9"/>
+<text x="20" y="122" class="pt">第 20 层 attn + FFN</text>
+<rect x="210" y="108" width="820" height="18" rx="2" fill="var(--sunk)" fill-opacity=".55"/>
+<rect x="925.0" y="108" width="105.0" height="18" rx="2" fill="var(--amber-mark)" fill-opacity=".9"/>
+<text x="20" y="146" class="pt">第 21–38 层</text>
+<rect x="210" y="132" width="820" height="18" rx="2" fill="var(--sunk)" fill-opacity=".55"/>
+<rect x="925.0" y="132" width="105.0" height="18" rx="2" fill="var(--amber-mark)" fill-opacity=".9"/>
+<text x="20" y="170" class="pt">第 39 层 KV</text>
+<rect x="210" y="156" width="820" height="18" rx="2" fill="var(--sunk)" fill-opacity=".55"/>
+<rect x="925.0" y="156" width="105.0" height="18" rx="2" fill="var(--amber-mark)" fill-opacity=".9"/>
+<text x="20" y="194" class="pt">第 39 层 query/FFN</text>
+<rect x="210" y="180" width="820" height="18" rx="2" fill="var(--sunk)" fill-opacity=".55"/>
+<rect x="1029.2" y="180" width="2.5" height="18" rx="2" fill="var(--plum-mark)" fill-opacity=".9"/>
+<text x="20" y="218" class="pt">LM head</text>
+<rect x="210" y="204" width="820" height="18" rx="2" fill="var(--sunk)" fill-opacity=".55"/>
+<rect x="1029.2" y="204" width="2.5" height="18" rx="2" fill="var(--moss-mark)" fill-opacity=".9"/>
+<text x="419.92" y="246" class="xs" text-anchor="middle">↑ chunk 1：不是最后一个，decoder 不跑</text>
+<text x="829.92" y="246" class="xs" text-anchor="middle">↑ chunk 2：完成 prompt 的 forward</text>
+<text x="20" y="270" class="sub">关掉：--no-decoder-swa-bounded-replay（每个 chunk 的每一行跑满 40 层）</text>
+<path d="M210.0 288 V460" stroke="var(--line-soft)" stroke-width="1"/>
+<text x="210" y="286" class="xs" text-anchor="middle">0</text>
+<path d="M315.0 288 V460" stroke="var(--line-soft)" stroke-width="1"/>
+<text x="314.96" y="286" class="xs" text-anchor="middle">128</text>
+<path d="M419.9 288 V460" stroke="var(--line-soft)" stroke-width="1"/>
+<text x="419.92" y="286" class="xs" text-anchor="middle">256</text>
+<path d="M524.9 288 V460" stroke="var(--line-soft)" stroke-width="1"/>
+<text x="524.88" y="286" class="xs" text-anchor="middle">384</text>
+<path d="M629.8 288 V460" stroke="var(--line-soft)" stroke-width="1"/>
+<text x="629.84" y="286" class="xs" text-anchor="middle">512</text>
+<path d="M734.8 288 V460" stroke="var(--line-soft)" stroke-width="1"/>
+<text x="734.8" y="286" class="xs" text-anchor="middle">640</text>
+<path d="M839.8 288 V460" stroke="var(--line-soft)" stroke-width="1"/>
+<text x="839.76" y="286" class="xs" text-anchor="middle">768</text>
+<path d="M944.7 288 V460" stroke="var(--line-soft)" stroke-width="1"/>
+<text x="944.72" y="286" class="xs" text-anchor="middle">896</text>
+<path d="M1030.0 288 V460" stroke="var(--line-soft)" stroke-width="1"/>
+<text x="1030" y="286" class="xs" text-anchor="middle">1000</text>
+<path d="M629.8 288 V462" stroke="var(--ink-2)" stroke-width="1.4" stroke-dasharray="5 3"/>
+<text x="20" y="308" class="pt">第 0–19 层 encoder</text>
+<rect x="210" y="294" width="820" height="18" rx="2" fill="var(--sunk)" fill-opacity=".55"/>
+<rect x="210.0" y="294" width="419.8" height="18" rx="2" fill="var(--petrol-mark)" fill-opacity=".9"/>
+<rect x="629.8" y="294" width="400.2" height="18" rx="2" fill="var(--petrol-mark)" fill-opacity=".9"/>
+<text x="20" y="332" class="pt">第 20 层 压缩</text>
+<rect x="210" y="318" width="820" height="18" rx="2" fill="var(--sunk)" fill-opacity=".55"/>
+<rect x="210.0" y="318" width="419.8" height="18" rx="2" fill="var(--amber-mark)" fill-opacity=".9"/>
+<rect x="629.8" y="318" width="400.2" height="18" rx="2" fill="var(--amber-mark)" fill-opacity=".9"/>
+<text x="20" y="356" class="pt">第 20 层 attn + FFN</text>
+<rect x="210" y="342" width="820" height="18" rx="2" fill="var(--sunk)" fill-opacity=".55"/>
+<rect x="210.0" y="342" width="820.0" height="18" rx="2" fill="var(--amber-mark)" fill-opacity=".9"/>
+<text x="20" y="380" class="pt">第 21–38 层</text>
+<rect x="210" y="366" width="820" height="18" rx="2" fill="var(--sunk)" fill-opacity=".55"/>
+<rect x="210.0" y="366" width="820.0" height="18" rx="2" fill="var(--amber-mark)" fill-opacity=".9"/>
+<text x="20" y="404" class="pt">第 39 层 KV</text>
+<rect x="210" y="390" width="820" height="18" rx="2" fill="var(--sunk)" fill-opacity=".55"/>
+<rect x="210.0" y="390" width="820.0" height="18" rx="2" fill="var(--amber-mark)" fill-opacity=".9"/>
+<text x="20" y="428" class="pt">第 39 层 query/FFN</text>
+<rect x="210" y="414" width="820" height="18" rx="2" fill="var(--sunk)" fill-opacity=".55"/>
+<rect x="210.0" y="414" width="820.0" height="18" rx="2" fill="var(--amber-mark)" fill-opacity=".9"/>
+<text x="20" y="452" class="pt">LM head</text>
+<rect x="210" y="438" width="820" height="18" rx="2" fill="var(--sunk)" fill-opacity=".55"/>
+<rect x="1029.2" y="438" width="2.5" height="18" rx="2" fill="var(--moss-mark)" fill-opacity=".9"/>
+<rect x="20" y="502" width="500" height="48" rx="7" fill="url(#gm)" stroke="var(--moss-mark)"/>
+<text x="36" y="522" class="pt">层 × 行：40 × 1000 = 40,000 → 20 × 1000 + 20 × 128 ≈ 22,560</text>
+<text x="36" y="540" class="pt mo">长 prompt 下 prefill 计算量约减半（估算，按层×行计）</text>
+<rect x="540" y="502" width="500" height="48" rx="7" fill="url(#gr)" stroke="var(--brick)"/>
+<text x="556" y="522" class="pt">代价：tail 行在每个 decoder 层的窗口截断在 872</text>
+<text x="556" y="540" class="pt br">最后一个 token 的 logits 与完整 prefill 不同（模型后训练适应）</text>
+</svg>
+    <figcaption>
+      上半是默认（chunk 512），下半是关掉之后。灰底是没算的部分。默认情况下 chunk 1 的 decoder 一行都不算——它的 ring 会被 chunk 2 的 tail 重新写满；
+      第 39 层的 query 只取每个请求的最后一行（<code>QueryRows</code>：<code>cu_seqlens_q</code> 比 <code>cu_seqlens_k</code> 短的 varlen 注意力）。
+    </figcaption>
+  </figure>
+  <p><strong>执行顺序</strong>（<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/models/deepseek_v41/runtime.py#L384"><code>atom/models/deepseek_v41/runtime.py:384</code></a> 的 <code>_replayed</code>）：</p>
+  <ol class="steps">
+    <li class="step"><code>_EarlyLayers</code>：编译好的一张图，跑第 0–19 层的全部行（<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/models/deepseek_v41/runtime.py#L199"><code>atom/models/deepseek_v41/runtime.py:199</code></a>）。</li>
+    <li class="step">第 20 层：mHC 接缝 + <code>_compress_batch</code>，仍是全部行——这是唯一被拆成两半的层（第 7 章）。</li>
+    <li class="step"><code>DecoderGraph.run</code>（<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/models/deepseek_v41/decoder_graph.py#L39"><code>atom/models/deepseek_v41/decoder_graph.py:39</code></a>）：把每个完成 prompt 的请求的最后 <code>min(len, 128)</code> 行 gather 进固定布局的 tail 缓冲，
+      跑第 20 层 attention + FFN → <code>_LateLayers</code>（第 21–38 层，<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/models/deepseek_v41/runtime.py#L222"><code>atom/models/deepseek_v41/runtime.py:222</code></a>）→ 第 39 层。</li>
+    <li class="step">把第 39 层的输出 scatter 回 forward 里各请求的最后一行，其余行填 0；LM head 只读这些行。</li>
+  </ol>
+  <div class="grid2">
+    <div class="card"><p class="eyebrow">tail 的布局</p><h3>按 running_bs 排成固定地址</h3>
+      <p><code>lay_out_tail</code>（<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/models/deepseek_v41/bounded_replay.py#L154"><code>atom/models/deepseek_v41/bounded_replay.py:154</code></a>）按本步的 <code>running_bs</code> 排成 <code>running_bs × 128</code> 行（<code>tail_width</code>，<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/models/deepseek_v41/bounded_replay.py#L127"><code>atom/models/deepseek_v41/bounded_replay.py:127</code></a>）：
+      完成的请求在前，然后是长度为 0 的填充请求、重复某个真实行的填充行。同一个 <code>running_bs</code> 的步骤地址完全一样，decoder 因此能按桶录成 ReqGraph
+      （<code>ATOM_DECODER_GRAPH_SIZES</code> 默认 <code>1,2,3,4,8,16</code>，<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/utils/envs.py#L624"><code>atom/utils/envs.py:624</code></a>）。</p></div>
+    <div class="card"><p class="eyebrow">什么时候不 replay</p><h3>decode、warmup、草稿、TBO</h3>
+      <p><code>replayable</code> 只放行 prefill（<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/models/deepseek_v41/bounded_replay.py#L93"><code>atom/models/deepseek_v41/bounded_replay.py:93</code></a>）；decode、warmup、DSpark 草稿、TBO 微批都跑全部行。
+      runtime 文档还列了几种不走录好的图、改走 eager 的情形：<code>running_bs</code> 不在列表里、带图像行、FP8 index plane、decoder 读 encoder 带来的选择（<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/docs/deepseek_v41_runtime.md"><code>docs/deepseek_v41_runtime.md</code></a>）。</p></div>
+  </div>
+  <div class="callout">
+    <p class="eyebrow">精度代价</p>
+    <p>
+      这不等价于完整 prefill。每个 decoder 层里 tail 行的窗口截断在 tail 起点（<code>swa_replay_start</code>）；从第 21 层开始，连最后一个 token 的窗口里装的都是
+      「基于截断窗口算出来的行」，所以最后一个 token 的 logits 和 decode 阶段读到的各层 ring 都与完整 prefill 不同。encoder、压缩 KV 与 decoder 复用的 top-k 选择都是精确的。
+      文档的说法是 “DeepSeek post-trains on this truncation”。TorchSpec 这类要导出每一行 hidden 的用途必须关掉它。
+    </p>
+  </div>
+</section>
+
+<section id="backoff">
+  <hr class="rule">
+  <p class="eyebrow">边界情况</p>
+  <h2>最后一段不足 128 行时，往前挪到 hash 块网格上</h2>
+  <p>
+    最后一个 chunk 可能很短，或者前缀命中后只剩很短的后缀，tail 就凑不满 128 行。<code>BlockManager.replay_start</code>（<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/model_engine/block_manager.py#L1847"><code>atom/model_engine/block_manager.py:1847</code></a>）把起点往前挪，
+    并对齐到 hash 块：<code>min_final_prefill_rows</code> 在 V4.1 上被设成窗口大小 128（<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/config.py#L2778"><code>atom/config.py:2778</code></a>）。
+  </p>
+  <pre class="code">short = min_final_prefill_rows − (num_tokens − start)       <span class="c"># 128 − 剩余行数</span>
+if short &gt; 0:
+    start = (start − short) // hash_block_size × hash_block_size</pre>
+  <figure>
+    <p class="fignum">图 3 · 例 2：[0, 960) + [960, 1000) → 最后一次 forward 从 768 开始</p>
+    <svg viewBox="0 0 1060 330" class="svg-min" role="img" aria-label="最后一个 chunk 太短时往前挪到 hash 块网格上的例子">
+<text x="20" y="30" class="sub">例 2：chunk 切成 [0, 960) + [960, 1000)，最后一段只有 40 行</text>
+<path d="M60 70 H1020" class="sv-axis"/>
+<path d="M60.0 65 V75" class="sv-axis"/>
+<text x="60" y="60" class="xs" text-anchor="middle">0</text>
+<path d="M182.9 65 V75" class="sv-axis"/>
+<text x="182.88" y="60" class="xs" text-anchor="middle">128</text>
+<path d="M305.8 65 V75" class="sv-axis"/>
+<text x="305.76" y="60" class="xs" text-anchor="middle">256</text>
+<path d="M428.6 65 V75" class="sv-axis"/>
+<text x="428.64" y="60" class="xs" text-anchor="middle">384</text>
+<path d="M551.5 65 V75" class="sv-axis"/>
+<text x="551.52" y="60" class="xs" text-anchor="middle">512</text>
+<path d="M674.4 65 V75" class="sv-axis"/>
+<text x="674.4" y="60" class="xs" text-anchor="middle">640</text>
+<path d="M797.3 65 V75" class="sv-axis"/>
+<text x="797.28" y="60" class="xs" text-anchor="middle">768</text>
+<path d="M920.2 65 V75" class="sv-axis"/>
+<text x="920.16" y="60" class="xs" text-anchor="middle">896</text>
+<text x="1020" y="60" class="xs" text-anchor="middle">1000</text>
+<text x="60" y="92" class="xs">hash 块网格：每 128 token 一格</text>
+<text x="20" y="124" class="n">fwd 1</text>
+<rect x="60.0" y="110" width="921.6" height="20" rx="3" fill="var(--petrol-mark)"/>
+<text x="520.8" y="124" class="pt" text-anchor="middle" style="fill:var(--surface)">[0, 960)：encoder + 第 20 层压缩，decoder 不跑</text>
+<text x="20" y="164" class="n dm">朴素</text>
+<rect x="981.6" y="150" width="38.4" height="20" rx="3" fill="var(--brick-bg)" stroke="var(--brick)"/>
+<text x="976.8" y="164" class="pt br" text-anchor="end">只有 40 行 &lt; 128：tail 凑不满，decoder ring 缺行</text>
+<text x="20" y="206" class="n">fwd 2</text>
+<rect x="797.3" y="192" width="184.3" height="20" rx="3" fill="url(#hatch)" stroke="var(--petrol-mark)"/>
+<rect x="981.6" y="192" width="38.4" height="20" rx="3" fill="var(--petrol-mark)"/>
+<text x="789.6" y="206" class="pt pe" text-anchor="end">start 挪到 768</text>
+<rect x="897.1" y="218" width="122.9" height="14" rx="3" fill="var(--amber-mark)"/>
+<text x="893.28" y="229" class="xs am" text-anchor="end">decoder tail 872–999</text>
+<rect x="808.8" y="196" width="161.3" height="12" rx="2" fill="var(--surface)" fill-opacity=".85"/>
+<text x="889.44" y="206" class="xs pe" text-anchor="middle">768–959：只重算，喂 decoder</text>
+<rect x="20" y="268" width="500" height="54" rx="7" fill="url(#ga)" stroke="var(--amber-mark)"/>
+<text x="36" y="290" class="pt">short = 128 − (1000 − 960) = 88</text>
+<text x="36" y="308" class="pt am">start = (960 − 88) // 128 × 128 = 768</text>
+<rect x="540" y="268" width="500" height="54" rx="7" fill="url(#gn)" stroke="var(--line)"/>
+<text x="556" y="290" class="pt">重算的行不改缓存：全局 KV 不重写（write_from = 960），</text>
+<text x="556" y="308" class="pt">encoder ring 已有的行保留（cached_until = 960）</text>
+</svg>
+    <figcaption>
+      往前多出来的 768–959 会重算，但不改缓存：<code>make_compress_plans(write_from=…)</code> 丢掉起点之前已经结束的组（<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/model_ops/v4_kernels/compress_plan.py#L328"><code>atom/model_ops/v4_kernels/compress_plan.py:328</code></a>），
+      <code>swa_write(cached_until=…)</code> 保留 encoder ring 已有的行（<code>write_window</code>，<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/model_ops/attentions/deepseek_v41/cache.py#L878"><code>atom/model_ops/attentions/deepseek_v41/cache.py:878</code></a>）。唯一新产生的是这些行喂给 decoder 的输入。
+    </figcaption>
+  </figure>
+  <div class="ex">
+    <p class="eyebrow">例 1 · prompt 1000，chunk 512</p>
+    <p>chunk 1 = [0, 512)：encoder + 第 20 层压缩共 512 行，decoder 跳过。chunk 2 = [512, 1000)：488 行 ≥ 128，不用挪；encoder + 压缩 488 行，decoder 第 20–38 层只跑 872–999，第 39 层的 query 只算第 999 行。</p>
+  </div>
+</section>
+
+<section id="encoder">
+  <hr class="rule">
+  <p class="eyebrow">encoder SWA bounded replay</p>
+  <h2>前缀命中时不存状态，往前退一个 hash 块把它算出来</h2>
+  <p>
+    前缀命中能拿回 PAGE，但 STATE 不在 PAGE 里：40 层窗口、compressor 半成品、Engram 游标都没有。默认做法（<code>enable_encoder_swa_bounded_replay</code>，<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/config.py#L2039"><code>atom/config.py:2039</code></a>）
+    是让后端声明 <code>StateTransfer.replay()</code>（<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/model_ops/attentions/deepseek_v41/backend.py#L403"><code>atom/model_ops/attentions/deepseek_v41/backend.py:403</code></a>、<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/model_engine/state_runtime.py#L96"><code>atom/model_engine/state_runtime.py:96</code></a>）：
+    引擎不保存 checkpoint，不为 checkpoint 切 chunk，命中可以落在任意 hash 块边界，<code>replay_start</code> 在命中时先 <code>start −= hash_block_size</code>。
+  </p>
+  <figure>
+    <p class="fignum">图 4 · 命中到 768：forward 从 640 开始，640–767 只为重建状态</p>
+    <svg viewBox="0 0 1060 420" class="svg-min" role="img" aria-label="encoder SWA bounded replay：前缀命中后往前退一个 hash 块重建状态">
+<text x="20" y="30" class="sub">例：前缀命中到 768（6 个 hash 块），prompt 共 1000 token</text>
+<path d="M120 66 H1020" class="sv-axis"/>
+<path d="M120.0 61 V71" class="sv-axis"/>
+<text x="120" y="56" class="xs" text-anchor="middle">0</text>
+<path d="M235.2 61 V71" class="sv-axis"/>
+<text x="235.2" y="56" class="xs" text-anchor="middle">128</text>
+<path d="M350.4 61 V71" class="sv-axis"/>
+<text x="350.4" y="56" class="xs" text-anchor="middle">256</text>
+<path d="M465.6 61 V71" class="sv-axis"/>
+<text x="465.6" y="56" class="xs" text-anchor="middle">384</text>
+<path d="M580.8 61 V71" class="sv-axis"/>
+<text x="580.8" y="56" class="xs" text-anchor="middle">512</text>
+<path d="M696.0 61 V71" class="sv-axis"/>
+<text x="696" y="56" class="xs" text-anchor="middle">640</text>
+<path d="M811.2 61 V71" class="sv-axis"/>
+<text x="811.2" y="56" class="xs" text-anchor="middle">768</text>
+<path d="M926.4 61 V71" class="sv-axis"/>
+<text x="926.4" y="56" class="xs" text-anchor="middle">896</text>
+<path d="M1020.0 61 V71" class="sv-axis"/>
+<text x="1020" y="56" class="xs" text-anchor="middle">1000</text>
+<text x="20" y="106" class="pt">HBM / 层里</text>
+<rect x="121.0" y="92" width="113.2" height="20" rx="3" fill="var(--moss-mark)" fill-opacity=".85"/>
+<rect x="236.2" y="92" width="113.2" height="20" rx="3" fill="var(--moss-mark)" fill-opacity=".85"/>
+<rect x="351.4" y="92" width="113.2" height="20" rx="3" fill="var(--moss-mark)" fill-opacity=".85"/>
+<rect x="466.6" y="92" width="113.2" height="20" rx="3" fill="var(--moss-mark)" fill-opacity=".85"/>
+<rect x="581.8" y="92" width="113.2" height="20" rx="3" fill="var(--moss-mark)" fill-opacity=".85"/>
+<rect x="697.0" y="92" width="113.2" height="20" rx="3" fill="var(--moss-mark)" fill-opacity=".85"/>
+<text x="465.6" y="106" class="pt" text-anchor="middle" style="fill:var(--surface)">PAGE 命中：main_* 与 index key 都在</text>
+<text x="822" y="106" class="pt br">STATE：没有（不存 checkpoint）</text>
+<text x="20" y="154" class="n">forward</text>
+<rect x="696.0" y="140" width="115.2" height="20" rx="3" fill="url(#hatch)" stroke="var(--plum-mark)"/>
+<rect x="811.2" y="140" width="208.8" height="20" rx="3" fill="var(--petrol-mark)"/>
+<text x="915.6" y="154" class="pt" text-anchor="middle" style="fill:var(--surface)">768–999：正常 prefill</text>
+<text x="688.8" y="154" class="pt pl" text-anchor="end">start = 768 − 128 = 640</text>
+<rect x="904.8" y="166" width="115.2" height="14" rx="3" fill="var(--amber-mark)"/>
+<text x="1020" y="194" class="xs am" text-anchor="end">decoder tail 872–999</text>
+<rect x="20" y="214" width="500" height="190" rx="7" fill="url(#gv)" stroke="var(--plum-mark)"/>
+<text x="36" y="236" class="n">640–767 这 128 行在新 slot 里重建状态</text>
+<text x="36" y="258" class="pt">• 窗口从 640 开始（swa_replay_start）：第 640 行只看见自己，</text>
+<text x="36" y="277" class="pt">  第 767 行看见 640–767 —— 重建的 ring 是截断的</text>
+<text x="36" y="296" class="pt">• compress plan 用 write_from = 768：不重写缓存里的组</text>
+<text x="36" y="315" class="pt">• Engram 历史 = 第 637、638、639 个 token 的压缩 id</text>
+<text x="36" y="334" class="pt">  （Sequence.replay，replay_history_tokens = 3；图像位置记 DEAD）</text>
+<text x="36" y="353" class="pt">• compressor 尾巴不用恢复：768 是 1 和 2 的公倍数，没有半组</text>
+<text x="36" y="372" class="pt">• 报告的命中仍是 768</text>
+<rect x="540" y="214" width="500" height="190" rx="7" fill="url(#gn)" stroke="var(--line)"/>
+<text x="556" y="236" class="n">为什么正好退 128</text>
+<text x="556" y="258" class="pt">• 一个 hash 块 = 128 token = 窗口大小：退一块，</text>
+<text x="556" y="277" class="pt">  命中点处的行就能读到完整的 127 行历史</text>
+<text x="556" y="296" class="pt">• validate_runtime_config 拒绝 PAGE &lt; window − 1</text>
+<text x="556" y="315" class="pt">• 同时保证 decoder 有满 128 行的 tail，后缀再短也够</text>
+<text x="556" y="334" class="pt">• LMCache 从层里搬回来的命中也这么处理</text>
+<text x="556" y="353" class="pt">  （tier_resume_replays）：只搬 PAGE，不搬 STATE</text>
+</svg>
+    <figcaption>
+      Engram 历史来自 <code>Sequence.replay</code> 里的 <code>history_ids</code>（<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/model_engine/sequence.py#L138"><code>atom/model_engine/sequence.py:138</code></a>），个数由 <code>replay_history_tokens = engram_max_ngram_size − 1 = 3</code> 决定（<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/config.py#L2779"><code>atom/config.py:2779</code></a>）。
+      LMCache 层里的命中同样适用：<code>tier_resume_replays</code> 在 <code>replay</code> 状态传输下恒为真（<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/model_engine/block_manager.py#L1836"><code>atom/model_engine/block_manager.py:1836</code></a>）。
+    </figcaption>
+  </figure>
+  <div class="callout">
+    <p class="eyebrow">精度代价</p>
+    <p>重建出来的 128 行，窗口截断在重放起点，所以恢复出来的请求的 logits 与冷启动 prefill 不同，偏差的性质和 decoder replay 一样；它读到的缓存全局 KV 仍是精确的。</p>
+  </div>
+</section>
+
+<section id="both">
+  <hr class="rule">
+  <p class="eyebrow">叠加</p>
+  <h2>两个功能一起作用：退回的 128 行顺手给了 decoder 一个满 tail</h2>
+  <div class="tscroll"><table>
+    <thead><tr><th>场景</th><th>encoder（0–19）</th><th>第 20 层压缩</th><th>decoder（20–39）</th></tr></thead>
+    <tbody>
+      <tr><td>冷启动长 prompt，最后一个 chunk</td><td>本 chunk 全部行</td><td>本 chunk 全部行</td><td>最后 128 行</td></tr>
+      <tr><td>冷启动，不是最后一个 chunk</td><td>本 chunk 全部行</td><td>本 chunk 全部行</td><td class="off">不跑</td></tr>
+      <tr><td>最后一段 &lt; 128 行</td><td>从网格起点起的全部行（前一段只重建）</td><td>只写新组</td><td>最后 128 行</td></tr>
+      <tr><td>前缀命中到 h</td><td>从 h − 128 起（h 之前只重建 ring）</td><td>只写 h 之后的组</td><td>最后 128 行</td></tr>
+      <tr><td>decode</td><td>全部（每请求 1 行，或 1 + 草稿）</td><td>全部</td><td>全部</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="noreplay">
+  <hr class="rule">
+  <p class="eyebrow">关掉之后</p>
+  <h2>decoder 关掉就是完整 prefill；encoder 关掉改存 STATE 镜像</h2>
+  <div class="grid2">
+    <div class="card"><p class="eyebrow">--no-decoder-swa-bounded-replay</p><h3>一张图，每行 40 层</h3>
+      <p>runtime 只编译 <code>_Backbone</code>（<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/models/deepseek_v41/runtime.py#L173"><code>atom/models/deepseek_v41/runtime.py:173</code></a>），不再拆成 early / late；<code>min_final_prefill_rows</code> 保持 0，最后一段再短也不往前挪。
+      logits 与完整 prefill 一致；代价是 decoder 20 层也跑全部行，长 prompt 的 prefill 约翻倍（图 2 下半）。</p></div>
+    <div class="card"><p class="eyebrow">--no-encoder-swa-bounded-replay</p><h3>StateTransfer.copy：存镜像</h3>
+      <p>状态传输换成 <code>copy(layout_id)</code>（<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/model_engine/state_runtime.py#L116"><code>atom/model_engine/state_runtime.py:116</code></a>）。镜像内容是 <code>checkpoint_image_ranges</code>：40 层窗口 + cursor，不含 compressor 半成品
+      （<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/model_ops/attentions/pool_layout/v41_pool_geometry.py#L380"><code>atom/model_ops/attentions/pool_layout/v41_pool_geometry.py:380</code></a>）。镜像存在 KV 池自己的 PAGE 单元里、按前缀 hash 建索引，
+      每个占 <code>ceil(镜像字节 / PAGE 字节)</code> 个单元（<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/model_engine/page_unit_checkpoint.py#L64"><code>atom/model_engine/page_unit_checkpoint.py:64</code></a>），粗算约 13 个。</p></div>
+  </div>
+  <p style="margin-top:20px">
+    V4.1 的状态只能在一次 forward 的<strong>最后一个 token</strong>处取出（<code>readable_midstep = False</code>），所以想在位置 p 留镜像，prefill 必须在 p 处切一刀，
+    让某次 forward 恰好结束在那里（<code>checkpoint_cut</code>，<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/model_engine/block_manager.py#L2886"><code>atom/model_engine/block_manager.py:2886</code></a>）。位置由一套梯子决定（<code>checkpointers_at</code>，<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/model_engine/block_manager.py#L3022"><code>atom/model_engine/block_manager.py:3022</code></a>）：
+  </p>
+  <ul class="tight">
+    <li><strong>间隔梯级</strong>：每 <code>state_checkpoint_interval_tokens</code> 一个，默认 8192（<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/config.py#L2011"><code>atom/config.py:2011</code></a>）；设 0 关闭，设 −1 不放间隔梯级。</li>
+    <li><strong>prompt 末尾锚点</strong>：在 prompt 末尾往前留出「下一次 forward 至少要带的行数」后的最后一个 PAGE 边界；V4.1 开着 decoder replay 时这个余量至少是 128（<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/model_engine/block_manager.py#L2615"><code>atom/model_engine/block_manager.py:2615</code></a>）。</li>
+    <li><strong>按需补</strong>：某次命中因为没有镜像被拒，补一个（<code>state_checkpoint_demand</code>，默认开）。</li>
+  </ul>
+  <figure>
+    <p class="fignum">图 5 · 同一条 20,000 token 的 prompt：replay 与 checkpoint</p>
+    <svg viewBox="0 0 1060 452" class="svg-min" role="img" aria-label="replay 与 checkpoint 两种前缀缓存方式在一条 20000 token prompt 上的对比">
+<text x="20" y="30" class="sub">同一条 20,000 token 的 prompt，两种前缀缓存的做法</text>
+<path d="M150 64 H1020" class="sv-axis"/>
+<path d="M150.0 59 V69" class="sv-axis"/>
+<text x="150" y="54" class="xs" text-anchor="middle">0</text>
+<path d="M328.2 59 V69" class="sv-axis"/>
+<text x="328.176" y="54" class="xs" text-anchor="middle">4,096</text>
+<path d="M506.4 59 V69" class="sv-axis"/>
+<text x="506.352" y="54" class="xs" text-anchor="middle">8,192</text>
+<path d="M684.5 59 V69" class="sv-axis"/>
+<text x="684.528" y="54" class="xs" text-anchor="middle">12,288</text>
+<path d="M862.7 59 V69" class="sv-axis"/>
+<text x="862.704" y="54" class="xs" text-anchor="middle">16,384</text>
+<path d="M1020.0 59 V69" class="sv-axis"/>
+<text x="1020" y="54" class="xs" text-anchor="middle">20,000</text>
+<text x="20" y="112" class="n">replay（默认）</text>
+<rect x="150.0" y="96" width="712.7" height="24" rx="3" fill="var(--petrol-mark)" fill-opacity=".85"/>
+<rect x="862.7" y="96" width="157.3" height="24" rx="3" fill="var(--petrol-mark)" fill-opacity=".85"/>
+<text x="506.352" y="112" class="pt" text-anchor="middle" style="fill:var(--surface)">chunk 只按 token 预算切</text>
+<text x="150" y="140" class="pt">不存镜像。下一轮命中可落在任意 128 边界，例如 19,968 → 从 19,840 起重算 128 行</text>
+<text x="20" y="186" class="n">checkpoint</text>
+<rect x="151.0" y="170" width="354.4" height="24" rx="3" fill="var(--amber-mark)" fill-opacity=".85"/>
+<rect x="507.4" y="170" width="354.4" height="24" rx="3" fill="var(--amber-mark)" fill-opacity=".85"/>
+<rect x="863.7" y="170" width="148.3" height="24" rx="3" fill="var(--amber-mark)" fill-opacity=".85"/>
+<rect x="1014.0" y="170" width="5.0" height="24" rx="3" fill="var(--amber-mark)" fill-opacity=".85"/>
+<path d="M506.4 164 V200" stroke="var(--brick)" stroke-width="1.6"/>
+<g class="slab a"><path class="st" d="M492.352 211 l5 -5 h28 l-5 5 z"/><path class="ss" d="M520.352 211 l5 -5 v22 l-5 5 z"/><path class="sf" d="M492.352 211 h28 v22 h-28 z"/></g>
+<text x="506.352" y="252" class="xs am" text-anchor="middle">梯级 8,192</text>
+<path d="M862.7 164 V200" stroke="var(--brick)" stroke-width="1.6"/>
+<g class="slab a"><path class="st" d="M848.704 211 l5 -5 h28 l-5 5 z"/><path class="ss" d="M876.704 211 l5 -5 v22 l-5 5 z"/><path class="sf" d="M848.704 211 h28 v22 h-28 z"/></g>
+<text x="862.704" y="252" class="xs am" text-anchor="middle">梯级 16,384</text>
+<path d="M1013.0 164 V200" stroke="var(--brick)" stroke-width="1.6"/>
+<g class="slab a"><path class="st" d="M999.04 211 l5 -5 h28 l-5 5 z"/><path class="ss" d="M1027.04 211 l5 -5 v22 l-5 5 z"/><path class="sf" d="M999.04 211 h28 v22 h-28 z"/></g>
+<text x="1013.04" y="252" class="xs am" text-anchor="middle">末尾锚点 19,840</text>
+<text x="328.176" y="186" class="pt" text-anchor="middle" style="fill:var(--surface)">fwd 1</text>
+<text x="684.528" y="186" class="pt" text-anchor="middle" style="fill:var(--surface)">fwd 2</text>
+<text x="937.872" y="186" class="pt" text-anchor="middle" style="fill:var(--surface)">fwd 3</text>
+<text x="150" y="274" class="pt">每个梯级都要让某次 forward 恰好结束在那里（状态只能在 forward 末尾取），所以 prompt 被多切几刀；</text>
+<text x="150" y="290" class="pt">每个镜像约 2.6 MiB ≈ 13 个 PAGE 单元（估算），和 KV 抢同一个池。</text>
+<rect x="20" y="318" width="500" height="118" rx="7" fill="url(#gp)" stroke="var(--petrol-mark)"/>
+<text x="36" y="340" class="n pe">命中后：replay</text>
+<text x="36" y="362" class="pt">从命中点往前 128 行开始 forward，重建窗口</text>
+<text x="36" y="380" class="pt">代价：多算 128 行；窗口截断 → logits 有偏差</text>
+<text x="36" y="398" class="pt">命中粒度：每 128 token</text>
+<text x="36" y="416" class="pt">LMCache 只搬 PAGE</text>
+<rect x="540" y="318" width="500" height="118" rx="7" fill="url(#ga)" stroke="var(--amber-mark)"/>
+<text x="556" y="340" class="n am">命中后：checkpoint</text>
+<text x="556" y="362" class="pt">StateCopies 把镜像按字节拷进新 slot，接着算</text>
+<text x="556" y="380" class="pt">代价：存镜像 + 多切 chunk；没有截断</text>
+<text x="556" y="398" class="pt">命中粒度：只有存过镜像的位置</text>
+<text x="556" y="416" class="pt">LMCache 搬 PAGE + STATE 镜像</text>
+</svg>
+    <figcaption>
+      末尾锚点 19,840 是按余量 128 算的：<code>(20,000 − 128) // 128 × 128</code>。恢复时 <code>StateCopies</code> 把镜像按字节拷进新 slot（<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/model_ops/attentions/deepseek_v41/checkpoints.py#L14"><code>atom/model_ops/attentions/deepseek_v41/checkpoints.py:14</code></a>）；
+      命中点上没有镜像时，按 runtime 文档的说法调度器会退到能恢复的边界重算，可用的命中因此变短。<code>lmcache_mp</code> 在这种模式下连同 STATE 镜像一起搬
+      （<code>get_kv_transfer_tensors</code>，<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/model_ops/attentions/deepseek_v41/backend.py#L444"><code>atom/model_ops/attentions/deepseek_v41/backend.py:444</code></a>）。
+    </figcaption>
+  </figure>
+  <div class="tscroll"><table>
+    <thead><tr><th></th><th>replay（默认）</th><th>checkpoint（关掉 encoder replay）</th></tr></thead>
+    <tbody>
+      <tr><td>能命中在哪</td><td>任意 hash 块边界（每 128 token）</td><td>只能在存过镜像的位置</td></tr>
+      <tr><td>命中后的代价</td><td>重算命中点之前的 128 行</td><td>拷一个约 2.6 MiB 的镜像</td></tr>
+      <tr><td>额外存储</td><td>无</td><td>每个镜像约 13 个 PAGE 单元，挤占 KV</td></tr>
+      <tr><td>对 prefill 的影响</td><td>不切 chunk</td><td>每个镜像位置切一刀，多一次 forward</td></tr>
+      <tr><td>精度</td><td>窗口截断，logits 与冷启动不同</td><td>没有截断</td></tr>
+      <tr><td>LMCache 搬什么</td><td>只有 PAGE</td><td>PAGE + STATE 镜像</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="plugin">
+  <hr class="rule">
+  <p class="eyebrow">vLLM 插件</p>
+  <h2>插件路径上两种都没有：前缀缓存整个被拒绝</h2>
+  <p>
+    插件路径由 vLLM 管块分配。V4.1 声明一个假注意力层，它的 <code>FullAttentionSpec</code> 是一块字节 arena（<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/plugin/vllm/deepseek_v41_bridge.py#L914"><code>atom/plugin/vllm/deepseek_v41_bridge.py:914</code></a>），
+    PAGE 定死为 256（<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/plugin/vllm/deepseek_v41_bridge.py#L60"><code>atom/plugin/vllm/deepseek_v41_bridge.py:60</code></a>），vLLM 的块号就是 V4.1 的页号；STATE 按请求数计价，只能从块池尾部扣出几块不让 vLLM 分配
+    （<code>v41_proxy_state_reserve_blocks</code>，<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/plugin/vllm/deepseek_v41_bridge.py#L275"><code>atom/plugin/vllm/deepseek_v41_bridge.py:275</code></a>；补丁在 <a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/plugin/vllm/deepseek_v41_state_reserve_patch.py#L91"><code>atom/plugin/vllm/deepseek_v41_state_reserve_patch.py:91</code></a>）。
+  </p>
+  <p>
+    <code>enforce_deepseek_v41_constraints</code>（<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/plugin/vllm/platform.py#L378"><code>atom/plugin/vllm/platform.py:378</code></a>）拒绝前缀缓存：vLLM 认为每个被缓存的块边界处后端都留下了可恢复的状态，
+    V4.1 只能在 forward 末尾给出状态，checkpoint 这条路走不通；replay 靠的是 ATOM 自己调度器里的 <code>replay_start</code>，而插件路径用的是 vLLM 的调度器。同一个函数还拒绝一切 KV connector，包括 <code>lmcache_mp</code>。
+    所以插件上的 V4.1 每个请求都从头 prefill。
+  </p>
+</section>
+
+<section id="read">
+  <hr class="rule">
+  <p class="eyebrow">读码路线</p>
+  <h2>几何 → runtime 的拆图 → 调度器的起点 → 状态传输</h2>
+  <ol class="steps">
+    <li class="step"><a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/model_ops/attentions/pool_layout/v41_pool_geometry.py#L266"><code>atom/model_ops/attentions/pool_layout/v41_pool_geometry.py:266</code></a> <code>page_fields</code>、<code>:334</code> <code>state_fields</code>、<code>:380</code> <code>checkpoint_image_ranges</code>：两种货币各装什么。</li>
+    <li class="step"><a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/models/deepseek_v41/bounded_replay.py"><code>atom/models/deepseek_v41/bounded_replay.py</code></a> 模块文档 → <a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/models/deepseek_v41/runtime.py#L278"><code>atom/models/deepseek_v41/runtime.py:278</code></a> <code>_build_replay_stages</code> → <code>:384</code> <code>_replayed</code> → <a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/models/deepseek_v41/decoder_graph.py#L39"><code>atom/models/deepseek_v41/decoder_graph.py:39</code></a>。</li>
+    <li class="step"><a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/model_engine/block_manager.py#L1847"><code>atom/model_engine/block_manager.py:1847</code></a> <code>replay_start</code>：命中退一块、最后一段补满 128，两件事在同一个函数里。</li>
+    <li class="step"><a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/model_ops/attentions/deepseek_v41/backend.py#L403"><code>atom/model_ops/attentions/deepseek_v41/backend.py:403</code></a> <code>state_transfer</code>：replay 与 copy 的分叉点；之后 <a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/model_engine/block_manager.py#L3022"><code>atom/model_engine/block_manager.py:3022</code></a> 的梯子只在 copy 下生效。</li>
+    <li class="step"><a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/docs/deepseek_v41_runtime.md"><code>docs/deepseek_v41_runtime.md</code></a> 的 “Decoder SWA bounded replay” 与 “Encoder SWA bounded replay” 两节：DP attention 下各 rank 怎样对齐 tail 宽度，这里没有展开。</li>
+  </ol>
+  <div class="callout">
+    <p class="eyebrow">读码坑</p>
+    <p>
+      「replay」这个词在 ATOM 里有两种：DeepSeek-V4 的 bounded replay 退的是 <code>state_replay_tokens</code>（状态的感受野），V4.1 的 encoder replay 退的是一个 hash 块。
+      <code>replay_start</code> 里两条分支挨着写（<code>transfer.replays</code> 与 <code>state_replay_tokens</code>），读的时候别混。
+    </p>
+  </div>
+</section>
+<nav class="pager" aria-label="翻页"><a class="prev" href="reindex.html"><span>← 上一章</span>9 · Reindex 层</a></nav>
+<footer>
+  <p>
+    源码 <a href="https://github.com/ROCm/ATOM/tree/99ebf633ac7a327c54282c3b244ea8519f3eef29">ROCm/ATOM@99ebf633a</a>（2026-11-01）·
+    文中 <code>文件:行号</code> 均指这一提交 ·
+    模型配置取自 <code>tests/models/deepseek_v41/fixtures/config.json</code>（钉在 <code>deepseek-ai/DeepSeek-V4.1-Flash@dba1be0</code>）·
+    mHC 与 CSA 的出处是 DeepSeek-V4 论文 §2.2、§2.3 ·
+    仓库 <a href="https://github.com/PerryZhang01/LLM">PerryZhang01/LLM</a>
+  </p>
+</footer>
+</div>
+</body>
+</html>

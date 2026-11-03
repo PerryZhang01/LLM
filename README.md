@@ -47,12 +47,27 @@ GitHub 的文件浏览器不渲染 HTML（只显示源码），所以文档通�
 |---|---|---|---|---|
 | **[MiniMax-M3](https://perryzhang01.github.io/LLM/models/MiniMax/m3_anatomy.html)** | `minimax_m3_vl` | 427.0 B / 24.73 B | 60 层里 57 层带 MSA 块级稀疏注意力（GQA 64:4 + 128-token 块 top-16），128 专家 top-4，原生多模态 | `atom/models/minimax_m3.py` |
 | **[DeepSeek-V4-Pro](https://perryzhang01.github.io/LLM/models/DeepSeek/v4_pro_anatomy.html)** | `deepseek_v4` | 1598.8 B / 49.78 B | 61 层 HCA/CSA 交替：31 层 128:1 全看、30 层 4:1 选 top-1024；前 3 层哈希路由，mHC 四路，1 层 MTP | `atom/models/deepseek_v4.py` |
-| **[DeepSeek-V4.1-Flash](https://perryzhang01.github.io/LLM/models/DeepSeek/v41_flash_anatomy.html)** | `deepseek_v41` | 763.2 B / 16.79 B | 40 层 CSA2：WINDOW / FULL / REINDEX / REUSE 四种层，4 个压缩 KV owner，mHC 四路，两层 Engram，3 层 DSpark | `atom/models/deepseek_v41/` |
+| **[DeepSeek-V4.1-Flash](https://perryzhang01.github.io/LLM/models/DeepSeek/v41_flash/index.html)** | `deepseek_v41` | 763.2 B / 16.79 B | 40 层 CSA2：WINDOW / FULL / REINDEX / REUSE 四种层，4 个压缩 KV owner，mHC 四路，两层 Engram，3 层 DSpark。**分 10 章**逐模块拆解，另有[单页速览版](https://perryzhang01.github.io/LLM/models/DeepSeek/v41_flash_anatomy.html) | `atom/models/deepseek_v41/` |
 | **[GLM-5.3-Flash](https://perryzhang01.github.io/LLM/models/GLM/glm53_flash_anatomy.html)** | `glm5_next` | 320.8 B / 17.38 B | 34 层 KDA + 11 层稀疏 MLA 混合，mHC 四路残差，全模型 NoPE，k-pool 稀疏索引 | `atom/models/glm5_next.py` |
 | **[GLM-5.3](https://perryzhang01.github.io/LLM/models/GLM/glm53_anatomy.html)** | `glm_moe_dsa` | 753.3 B / 41.25 B | 78 层 MLA + DSA，256 专家，IndexShare；结构与 5.2 逐字段相同，只多一个 `moe_router_dtype` | `atom/models/deepseek_v2.py` |
 | **[GLM-5.2](https://perryzhang01.github.io/LLM/models/glm52_anatomy.html)** | `glm_moe_dsa` | 753.3 B / 41.25 B | 引入 IndexShare：78 层里只有 21 层真的算 top-k | `atom/models/deepseek_v2.py` |
 
 GLM-5.2 另有一份 Markdown 版，GitHub 可直接阅读：[`models/GLM/model.md`](models/GLM/model.md)。
+
+### DeepSeek-V4.1-Flash 的十章
+
+| 章 | 页面 | 讲什么 |
+|---|---|---|
+| 1 | [总览](https://perryzhang01.github.io/LLM/models/DeepSeek/v41_flash/index.html) | 40 层拓扑全景、一个 token 的形状旅程、Block 内部、encoder–decoder 分工、四种注意力层速查、ATOM 代码地图 |
+| 2 | [四路残差 mHC](https://perryzhang01.github.io/LLM/models/DeepSeek/v41_flash/residual.html) | embedding 怎么复制成 4 路、one-hot 初始 pre、接缝的四步、Sinkhorn 拆出 pre / post / comb、延迟 pre 与 V4 的区别、为什么是 4 路 |
+| 3 | [Engram](https://perryzhang01.github.io/LLM/models/DeepSeek/v41_flash/engram.html) | 词表压缩、2/3/4-gram × 8 头哈希与碰撞上界、UVA 直读宿主表与 TP 切头、4 路各自的门控、旁路 stream 时序 |
+| 4 | [CSA2 注意力骨架](https://perryzhang01.github.io/LLM/models/DeepSeek/v41_flash/csa2.html) | A–H 八步与全部权重、partial RoPE、双源 KV + sink、分组输出 LoRA、index plane 与 index key、四种模式各跑哪几步 |
+| 5 | [Window 层](https://perryzhang01.github.io/LLM/models/DeepSeek/v41_flash/window.html) | 第 0、1 层：窗口 ring 的地址公式、prefill 与 decode 的读写时序、不带 YaRN 的 RoPE、草稿层的窗口 |
+| 6 | [Full 层](https://perryzhang01.github.io/LLM/models/DeepSeek/v41_flash/full.html) | 第 2/8/14 层：ratio 2 池化、index key 的生产、32 头 ReLU 打分、可见范围、top-512 与下标组 |
+| 7 | [第 20 层](https://perryzhang01.github.io/LLM/models/DeepSeek/v41_flash/layer20.html) | ratio 1 的逐 token 记忆、一份 logits 两次选择（top-512 与 2048 候选块）、在 bounded replay 里被拆成两半 |
+| 8 | [Reuse 层](https://perryzhang01.github.io/LLM/models/DeepSeek/v41_flash/reuse.html) | 30 层既不压缩也不打分：下标组一次生成、各层只加自己的窗口 |
+| 9 | [Reindex 层](https://perryzhang01.github.io/LLM/models/DeepSeek/v41_flash/reindex.html) | 第 24/28/32/36 层：候选块翻译成紧凑块表、在 16,384 列上重打分、列号换算回 token 位置 |
+| 10 | [缓存与 Bounded Replay](https://perryzhang01.github.io/LLM/models/DeepSeek/v41_flash/replay.html) | PAGE 与 STATE、decoder replay 让 prefill 少算一半、encoder replay 让前缀命中不存状态、关掉之后的 checkpoint |
 
 ### 每份模型文档包含什么
 
@@ -114,7 +129,18 @@ GLM-5.2 另有一份 Markdown 版，GitHub 可直接阅读：[`models/GLM/model.
 │   │   └── m3_anatomy.html             # MiniMax-M3
 │   └── DeepSeek/
 │       ├── v4_pro_anatomy.html         # DeepSeek-V4-Pro
-│       └── v41_flash_anatomy.html      # DeepSeek-V4.1-Flash
+│       ├── v41_flash_anatomy.html      # DeepSeek-V4.1-Flash（单页速览）
+│       └── v41_flash/                  # DeepSeek-V4.1-Flash，十章
+│           ├── index.html              # 1 总览
+│           ├── residual.html           # 2 四路残差 mHC
+│           ├── engram.html             # 3 Engram
+│           ├── csa2.html               # 4 CSA2 注意力骨架
+│           ├── window.html             # 5 Window 层
+│           ├── full.html               # 6 Full 层
+│           ├── layer20.html            # 7 第 20 层
+│           ├── reuse.html              # 8 Reuse 层
+│           ├── reindex.html            # 9 Reindex 层
+│           └── replay.html             # 10 缓存与 Bounded Replay
 ├── framework/                          # 框架解剖
 │   └── DeepInfer/                      # DeepInfer，六章
 │       ├── index.html                  # 1 总览

@@ -1,0 +1,868 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DeepSeek-V4.1-Flash 结构解剖 · 总览</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
+<style>
+:root{
+  --bg:#E8EBEA; --surface:#F6F8F7; --surface-2:#DDE3E2; --sunk:#D3DAD9;
+  --ink:#141A1C; --ink-2:#4B5A5C; --ink-3:#75858880;
+  --line:#C3CDCC; --line-soft:#D4DCDB;
+  --amber:#8A5D0C; --amber-mark:#C79433; --amber-bg:#EFE2C2;
+  --petrol:#1D5A74; --petrol-mark:#3D87A6; --petrol-bg:#D3E3EA;
+  --brick:#8E3629; --brick-bg:#F0DAD5;
+  --moss:#3F6034; --moss-mark:#6E9A5C; --moss-bg:#DDE8D6;
+  --mute-mark:#9FADAF;
+  --c1:#1F7AB0; --c2:#B5700F;
+  --shadow:0 1px 2px rgba(20,26,28,.06), 0 8px 24px -14px rgba(20,26,28,.24);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0D1315; --surface:#141C1E; --surface-2:#1C2629; --sunk:#101819;
+    --ink:#E3EAE9; --ink-2:#94A4A6; --ink-3:#6E7E8080;
+    --line:#283437; --line-soft:#1F2B2E;
+    --amber:#E0AB53; --amber-mark:#D69B36; --amber-bg:#3B2E13;
+    --petrol:#6FB6D5; --petrol-mark:#4C93B4; --petrol-bg:#12303D;
+    --brick:#E58472; --brick-bg:#3A1D18;
+    --moss:#A8CE96; --moss-mark:#7FAE6B; --moss-bg:#22301B;
+    --mute-mark:#3C4A4D;
+    --c1:#3A90C8; --c2:#BF7E22;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 30px -18px rgba(0,0,0,.8);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0D1315; --surface:#141C1E; --surface-2:#1C2629; --sunk:#101819;
+  --ink:#E3EAE9; --ink-2:#94A4A6; --ink-3:#6E7E8080;
+  --line:#283437; --line-soft:#1F2B2E;
+  --amber:#E0AB53; --amber-mark:#D69B36; --amber-bg:#3B2E13;
+  --petrol:#6FB6D5; --petrol-mark:#4C93B4; --petrol-bg:#12303D;
+  --brick:#E58472; --brick-bg:#3A1D18;
+  --moss:#A8CE96; --moss-mark:#7FAE6B; --moss-bg:#22301B;
+  --mute-mark:#3C4A4D;
+  --c1:#3A90C8; --c2:#BF7E22;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 30px -18px rgba(0,0,0,.8);
+}
+*{box-sizing:border-box}
+body{margin:0; background:var(--bg); color:var(--ink);
+  font-family:"Source Serif 4", "Songti SC", "Noto Serif CJK SC", "Source Han Serif SC", Georgia, serif;
+  font-size:16.5px; line-height:1.72; -webkit-font-smoothing:antialiased}
+.wrap{max-width:1140px; margin:0 auto; padding:0 28px 96px}
+h1,h2,h3,.eyebrow,.stat-n,.lgd,.tag,th,.chapnav,.pager{font-family:Archivo, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif}
+h1{font-size:clamp(2.2rem,5.2vw,3.6rem); line-height:1.04; letter-spacing:-.028em; font-weight:700; margin:0; text-wrap:balance}
+h2{font-size:clamp(1.3rem,2.5vw,1.68rem); line-height:1.22; letter-spacing:-.014em; font-weight:600; margin:0 0 .3em; text-wrap:balance}
+h3{font-size:1.0rem; letter-spacing:.005em; font-weight:600; margin:0 0 .35em}
+p{margin:0 0 1em; max-width:72ch}
+a{color:var(--petrol)}
+code,.mono{font-family:"IBM Plex Mono", ui-monospace, monospace; font-size:.855em; font-variant-ligatures:none}
+:not(pre) > code{background:var(--surface-2); padding:.1em .38em; border-radius:3px; color:var(--ink); overflow-wrap:anywhere}
+.eyebrow{font-size:.66rem; font-weight:600; letter-spacing:.16em; text-transform:uppercase; color:var(--ink-2); margin:0 0 .55em}
+.lede{font-size:1.1rem; color:var(--ink-2); max-width:70ch}
+.note{font-size:.9rem; color:var(--ink-2)}
+header.mast{border-bottom:1px solid var(--line); margin-bottom:52px; padding:24px 0 34px}
+.mast-id{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:22px}
+.tag{font-size:.68rem; font-weight:600; letter-spacing:.09em; text-transform:uppercase; padding:.32em .7em; border:1px solid var(--line); border-radius:2px; color:var(--ink-2); background:var(--surface)}
+.tag.hot{border-color:var(--amber); color:var(--amber); background:var(--amber-bg)}
+.mast p.lede{margin-top:18px}
+.stats{display:grid; grid-template-columns:repeat(auto-fit,minmax(128px,1fr)); gap:1px; background:var(--line-soft); border:1px solid var(--line-soft); margin-top:34px}
+.stat{background:var(--surface); padding:14px 16px 16px}
+.stat-n{display:block; font-size:1.45rem; font-weight:700; letter-spacing:-.02em; font-variant-numeric:tabular-nums; line-height:1.15}
+.stat-l{display:block; font-size:.74rem; color:var(--ink-2); letter-spacing:.02em; margin-top:3px; font-family:"IBM Plex Mono", monospace}
+section{margin:0 0 68px; scroll-margin-top:20px}
+.rule{border:0; border-top:1px solid var(--line); margin:0 0 34px}
+figure{margin:26px 0 0; background:var(--surface); border:1px solid var(--line); padding:24px 22px 16px; box-shadow:var(--shadow); overflow-x:auto}
+figure svg{max-width:100%; height:auto; display:block; margin:0 auto; color:var(--ink-2); font-family:"IBM Plex Mono", ui-monospace, monospace; font-size:10.5px}
+figure svg text{fill:var(--ink)}
+figure .fignum{font-family:Archivo,sans-serif; font-size:.66rem; font-weight:600; letter-spacing:.16em; text-transform:uppercase; color:var(--ink-2); margin:0 0 14px}
+figcaption{font-size:.86rem; color:var(--ink-2); margin-top:16px; padding-top:12px; border-top:1px solid var(--line-soft); max-width:80ch}
+figcaption strong{color:var(--ink)}
+.svg-min{min-width:760px}
+figure svg.chart{max-width:760px}
+.tscroll{overflow-x:auto; margin-top:22px; border:1px solid var(--line); background:var(--surface); box-shadow:var(--shadow)}
+table{border-collapse:collapse; width:100%; min-width:640px; font-size:.9rem}
+th{text-align:left; font-size:.68rem; letter-spacing:.11em; text-transform:uppercase; font-weight:600; color:var(--ink-2); padding:11px 16px; background:var(--surface-2); border-bottom:1px solid var(--line); white-space:nowrap}
+td{padding:10px 16px; border-bottom:1px solid var(--line-soft); vertical-align:top; line-height:1.55}
+tbody tr:last-child td{border-bottom:0}
+td.num{font-family:"IBM Plex Mono",monospace; font-variant-numeric:tabular-nums; white-space:nowrap}
+td.k{font-family:"IBM Plex Mono",monospace; font-size:.8rem}
+.hl{color:var(--amber); font-weight:600}
+.dim{color:var(--ink-2)}
+.pos{color:var(--moss); font-weight:600}
+.neg{color:var(--brick); font-weight:600}
+.grid2{display:grid; grid-template-columns:repeat(auto-fit,minmax(310px,1fr)); gap:18px; margin-top:24px}
+.grid3{display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:16px; margin-top:24px}
+.card{background:var(--surface); border:1px solid var(--line); padding:18px 20px 16px; box-shadow:var(--shadow)}
+.card h3{color:var(--ink)}
+.card p:last-child{margin-bottom:0}
+.card.warn{border-left:3px solid var(--brick)}
+.card.good{border-left:3px solid var(--petrol)}
+.card.key{border-left:3px solid var(--amber-mark)}
+.card.moss{border-left:3px solid var(--moss-mark)}
+.card .eyebrow{margin-bottom:.4em}
+a.card{display:block; text-decoration:none; color:inherit; transition:transform .12s ease, border-color .12s ease}
+a.card:hover{transform:translateY(-2px); border-color:var(--amber-mark)}
+a.card .go{font-family:"IBM Plex Mono",monospace; font-size:.76rem; color:var(--amber); font-weight:600}
+ul.tight,ol.tight{margin:0; padding-left:1.25em}
+ul.tight li,ol.tight li{margin-bottom:.42em}
+ul.tight li:last-child,ol.tight li:last-child{margin-bottom:0}
+.pathline{font-family:"IBM Plex Mono",monospace; font-size:.76rem; color:var(--ink-2); background:var(--sunk); padding:5px 9px; display:inline-block; margin-top:10px; border-radius:2px; word-break:break-all}
+.callout{background:var(--amber-bg); border:1px solid var(--amber-mark); padding:16px 20px; margin-top:24px}
+.callout .eyebrow{color:var(--amber)}
+.callout p:last-child{margin-bottom:0}
+.callout.p{background:var(--petrol-bg); border-color:var(--petrol-mark)}
+.callout.p .eyebrow{color:var(--petrol)}
+pre.code{background:var(--sunk); border:1px solid var(--line-soft); padding:14px 16px; overflow-x:auto; font-family:"IBM Plex Mono",monospace; font-size:.78rem; line-height:1.6; margin:20px 0 0; color:var(--ink)}
+pre.code .c{color:var(--ink-2)}
+pre.code .h{color:var(--amber); font-weight:600}
+footer{border-top:1px solid var(--line); padding-top:22px; color:var(--ink-2); font-size:.85rem}
+.backnav{padding:22px 0 0; font-family:Archivo,"PingFang SC",system-ui,sans-serif; font-size:.8rem}
+.backnav a{color:var(--ink-2); text-decoration:none}
+.backnav a:hover{color:var(--amber)}
+.chapnav{display:flex; flex-wrap:wrap; gap:6px; margin:14px 0 0; font-size:.74rem}
+.chapnav a{padding:.36em .8em; border:1px solid var(--line); background:var(--surface); color:var(--ink-2); text-decoration:none; border-radius:2px; white-space:nowrap}
+.chapnav a:hover{border-color:var(--amber-mark); color:var(--ink)}
+.chapnav a.on{border-color:var(--amber); color:var(--amber); background:var(--amber-bg); font-weight:600}
+.pager{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin:12px 0 40px}
+.pager a{display:block; text-decoration:none; color:var(--ink); background:var(--surface); border:1px solid var(--line); padding:14px 18px; box-shadow:var(--shadow)}
+.pager a:hover{border-color:var(--amber-mark)}
+.pager a span{display:block; font-size:.66rem; letter-spacing:.14em; text-transform:uppercase; color:var(--ink-2)}
+.pager a.next{text-align:right; grid-column:2}
+/* svg 语义类 */
+.sv-band{fill:var(--surface-2)}
+.sv-box{fill:var(--surface); stroke:var(--line); stroke-width:1.2}
+.sv-a{fill:var(--amber-bg); stroke:var(--amber-mark); stroke-width:1.3}
+.sv-p{fill:var(--petrol-bg); stroke:var(--petrol-mark); stroke-width:1.3}
+.sv-m{fill:var(--moss-bg); stroke:var(--moss-mark); stroke-width:1.3}
+.sv-r{fill:var(--brick-bg); stroke:var(--brick); stroke-width:1.3}
+.sv-sunk{fill:var(--sunk); stroke:var(--line); stroke-width:1}
+.sv-dash{fill:none; stroke:var(--ink-2); stroke-width:1.1; stroke-dasharray:5 4}
+.sv-hatch{fill:url(#hatch); stroke:var(--line); stroke-width:1}
+.sv-ln{stroke:var(--ink-2); stroke-width:1.3; fill:none}
+.sv-ln-d{stroke:var(--ink-2); stroke-width:1.2; fill:none; stroke-dasharray:4 3}
+.sv-ln-a{stroke:var(--amber-mark); stroke-width:1.6; fill:none}
+.sv-ln-p{stroke:var(--petrol-mark); stroke-width:1.6; fill:none}
+.sv-grid{stroke:var(--line-soft); stroke-width:1}
+.sv-axis{stroke:var(--ink-2); stroke-width:1}
+figure svg text.n{font-size:11.5px; font-weight:600}
+figure svg text.s{fill:var(--ink-2); font-size:9.5px}
+figure svg text.xs{fill:var(--ink-2); font-size:9px}
+figure svg text.h{font-family:Archivo,"PingFang SC",system-ui,sans-serif; font-size:12px; font-weight:600}
+figure svg text.am{fill:var(--amber)}
+figure svg text.pe{fill:var(--petrol)}
+.mk{fill:var(--ink-2)} .mka{fill:var(--amber-mark)} .mkp{fill:var(--petrol-mark)}
+.hatch-l{stroke:var(--line); stroke-width:2}
+.c1l{stroke:var(--c1); stroke-width:2; fill:none} .c2l{stroke:var(--c2); stroke-width:2; fill:none}
+.c1d{fill:var(--c1); stroke:var(--surface); stroke-width:2} .c2d{fill:var(--c2); stroke:var(--surface); stroke-width:2}
+.hit{fill:transparent; cursor:default}
+.hit:hover + .c1d, .hit:hover + .c2d{stroke:var(--ink)}
+@media (max-width:640px){ .wrap{padding:0 16px 64px} .pager{grid-template-columns:1fr} .pager a.next{grid-column:1} }
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+:focus-visible{outline:2px solid var(--petrol); outline-offset:2px}
+/* ===== V4.1 章节扩展：配色 ===== */
+:root{
+  --plum:#5E3C78; --plum-mark:#9A72B8; --plum-bg:#E9E0F0;
+  --s0:#C79433; --s1:#3D87A6; --s2:#6E9A5C; --s3:#B0584A;
+  --enc:#D3E3EA; --dec:#EFE2C2;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --plum:#CDAEE6; --plum-mark:#9C78BA; --plum-bg:#2A1F35;
+    --s0:#D69B36; --s1:#4C93B4; --s2:#7FAE6B; --s3:#D17562;
+    --enc:#12303D; --dec:#3B2E13;
+  }
+}
+:root[data-theme="dark"]{
+  --plum:#CDAEE6; --plum-mark:#9C78BA; --plum-bg:#2A1F35;
+  --s0:#D69B36; --s1:#4C93B4; --s2:#7FAE6B; --s3:#D17562;
+  --enc:#12303D; --dec:#3B2E13;
+}
+/* ===== 页面小件 ===== */
+.toc{display:flex; flex-wrap:wrap; gap:6px 14px; margin:18px 0 0; font-family:Archivo,"PingFang SC",system-ui,sans-serif; font-size:.78rem}
+.toc a{color:var(--ink-2); text-decoration:none; border-bottom:1px dotted var(--line)}
+.toc a:hover{color:var(--amber)}
+.kv{display:grid; grid-template-columns:max-content 1fr; gap:4px 16px; font-size:.9rem; margin:10px 0 0}
+.kv dt{font-family:"IBM Plex Mono",monospace; font-size:.8rem; color:var(--ink-2)}
+.kv dd{margin:0}
+.step{counter-increment:st; position:relative; padding-left:2.1em; margin:0 0 .8em}
+.step::before{content:counter(st); position:absolute; left:0; top:.1em; width:1.45em; height:1.45em; border-radius:50%;
+  background:var(--amber-bg); color:var(--amber); border:1px solid var(--amber-mark);
+  font:600 .72rem/1.45em Archivo,system-ui,sans-serif; text-align:center}
+.steps{counter-reset:st; margin:16px 0 0; padding:0; list-style:none}
+.ex{background:var(--surface); border:1px dashed var(--amber-mark); padding:16px 20px; margin-top:22px}
+.ex .eyebrow{color:var(--amber)}
+.ex p:last-child{margin-bottom:0}
+td.on{color:var(--moss); font-weight:600} td.off{color:var(--ink-3)}
+/* ===== SVG 图元：在 sv-* 之外新增 ===== */
+.sv-v{fill:var(--plum-bg); stroke:var(--plum-mark); stroke-width:1.3}
+.sv-ln-m{stroke:var(--moss-mark); stroke-width:1.6; fill:none}
+.sv-ln-r{stroke:var(--brick); stroke-width:1.6; fill:none}
+.sv-ln-v{stroke:var(--plum-mark); stroke-width:1.6; fill:none}
+.sv-flow{stroke:var(--ink-2); stroke-width:2.2; fill:none; stroke-linecap:round}
+.sv-enc{fill:var(--enc)} .sv-dec{fill:var(--dec)}
+/* 四路残差的四条泳道 */
+.ln0,.ln1,.ln2,.ln3{fill:none; stroke-width:3.2; stroke-linecap:round}
+.ln0{stroke:var(--s0)} .ln1{stroke:var(--s1)} .ln2{stroke:var(--s2)} .ln3{stroke:var(--s3)}
+.lf0{fill:var(--s0)} .lf1{fill:var(--s1)} .lf2{fill:var(--s2)} .lf3{fill:var(--s3)}
+/* 形状标签（贴在箭头上的 [T, 5120]） */
+.pill{fill:var(--surface); stroke:var(--line); stroke-width:1}
+.pill-a{fill:var(--amber-bg); stroke:var(--amber-mark); stroke-width:1}
+.pill-p{fill:var(--petrol-bg); stroke:var(--petrol-mark); stroke-width:1}
+.pill-m{fill:var(--moss-bg); stroke:var(--moss-mark); stroke-width:1}
+.pill-v{fill:var(--plum-bg); stroke:var(--plum-mark); stroke-width:1}
+figure svg text.pt{font-size:9.5px; fill:var(--ink-2)}
+figure svg text.t{font-family:Archivo,"PingFang SC",system-ui,sans-serif; font-size:13.5px; font-weight:700}
+figure svg text.sub{font-family:Archivo,"PingFang SC",system-ui,sans-serif; font-size:10px; font-weight:600; letter-spacing:.14em; fill:var(--ink-2)}
+figure svg text.big{font-family:Archivo,system-ui,sans-serif; font-size:20px; font-weight:700}
+figure svg text.sym{font-family:"Source Serif 4",Georgia,serif; font-size:15px; font-weight:600}
+figure svg text.pl{fill:var(--plum)} figure svg text.mo{fill:var(--moss)} figure svg text.br{fill:var(--brick)} figure svg text.dm{fill:var(--ink-2)}
+/* 运算节点（∑ σ ⊙ 之类） */
+.op{fill:var(--surface); stroke:var(--ink-2); stroke-width:1.3}
+.op-a{fill:var(--amber-bg); stroke:var(--amber-mark); stroke-width:1.4}
+.op-p{fill:var(--petrol-bg); stroke:var(--petrol-mark); stroke-width:1.4}
+/* 立体张量块：front / top / side 三个面，配色由外层 class 决定 */
+.slab .sf{stroke-width:1.2} .slab .st{stroke-width:1} .slab .ss{stroke-width:1}
+.slab.a .sf{fill:var(--amber-bg); stroke:var(--amber-mark)} .slab.a .st{fill:var(--surface); stroke:var(--amber-mark)} .slab.a .ss{fill:var(--amber-mark); fill-opacity:.38; stroke:var(--amber-mark)}
+.slab.p .sf{fill:var(--petrol-bg); stroke:var(--petrol-mark)} .slab.p .st{fill:var(--surface); stroke:var(--petrol-mark)} .slab.p .ss{fill:var(--petrol-mark); fill-opacity:.38; stroke:var(--petrol-mark)}
+.slab.m .sf{fill:var(--moss-bg); stroke:var(--moss-mark)} .slab.m .st{fill:var(--surface); stroke:var(--moss-mark)} .slab.m .ss{fill:var(--moss-mark); fill-opacity:.38; stroke:var(--moss-mark)}
+.slab.v .sf{fill:var(--plum-bg); stroke:var(--plum-mark)} .slab.v .st{fill:var(--surface); stroke:var(--plum-mark)} .slab.v .ss{fill:var(--plum-mark); fill-opacity:.38; stroke:var(--plum-mark)}
+.slab.r .sf{fill:var(--brick-bg); stroke:var(--brick)} .slab.r .st{fill:var(--surface); stroke:var(--brick)} .slab.r .ss{fill:var(--brick); fill-opacity:.32; stroke:var(--brick)}
+.slab.n .sf{fill:var(--surface-2); stroke:var(--ink-2)} .slab.n .st{fill:var(--surface); stroke:var(--ink-2)} .slab.n .ss{fill:var(--ink-2); fill-opacity:.25; stroke:var(--ink-2)}
+/* 网格单元：PAGE / tile / 候选块 / top-k 位图 */
+.cell{fill:var(--surface); stroke:var(--line); stroke-width:.8}
+.cell-a{fill:var(--amber-mark); fill-opacity:.85; stroke:var(--surface); stroke-width:.8}
+.cell-p{fill:var(--petrol-mark); fill-opacity:.85; stroke:var(--surface); stroke-width:.8}
+.cell-m{fill:var(--moss-mark); fill-opacity:.85; stroke:var(--surface); stroke-width:.8}
+.cell-v{fill:var(--plum-mark); fill-opacity:.85; stroke:var(--surface); stroke-width:.8}
+.cell-r{fill:var(--brick); fill-opacity:.75; stroke:var(--surface); stroke-width:.8}
+.cell-d{fill:var(--sunk); stroke:var(--line-soft); stroke-width:.8}
+
+</style>
+
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
+<marker id="ar" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path class="mk" d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z"/></marker>
+<marker id="ara" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path class="mka" d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z"/></marker>
+<marker id="arp" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path class="mkp" d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z"/></marker>
+<marker id="arm" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z" fill="var(--moss-mark)"/></marker>
+<marker id="arr" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z" fill="var(--brick)"/></marker>
+<marker id="arv" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z" fill="var(--plum-mark)"/></marker>
+<linearGradient id="gn" x1="0" y1="0" x2=".4" y2="1"><stop offset="0%" stop-color="var(--surface)"/><stop offset="100%" stop-color="var(--surface-2)"/></linearGradient>
+<linearGradient id="ga" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--amber-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+<linearGradient id="gp" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--petrol-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+<linearGradient id="gm" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--moss-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+<linearGradient id="gr" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--brick-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+<linearGradient id="gv" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--plum-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+<linearGradient id="genc" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="var(--petrol-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+<linearGradient id="gdec" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="var(--surface)"/><stop offset="100%" stop-color="var(--amber-bg)"/></linearGradient>
+<filter id="sh" x="-8%" y="-12%" width="116%" height="140%"><feDropShadow dx="0" dy="1.4" stdDeviation="2.2" flood-opacity=".14"/></filter>
+<pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line class="hatch-l" x1="0" y1="0" x2="0" y2="6"/></pattern>
+<pattern id="dots" width="8" height="8" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1" fill="var(--line)"/></pattern>
+</defs></svg>
+<div class="wrap">
+<nav class="backnav"><a href="../../../index.html">← LLM 模型与框架结构手册</a> · <a href="../v41_flash_anatomy.html">单页速览版</a></nav>
+<nav class="chapnav" aria-label="章节"><a href="index.html" class="on">1 · 总览</a><a href="residual.html">2 · 四路残差 mHC</a><a href="engram.html">3 · Engram</a><a href="csa2.html">4 · CSA2 注意力骨架</a><a href="window.html">5 · Window 层</a><a href="full.html">6 · Full 层</a><a href="layer20.html">7 · 第 20 层</a><a href="reuse.html">8 · Reuse 层</a><a href="reindex.html">9 · Reindex 层</a><a href="replay.html">10 · 缓存与 Bounded Replay</a></nav>
+<header class="mast">
+  <div class="mast-id">
+    <span class="tag">deepseek-ai/DeepSeek-V4.1-Flash</span>
+    <span class="tag">DeepseekV41ForCausalLM</span>
+    <span class="tag">ROCm/ATOM@99ebf63 · 2026-11-01</span>
+    <span class="tag hot">CSA2 · 四种注意力层</span>
+    <span class="tag hot">mHC 四路残差</span>
+    <span class="tag hot">Engram</span>
+  </div>
+  <h1>DeepSeek-V4.1-Flash 结构解剖</h1>
+  <p class="lede">
+    40 层的自回归模型，但前 20 层和后 20 层分工不同：前半段一边算一边写下三份压缩记忆，
+    第 20 层把 encoder 的输出按 token 存成 decoder 唯一的远程记忆，后半段只在 128 行窗口里加工，远处的东西全靠检索。
+    残差流被加宽成 4 路，每个子层只看其中加权合成的 1 路。这组页面把每个模块拆到张量形状这一级，
+    每张图标注 shape 的变化，关键处配一个算得出数的例子。
+  </p>
+  <div class="stats">
+    <div class="stat"><span class="stat-n">40 + 3</span><span class="stat-l">主干层 + DSpark 草稿层</span></div>
+    <div class="stat"><span class="stat-n">5120</span><span class="stat-l">hidden，残差 [T, 4, 5120]</span></div>
+    <div class="stat"><span class="stat-n">64 × 512</span><span class="stat-l">query 头 × 维，KV 只有 1 个头</span></div>
+    <div class="stat"><span class="stat-n">4</span><span class="stat-l">KV owner：第 2/8/14/20 层</span></div>
+    <div class="stat"><span class="stat-n">8</span><span class="stat-l">层真正打 top-512</span></div>
+    <div class="stat"><span class="stat-n">128</span><span class="stat-l">窗口行数 = PAGE token 数</span></div>
+    <div class="stat"><span class="stat-n">384 / 6</span><span class="stat-l">路由专家 / 每 token 激活</span></div>
+    <div class="stat"><span class="stat-n">2 × 24</span><span class="stat-l">Engram 层 × 哈希头</span></div>
+  </div>
+  <nav class="toc" aria-label="本页目录">
+    <a href="#chapters">章节</a><a href="#topology">40 层全景</a><a href="#journey">一个 token 的旅程</a>
+    <a href="#block">一个 Block 里面</a><a href="#encdec">encoder–decoder 视角</a><a href="#modes">四种注意力速查</a>
+    <a href="#codemap">ATOM 代码地图</a><a href="#conventions">阅读约定</a>
+  </nav>
+</header>
+
+<section id="chapters">
+  <p class="eyebrow">十章</p>
+  <h2>先看整网，再按模块拆，最后看缓存怎么省</h2>
+  <p>
+    第 2、3 章是挂在残差流上的两个特殊模块；第 4 章讲 40 层共用的注意力骨架，第 5–9 章按层的类型逐个拆开；
+    第 10 章讲 PAGE / STATE 两种缓存，以及 prefill 和前缀命中时怎样少算。每章都能单独读，章末有指向源码的读码路线。
+  </p>
+  <div class="grid3">
+    <a class="card key" href="residual.html"><p class="eyebrow">第 2 章</p><h3>四路残差 mHC</h3><p>embedding 怎么复制成 4 路、one-hot 的初始 pre、一个接缝里的四步、Sinkhorn 把 24 个系数拆成 pre / post / comb、延迟 pre 与 V4 的区别。</p><span class="go">residual.html →</span></a>
+    <a class="card key" href="engram.html"><p class="eyebrow">第 3 章</p><h3>Engram</h3><p>2/3/4-gram × 8 个哈希头 = 24 行；素数模、CRT 给出的碰撞上界；UVA 直读宿主表；4 路各自的门控与写回位置。</p><span class="go">engram.html →</span></a>
+    <a class="card good" href="csa2.html"><p class="eyebrow">第 4 章</p><h3>CSA2 注意力骨架</h3><p>A–H 八步、全部权重与 TP 切法、partial RoPE、双源 KV + sink、index plane 与 index key 是什么、四种模式各跑哪几步。</p><span class="go">csa2.html →</span></a>
+    <a class="card" href="window.html"><p class="eyebrow">第 5 章</p><h3>Window 层</h3><p>第 0、1 层只看最近 128 个 token：窗口 ring 的地址公式、prefill 与 decode 的读写时序、为什么用不带 YaRN 的 RoPE。</p><span class="go">window.html →</span></a>
+    <a class="card good" href="full.html"><p class="eyebrow">第 6 章</p><h3>Full 层</h3><p>第 2/8/14 层：ratio 2 的池化、index key 的生产、32 头 ReLU 打分、可见范围、top-512 怎么取，配一个 10 个 token 的逐行例子。</p><span class="go">full.html →</span></a>
+    <a class="card key" href="layer20.html"><p class="eyebrow">第 7 章</p><h3>第 20 层</h3><p>encoder 与 decoder 的分界：ratio 1 的逐 token 记忆、一份 logits 上做两次选择、最新块强制入选、在 bounded replay 里被拆成两半。</p><span class="go">layer20.html →</span></a>
+    <a class="card" href="reuse.html"><p class="eyebrow">第 8 章</p><h3>Reuse 层</h3><p>40 层里有 30 层既不压缩也不打分：下标组一次生成、各层只加自己的窗口，以及它们到底还剩哪些计算。</p><span class="go">reuse.html →</span></a>
+    <a class="card" href="reindex.html"><p class="eyebrow">第 9 章</p><h3>Reindex 层</h3><p>第 24/28/32/36 层：候选块翻译成压缩块表、在 16,384 列上重新打分、再把列号换算回 token 位置。</p><span class="go">reindex.html →</span></a>
+    <a class="card warn" href="replay.html"><p class="eyebrow">第 10 章</p><h3>缓存与 Bounded Replay</h3><p>PAGE 与 STATE 两种存储、decoder replay 让 prefill 少算一半、encoder replay 让前缀命中不存状态，以及关掉之后的 checkpoint。</p><span class="go">replay.html →</span></a>
+  </div>
+</section>
+
+<section id="topology">
+  <hr class="rule">
+  <p class="eyebrow">整网 · 拓扑</p>
+  <h2>40 层里只有 4 层写全局 KV，8 层打 top-k</h2>
+  <p>
+    每一层的注意力类型由 <code>compress_ratios</code>、<code>kv_source_layer_ids</code>、<code>index_source_layer_ids</code>、
+    <code>candidate_source_layer_id</code> 四个配置字段一次性推出来，结果是一张 43 项的静态表 <code>self.topology</code>
+    （<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/models/deepseek_v41/config.py#L75"><code>atom/models/deepseek_v41/config.py:75</code></a>）。下图把这张表画成一条带：方块的颜色是模式，下面三条带分别是
+    「全局 KV 从哪来」「top-k 由谁选」「候选块从哪来」。
+  </p>
+  <figure>
+    <p class="fignum">图 1 · 40 层 + 3 层草稿的注意力拓扑</p>
+    <svg viewBox="0 0 1060 432" class="svg-min" role="img" aria-label="DeepSeek-V4.1-Flash 40 层加 3 层草稿的注意力拓扑">
+<path d="M14 50 V42 H490 V50" class="sv-ln"/>
+<text x="252" y="34" class="sub pe" text-anchor="middle">ENCODER · 第 0–19 层 · 因果</text>
+<path d="M494 50 V42 H970 V50" class="sv-ln"/>
+<text x="732" y="34" class="sub am" text-anchor="middle">DECODER · 第 20–39 层</text>
+<path d="M974 50 V42 H1042 V50" class="sv-ln"/>
+<text x="1008" y="34" class="sub mo" text-anchor="middle">DSPARK</text>
+<circle cx="48.0" cy="64" r="8" fill="var(--plum-bg)" stroke="var(--plum-mark)" stroke-width="1.3"/>
+<text x="48" y="67.5" class="pl" text-anchor="middle" font-size="9.5" font-weight="700">E</text>
+<path d="M48.0 72 V80" stroke="var(--plum-mark)" stroke-width="1.2"/>
+<circle cx="360.0" cy="64" r="8" fill="var(--plum-bg)" stroke="var(--plum-mark)" stroke-width="1.3"/>
+<text x="360" y="67.5" class="pl" text-anchor="middle" font-size="9.5" font-weight="700">E</text>
+<path d="M360.0 72 V80" stroke="var(--plum-mark)" stroke-width="1.2"/>
+<rect x="14" y="80" width="20" height="66" rx="3" fill="var(--sunk)" stroke="var(--line)" stroke-width="1"/>
+<rect x="14" y="80" width="20" height="66" rx="3" fill="url(#hatch)"/>
+<text x="24.0" y="139" text-anchor="middle" fill="var(--ink-2)" font-size="9.5" font-weight="600">0</text>
+<text x="24" y="160" class="xs" text-anchor="middle">0</text>
+<rect x="38" y="80" width="20" height="66" rx="3" fill="var(--sunk)" stroke="var(--line)" stroke-width="1"/>
+<rect x="38" y="80" width="20" height="66" rx="3" fill="url(#hatch)"/>
+<text x="48.0" y="139" text-anchor="middle" fill="var(--ink-2)" font-size="9.5" font-weight="600">0</text>
+<text x="48" y="160" class="xs" text-anchor="middle">1</text>
+<rect x="62" y="80" width="20" height="66" rx="3" fill="var(--petrol-mark)" stroke="var(--petrol)" stroke-width="1"/>
+<text x="72.0" y="98" text-anchor="middle" fill="var(--surface)" font-size="11">★</text>
+<text x="72.0" y="139" text-anchor="middle" fill="var(--surface)" font-size="9.5" font-weight="600">2</text>
+<text x="72" y="160" class="xs" text-anchor="middle">2</text>
+<rect x="86" y="80" width="20" height="66" rx="3" fill="var(--petrol-bg)" stroke="var(--petrol-mark)" stroke-width="1"/>
+<text x="96.0" y="139" text-anchor="middle" fill="var(--ink-2)" font-size="9.5" font-weight="600">2</text>
+<text x="96" y="160" class="xs" text-anchor="middle">3</text>
+<rect x="110" y="80" width="20" height="66" rx="3" fill="var(--petrol-bg)" stroke="var(--petrol-mark)" stroke-width="1"/>
+<text x="120.0" y="139" text-anchor="middle" fill="var(--ink-2)" font-size="9.5" font-weight="600">2</text>
+<text x="120" y="160" class="xs" text-anchor="middle">4</text>
+<rect x="134" y="80" width="20" height="66" rx="3" fill="var(--petrol-bg)" stroke="var(--petrol-mark)" stroke-width="1"/>
+<text x="144.0" y="139" text-anchor="middle" fill="var(--ink-2)" font-size="9.5" font-weight="600">2</text>
+<text x="144" y="160" class="xs" text-anchor="middle">5</text>
+<rect x="158" y="80" width="20" height="66" rx="3" fill="var(--petrol-bg)" stroke="var(--petrol-mark)" stroke-width="1"/>
+<text x="168.0" y="139" text-anchor="middle" fill="var(--ink-2)" font-size="9.5" font-weight="600">2</text>
+<text x="168" y="160" class="xs" text-anchor="middle">6</text>
+<rect x="182" y="80" width="20" height="66" rx="3" fill="var(--petrol-bg)" stroke="var(--petrol-mark)" stroke-width="1"/>
+<text x="192.0" y="139" text-anchor="middle" fill="var(--ink-2)" font-size="9.5" font-weight="600">2</text>
+<text x="192" y="160" class="xs" text-anchor="middle">7</text>
+<rect x="206" y="80" width="20" height="66" rx="3" fill="var(--petrol-mark)" stroke="var(--petrol)" stroke-width="1"/>
+<text x="216.0" y="98" text-anchor="middle" fill="var(--surface)" font-size="11">★</text>
+<text x="216.0" y="139" text-anchor="middle" fill="var(--surface)" font-size="9.5" font-weight="600">2</text>
+<text x="216" y="160" class="xs" text-anchor="middle">8</text>
+<rect x="230" y="80" width="20" height="66" rx="3" fill="var(--petrol-bg)" stroke="var(--petrol-mark)" stroke-width="1"/>
+<text x="240.0" y="139" text-anchor="middle" fill="var(--ink-2)" font-size="9.5" font-weight="600">2</text>
+<text x="240" y="160" class="xs" text-anchor="middle">9</text>
+<rect x="254" y="80" width="20" height="66" rx="3" fill="var(--petrol-bg)" stroke="var(--petrol-mark)" stroke-width="1"/>
+<text x="264.0" y="139" text-anchor="middle" fill="var(--ink-2)" font-size="9.5" font-weight="600">2</text>
+<text x="264" y="160" class="xs" text-anchor="middle">10</text>
+<rect x="278" y="80" width="20" height="66" rx="3" fill="var(--petrol-bg)" stroke="var(--petrol-mark)" stroke-width="1"/>
+<text x="288.0" y="139" text-anchor="middle" fill="var(--ink-2)" font-size="9.5" font-weight="600">2</text>
+<text x="288" y="160" class="xs" text-anchor="middle">11</text>
+<rect x="302" y="80" width="20" height="66" rx="3" fill="var(--petrol-bg)" stroke="var(--petrol-mark)" stroke-width="1"/>
+<text x="312.0" y="139" text-anchor="middle" fill="var(--ink-2)" font-size="9.5" font-weight="600">2</text>
+<text x="312" y="160" class="xs" text-anchor="middle">12</text>
+<rect x="326" y="80" width="20" height="66" rx="3" fill="var(--petrol-bg)" stroke="var(--petrol-mark)" stroke-width="1"/>
+<text x="336.0" y="139" text-anchor="middle" fill="var(--ink-2)" font-size="9.5" font-weight="600">2</text>
+<text x="336" y="160" class="xs" text-anchor="middle">13</text>
+<rect x="350" y="80" width="20" height="66" rx="3" fill="var(--petrol-mark)" stroke="var(--petrol)" stroke-width="1"/>
+<text x="360.0" y="98" text-anchor="middle" fill="var(--surface)" font-size="11">★</text>
+<text x="360.0" y="139" text-anchor="middle" fill="var(--surface)" font-size="9.5" font-weight="600">2</text>
+<text x="360" y="160" class="xs" text-anchor="middle">14</text>
+<rect x="374" y="80" width="20" height="66" rx="3" fill="var(--petrol-bg)" stroke="var(--petrol-mark)" stroke-width="1"/>
+<text x="384.0" y="139" text-anchor="middle" fill="var(--ink-2)" font-size="9.5" font-weight="600">2</text>
+<text x="384" y="160" class="xs" text-anchor="middle">15</text>
+<rect x="398" y="80" width="20" height="66" rx="3" fill="var(--petrol-bg)" stroke="var(--petrol-mark)" stroke-width="1"/>
+<text x="408.0" y="139" text-anchor="middle" fill="var(--ink-2)" font-size="9.5" font-weight="600">2</text>
+<text x="408" y="160" class="xs" text-anchor="middle">16</text>
+<rect x="422" y="80" width="20" height="66" rx="3" fill="var(--petrol-bg)" stroke="var(--petrol-mark)" stroke-width="1"/>
+<text x="432.0" y="139" text-anchor="middle" fill="var(--ink-2)" font-size="9.5" font-weight="600">2</text>
+<text x="432" y="160" class="xs" text-anchor="middle">17</text>
+<rect x="446" y="80" width="20" height="66" rx="3" fill="var(--petrol-bg)" stroke="var(--petrol-mark)" stroke-width="1"/>
+<text x="456.0" y="139" text-anchor="middle" fill="var(--ink-2)" font-size="9.5" font-weight="600">2</text>
+<text x="456" y="160" class="xs" text-anchor="middle">18</text>
+<rect x="470" y="80" width="20" height="66" rx="3" fill="var(--petrol-bg)" stroke="var(--petrol-mark)" stroke-width="1"/>
+<text x="480.0" y="139" text-anchor="middle" fill="var(--ink-2)" font-size="9.5" font-weight="600">2</text>
+<text x="480" y="160" class="xs" text-anchor="middle">19</text>
+<rect x="494" y="80" width="20" height="66" rx="3" fill="var(--amber-mark)" stroke="var(--amber)" stroke-width="1"/>
+<text x="504.0" y="98" text-anchor="middle" fill="var(--surface)" font-size="11">★</text>
+<text x="504.0" y="139" text-anchor="middle" fill="var(--surface)" font-size="9.5" font-weight="600">1</text>
+<text x="504" y="160" class="xs" text-anchor="middle">20</text>
+<rect x="518" y="80" width="20" height="66" rx="3" fill="var(--amber-bg)" stroke="var(--amber-mark)" stroke-width="1"/>
+<text x="528.0" y="139" text-anchor="middle" fill="var(--ink-2)" font-size="9.5" font-weight="600">1</text>
+<text x="528" y="160" class="xs" text-anchor="middle">21</text>
+<rect x="542" y="80" width="20" height="66" rx="3" fill="var(--amber-bg)" stroke="var(--amber-mark)" stroke-width="1"/>
+<text x="552.0" y="139" text-anchor="middle" fill="var(--ink-2)" font-size="9.5" font-weight="600">1</text>
+<text x="552" y="160" class="xs" text-anchor="middle">22</text>
+<rect x="566" y="80" width="20" height="66" rx="3" fill="var(--amber-bg)" stroke="var(--amber-mark)" stroke-width="1"/>
+<text x="576.0" y="139" text-anchor="middle" fill="var(--ink-2)" font-size="9.5" font-weight="600">1</text>
+<text x="576" y="160" class="xs" text-anchor="middle">23</text>
+<rect x="590" y="80" width="20" height="66" rx="3" fill="var(--plum-mark)" stroke="var(--plum)" stroke-width="1"/>
+<text x="600.0" y="98" text-anchor="middle" fill="var(--surface)" font-size="11">◆</text>
+<text x="600.0" y="139" text-anchor="middle" fill="var(--surface)" font-size="9.5" font-weight="600">1</text>
+<text x="600" y="160" class="xs" text-anchor="middle">24</text>
+<rect x="614" y="80" width="20" height="66" rx="3" fill="var(--amber-bg)" stroke="var(--amber-mark)" stroke-width="1"/>
+<text x="624.0" y="139" text-anchor="middle" fill="var(--ink-2)" font-size="9.5" font-weight="600">1</text>
+<text x="624" y="160" class="xs" text-anchor="middle">25</text>
+<rect x="638" y="80" width="20" height="66" rx="3" fill="var(--amber-bg)" stroke="var(--amber-mark)" stroke-width="1"/>
+<text x="648.0" y="139" text-anchor="middle" fill="var(--ink-2)" font-size="9.5" font-weight="600">1</text>
+<text x="648" y="160" class="xs" text-anchor="middle">26</text>
+<rect x="662" y="80" width="20" height="66" rx="3" fill="var(--amber-bg)" stroke="var(--amber-mark)" stroke-width="1"/>
+<text x="672.0" y="139" text-anchor="middle" fill="var(--ink-2)" font-size="9.5" font-weight="600">1</text>
+<text x="672" y="160" class="xs" text-anchor="middle">27</text>
+<rect x="686" y="80" width="20" height="66" rx="3" fill="var(--plum-mark)" stroke="var(--plum)" stroke-width="1"/>
+<text x="696.0" y="98" text-anchor="middle" fill="var(--surface)" font-size="11">◆</text>
+<text x="696.0" y="139" text-anchor="middle" fill="var(--surface)" font-size="9.5" font-weight="600">1</text>
+<text x="696" y="160" class="xs" text-anchor="middle">28</text>
+<rect x="710" y="80" width="20" height="66" rx="3" fill="var(--amber-bg)" stroke="var(--amber-mark)" stroke-width="1"/>
+<text x="720.0" y="139" text-anchor="middle" fill="var(--ink-2)" font-size="9.5" font-weight="600">1</text>
+<text x="720" y="160" class="xs" text-anchor="middle">29</text>
+<rect x="734" y="80" width="20" height="66" rx="3" fill="var(--amber-bg)" stroke="var(--amber-mark)" stroke-width="1"/>
+<text x="744.0" y="139" text-anchor="middle" fill="var(--ink-2)" font-size="9.5" font-weight="600">1</text>
+<text x="744" y="160" class="xs" text-anchor="middle">30</text>
+<rect x="758" y="80" width="20" height="66" rx="3" fill="var(--amber-bg)" stroke="var(--amber-mark)" stroke-width="1"/>
+<text x="768.0" y="139" text-anchor="middle" fill="var(--ink-2)" font-size="9.5" font-weight="600">1</text>
+<text x="768" y="160" class="xs" text-anchor="middle">31</text>
+<rect x="782" y="80" width="20" height="66" rx="3" fill="var(--plum-mark)" stroke="var(--plum)" stroke-width="1"/>
+<text x="792.0" y="98" text-anchor="middle" fill="var(--surface)" font-size="11">◆</text>
+<text x="792.0" y="139" text-anchor="middle" fill="var(--surface)" font-size="9.5" font-weight="600">1</text>
+<text x="792" y="160" class="xs" text-anchor="middle">32</text>
+<rect x="806" y="80" width="20" height="66" rx="3" fill="var(--amber-bg)" stroke="var(--amber-mark)" stroke-width="1"/>
+<text x="816.0" y="139" text-anchor="middle" fill="var(--ink-2)" font-size="9.5" font-weight="600">1</text>
+<text x="816" y="160" class="xs" text-anchor="middle">33</text>
+<rect x="830" y="80" width="20" height="66" rx="3" fill="var(--amber-bg)" stroke="var(--amber-mark)" stroke-width="1"/>
+<text x="840.0" y="139" text-anchor="middle" fill="var(--ink-2)" font-size="9.5" font-weight="600">1</text>
+<text x="840" y="160" class="xs" text-anchor="middle">34</text>
+<rect x="854" y="80" width="20" height="66" rx="3" fill="var(--amber-bg)" stroke="var(--amber-mark)" stroke-width="1"/>
+<text x="864.0" y="139" text-anchor="middle" fill="var(--ink-2)" font-size="9.5" font-weight="600">1</text>
+<text x="864" y="160" class="xs" text-anchor="middle">35</text>
+<rect x="878" y="80" width="20" height="66" rx="3" fill="var(--plum-mark)" stroke="var(--plum)" stroke-width="1"/>
+<text x="888.0" y="98" text-anchor="middle" fill="var(--surface)" font-size="11">◆</text>
+<text x="888.0" y="139" text-anchor="middle" fill="var(--surface)" font-size="9.5" font-weight="600">1</text>
+<text x="888" y="160" class="xs" text-anchor="middle">36</text>
+<rect x="902" y="80" width="20" height="66" rx="3" fill="var(--amber-bg)" stroke="var(--amber-mark)" stroke-width="1"/>
+<text x="912.0" y="139" text-anchor="middle" fill="var(--ink-2)" font-size="9.5" font-weight="600">1</text>
+<text x="912" y="160" class="xs" text-anchor="middle">37</text>
+<rect x="926" y="80" width="20" height="66" rx="3" fill="var(--amber-bg)" stroke="var(--amber-mark)" stroke-width="1"/>
+<text x="936.0" y="139" text-anchor="middle" fill="var(--ink-2)" font-size="9.5" font-weight="600">1</text>
+<text x="936" y="160" class="xs" text-anchor="middle">38</text>
+<rect x="950" y="80" width="20" height="66" rx="3" fill="var(--amber-bg)" stroke="var(--amber-mark)" stroke-width="1"/>
+<text x="960.0" y="139" text-anchor="middle" fill="var(--ink-2)" font-size="9.5" font-weight="600">1</text>
+<text x="960" y="160" class="xs" text-anchor="middle">39</text>
+<rect x="974" y="80" width="20" height="66" rx="3" fill="var(--moss-bg)" stroke="var(--moss-mark)" stroke-width="1"/>
+<text x="984.0" y="139" text-anchor="middle" fill="var(--ink-2)" font-size="9.5" font-weight="600">0</text>
+<text x="984" y="160" class="xs" text-anchor="middle">40</text>
+<rect x="998" y="80" width="20" height="66" rx="3" fill="var(--moss-bg)" stroke="var(--moss-mark)" stroke-width="1"/>
+<text x="1008.0" y="139" text-anchor="middle" fill="var(--ink-2)" font-size="9.5" font-weight="600">0</text>
+<text x="1008" y="160" class="xs" text-anchor="middle">41</text>
+<rect x="1022" y="80" width="20" height="66" rx="3" fill="var(--moss-bg)" stroke="var(--moss-mark)" stroke-width="1"/>
+<text x="1032.0" y="139" text-anchor="middle" fill="var(--ink-2)" font-size="9.5" font-weight="600">0</text>
+<text x="1032" y="160" class="xs" text-anchor="middle">42</text>
+<text x="12" y="124" class="xs"></text>
+<text x="14" y="188" class="sub">全局 KV</text>
+<rect x="62" y="175" width="140" height="22" rx="4" class="sv-p"/>
+<text x="132" y="189.5" class="pt pe" text-anchor="middle">main_2 · 2 token 一行</text>
+<rect x="206" y="175" width="140" height="22" rx="4" class="sv-p"/>
+<text x="276" y="189.5" class="pt pe" text-anchor="middle">main_8 · 2 token 一行</text>
+<rect x="350" y="175" width="140" height="22" rx="4" class="sv-p"/>
+<text x="420" y="189.5" class="pt pe" text-anchor="middle">main_14 · 2 token 一行</text>
+<rect x="494" y="175" width="476" height="22" rx="4" class="sv-a"/>
+<text x="732" y="189.5" class="pt am" text-anchor="middle">main_20 · 每个 token 一行 · decoder 唯一的远程记忆</text>
+<text x="14" y="218" class="sub">top-k</text>
+<rect x="62" y="205" width="140" height="22" rx="4" class="sv-p"/>
+<text x="132" y="219.5" class="pt pe" text-anchor="middle">选自 2</text>
+<rect x="206" y="205" width="140" height="22" rx="4" class="sv-p"/>
+<text x="276" y="219.5" class="pt pe" text-anchor="middle">选自 8</text>
+<rect x="350" y="205" width="140" height="22" rx="4" class="sv-p"/>
+<text x="420" y="219.5" class="pt pe" text-anchor="middle">选自 14</text>
+<rect x="494" y="205" width="92" height="22" rx="4" class="sv-a"/>
+<text x="540" y="219.5" class="pt am" text-anchor="middle">选自 20</text>
+<rect x="590" y="205" width="92" height="22" rx="4" class="sv-v"/>
+<text x="636" y="219.5" class="pt pl" text-anchor="middle">选自 24</text>
+<rect x="686" y="205" width="92" height="22" rx="4" class="sv-v"/>
+<text x="732" y="219.5" class="pt pl" text-anchor="middle">选自 28</text>
+<rect x="782" y="205" width="92" height="22" rx="4" class="sv-v"/>
+<text x="828" y="219.5" class="pt pl" text-anchor="middle">选自 32</text>
+<rect x="878" y="205" width="92" height="22" rx="4" class="sv-v"/>
+<text x="924" y="219.5" class="pt pl" text-anchor="middle">选自 36</text>
+<text x="14" y="256" class="sub">候选块</text>
+<path d="M504.0 232 C504.0 254 600.0 254 600.0 232" fill="none" stroke="var(--plum-mark)" stroke-width="1.4" marker-end="url(#arv)"/>
+<path d="M504.0 232 C504.0 263 696.0 263 696.0 232" fill="none" stroke="var(--plum-mark)" stroke-width="1.4" marker-end="url(#arv)"/>
+<path d="M504.0 232 C504.0 272 792.0 272 792.0 232" fill="none" stroke="var(--plum-mark)" stroke-width="1.4" marker-end="url(#arv)"/>
+<path d="M504.0 232 C504.0 281 888.0 281 888.0 232" fill="none" stroke="var(--plum-mark)" stroke-width="1.4" marker-end="url(#arv)"/>
+<text x="731" y="296" class="pt pl" text-anchor="middle">第 20 层全量打分时顺带选出 2048 个候选块（16,384 行），第 24/28/32/36 层只在里面重选</text>
+<rect x="14" y="312" width="1028" height="18" rx="4" fill="url(#hatch)" stroke="var(--line)"/>
+<rect x="350" y="314" width="312" height="14" rx="3" fill="var(--surface)"/>
+<text x="506" y="324.5" class="pt" text-anchor="middle">每一层都有自己的 128 行窗口 ring（STATE，随并发增长）</text>
+<rect x="14" y="360" width="16" height="16" rx="3" fill="var(--sunk)" stroke="var(--line)"/>
+<rect x="14" y="360" width="16" height="16" rx="3" fill="url(#hatch)"/>
+<text x="38" y="372" class="s">WINDOW · 只看窗口</text>
+<rect x="276" y="360" width="16" height="16" rx="3" fill="var(--petrol-mark)" stroke="var(--petrol)"/>
+<text x="300" y="372" class="s">FULL ratio 2 · KV owner</text>
+<rect x="538" y="360" width="16" height="16" rx="3" fill="var(--amber-mark)" stroke="var(--amber)"/>
+<text x="562" y="372" class="s">FULL ratio 1 · 第 20 层</text>
+<rect x="800" y="360" width="16" height="16" rx="3" fill="var(--plum-mark)" stroke="var(--plum)"/>
+<text x="824" y="372" class="s">REINDEX · 候选内重选</text>
+<rect x="14" y="386" width="16" height="16" rx="3" fill="var(--petrol-bg)" stroke="var(--petrol-mark)"/>
+<text x="38" y="398" class="s">REUSE · encoder</text>
+<rect x="276" y="386" width="16" height="16" rx="3" fill="var(--amber-bg)" stroke="var(--amber-mark)"/>
+<text x="300" y="398" class="s">REUSE · decoder</text>
+<rect x="538" y="386" width="16" height="16" rx="3" fill="var(--moss-bg)" stroke="var(--moss-mark)"/>
+<text x="562" y="398" class="s">DSpark 草稿层</text>
+<circle cx="808" cy="394" r="8" fill="var(--plum-bg)" stroke="var(--plum-mark)"/>
+<text x="808" y="397.5" class="pl" text-anchor="middle" font-size="9.5" font-weight="700">E</text>
+<text x="824" y="398" class="s">Engram · ★ owner · ◆ 重选 · 数字 = ratio</text>
+</svg>
+    <figcaption>
+      <strong>读法：</strong>第 5 层是浅蓝 REUSE，它读 <code>main_2</code>，用第 2 层选出的 top-512；第 30 层是浅黄 REUSE，它读 <code>main_20</code>，
+      用第 28 层的选择。全局 KV 一共 4 份，top-k 一共选 8 次，候选块只选 1 次。
+      窗口 ring 不在这三条带里，因为每一层都有自己的一份，和模式无关。
+    </figcaption>
+  </figure>
+</section>
+
+<section id="journey">
+  <hr class="rule">
+  <p class="eyebrow">整网 · 形状</p>
+  <h2>一个 token 从 id 到 logits，宽度只在残差流上变成 4 倍</h2>
+  <p>
+    embedding 出来是 <code>[T, 5120]</code>，复制成 <code>[T, 4, 5120]</code> 后进入 40 个 Block；栈的末尾再用最后一个 pre 合回
+    <code>[T, 5120]</code>，过 RMSNorm 和 LM head。中间所有子层的输入输出都是 <code>[T, 5120]</code>，4 路只存在于子层之间。
+  </p>
+  <figure>
+    <p class="fignum">图 2 · 一个 token 的形状旅程</p>
+    <svg viewBox="0 0 1060 330" class="svg-min" role="img" aria-label="一个 token 从 id 到 logits 的形状变化">
+<g class="slab n"><path class="st" d="M18 147 l9 -9 h46 l-9 9 z"/><path class="ss" d="M64 147 l9 -9 v46 l-9 9 z"/><path class="sf" d="M18 147 h46 v46 h-46 z"/></g>
+<text x="45" y="216" class="n" text-anchor="middle">token ids</text>
+<text x="45" y="232" class="pt" text-anchor="middle">[T] int64</text>
+<path d="M76 170 H112" fill="none" stroke="var(--ink-2)" stroke-width="1.4" marker-end="url(#ar)"/>
+<g class="slab p"><path class="st" d="M116 133 l9 -9 h70 l-9 9 z"/><path class="ss" d="M186 133 l9 -9 v74 l-9 9 z"/><path class="sf" d="M116 133 h70 v74 h-70 z"/></g>
+<text x="155" y="226" class="n" text-anchor="middle">Embedding</text>
+<text x="155" y="242" class="pt" text-anchor="middle">[T, 5120] bf16</text>
+<text x="155" y="256" class="xs" text-anchor="middle">词表按 TP 切 + all-reduce</text>
+<path d="M200 170 H236" fill="none" stroke="var(--ink-2)" stroke-width="1.4" marker-end="url(#ar)"/>
+<g class="slab a"><path class="st" d="M244 111 l9 -9 h64 l-9 9 z"/><path class="ss" d="M308 111 l9 -9 v60 l-9 9 z"/><path class="sf" d="M244 111 h64 v60 h-64 z"/></g>
+<g class="slab p"><path class="st" d="M251 119 l9 -9 h64 l-9 9 z"/><path class="ss" d="M315 119 l9 -9 v60 l-9 9 z"/><path class="sf" d="M251 119 h64 v60 h-64 z"/></g>
+<g class="slab m"><path class="st" d="M258 127 l9 -9 h64 l-9 9 z"/><path class="ss" d="M322 127 l9 -9 v60 l-9 9 z"/><path class="sf" d="M258 127 h64 v60 h-64 z"/></g>
+<g class="slab r"><path class="st" d="M265 135 l9 -9 h64 l-9 9 z"/><path class="ss" d="M329 135 l9 -9 v60 l-9 9 z"/><path class="sf" d="M265 135 h64 v60 h-64 z"/></g>
+<text x="296" y="226" class="n" text-anchor="middle">复制 4 份</text>
+<text x="296" y="242" class="pt" text-anchor="middle">[T, 4, 5120]</text>
+<text x="296" y="256" class="xs pl" text-anchor="middle">pre_mix = [1, 0, 0, 0]</text>
+<path d="M340 170 H372" fill="none" stroke="var(--ink-2)" stroke-width="1.4" marker-end="url(#ar)"/>
+<rect x="378" y="22" width="384" height="262" rx="10" fill="url(#gn)" stroke="var(--line)" filter="url(#sh)"/>
+<text x="394" y="46" class="t">× 40 个 Block</text>
+<text x="746" y="46" class="pt" text-anchor="end">第 0 层 … 第 39 层</text>
+<path class="ln0" d="M394 70 H746"/><path class="ln1" d="M394 77 H746"/><path class="ln2" d="M394 84 H746"/><path class="ln3" d="M394 91 H746"/>
+<text x="394" y="108" class="s">4 路残差贯穿整个栈，子层之间只交接</text>
+<text x="394" y="122" class="s">「还没写回的 post」</text>
+<rect x="394" y="142" width="80" height="64" rx="6" fill="url(#gv)" stroke="var(--plum-mark)" stroke-dasharray="5 4"/>
+<text x="434" y="168" class="n" text-anchor="middle">Engram</text>
+<text x="434" y="186" class="pt" text-anchor="middle">仅第 1、14 层</text>
+<rect x="480" y="142" width="80" height="64" rx="6" fill="url(#ga)" stroke="var(--amber-mark)"/>
+<text x="520" y="168" class="n" text-anchor="middle">mHC 接缝</text>
+<text x="520" y="186" class="pt" text-anchor="middle">4 路 → 1 路</text>
+<rect x="566" y="142" width="80" height="64" rx="6" fill="url(#gp)" stroke="var(--petrol-mark)"/>
+<text x="606" y="168" class="n" text-anchor="middle">CSA2</text>
+<text x="606" y="186" class="pt" text-anchor="middle">[T,5120]</text>
+<rect x="652" y="142" width="80" height="64" rx="6" fill="url(#gm)" stroke="var(--moss-mark)"/>
+<text x="692" y="168" class="n" text-anchor="middle">接缝 + MoE</text>
+<text x="692" y="186" class="pt" text-anchor="middle">384 选 6</text>
+<path d="M474 174 H480" fill="none" stroke="var(--ink-2)" stroke-width="1.2" marker-end="url(#ar)"/>
+<path d="M560 174 H566" fill="none" stroke="var(--ink-2)" stroke-width="1.2" marker-end="url(#ar)"/>
+<path d="M646 174 H652" fill="none" stroke="var(--ink-2)" stroke-width="1.2" marker-end="url(#ar)"/>
+<path d="M434 92 V138" stroke="var(--line)" stroke-width="1" stroke-dasharray="3 3"/>
+<path d="M520 92 V138" stroke="var(--line)" stroke-width="1" stroke-dasharray="3 3"/>
+<path d="M606 92 V138" stroke="var(--line)" stroke-width="1" stroke-dasharray="3 3"/>
+<path d="M692 92 V138" stroke="var(--line)" stroke-width="1" stroke-dasharray="3 3"/>
+<text x="394" y="232" class="s">一层 = 两个子层：attention 与 FFN 各配一个 mHC 接缝；</text>
+<text x="394" y="248" class="s">attention 有四种模式（WINDOW / FULL / REUSE / REINDEX），</text>
+<text x="394" y="264" class="s">四种共用同一套 Q / O 投影，差别只在全局 KV 从哪来。</text>
+<path d="M762 170 H794" fill="none" stroke="var(--ink-2)" stroke-width="1.4" marker-end="url(#ar)"/>
+<g class="slab a"><path class="st" d="M800 133 l9 -9 h66 l-9 9 z"/><path class="ss" d="M866 133 l9 -9 v74 l-9 9 z"/><path class="sf" d="M800 133 h66 v74 h-66 z"/></g>
+<text x="838" y="226" class="n" text-anchor="middle">collapse</text>
+<text x="838" y="242" class="pt" text-anchor="middle">[T, 5120]</text>
+<text x="838" y="256" class="xs" text-anchor="middle">最后一个 pre 加权求和</text>
+<path d="M880 170 H908" fill="none" stroke="var(--ink-2)" stroke-width="1.4" marker-end="url(#ar)"/>
+<g class="slab a"><path class="st" d="M914 115 l9 -9 h112 l-9 9 z"/><path class="ss" d="M1026 115 l9 -9 v98 l-9 9 z"/><path class="sf" d="M914 115 h112 v98 h-112 z"/></g>
+<text x="975" y="226" class="n" text-anchor="middle">RMSNorm → LM head</text>
+<text x="975" y="242" class="pt" text-anchor="middle">[T, 129280]</text>
+<text x="975" y="256" class="xs" text-anchor="middle">只算需要采样的行</text>
+</svg>
+    <figcaption>
+      <code>T</code> 是这一步 forward 的 token 行数：decode 时是请求数（开投机时是请求数 × 验证长度），prefill 时是本 chunk 的行数。
+      词表 129,280，LM head 只对要采样的行算——开启 decoder bounded replay 时，prefill 只有每个请求的最后一行有定义（第 10 章）。
+    </figcaption>
+  </figure>
+</section>
+
+<section id="block">
+  <hr class="rule">
+  <p class="eyebrow">整网 · 一层</p>
+  <h2>一个 Block = 两个接缝 + 注意力 + MoE，Engram 只在两层出现</h2>
+  <p>
+    每个子层前面都有一个 <strong>mHC 接缝</strong>：把上一子层的输出写回 4 路，预测本子层的混合系数，用上一子层传来的 pre 把 4 路合成 1 路，再做本子层的 RMSNorm。
+    ATOM 把这四步合成一个 kernel（<code>pre_delayed</code>）。第 1、14 层在 attention 接缝前插一个 Engram，所以那一个接缝要拆成两次 launch。
+  </p>
+  <figure>
+    <p class="fignum">图 3 · Block 的内部</p>
+    <svg viewBox="0 0 1060 330" class="svg-min" role="img" aria-label="一个 Block 的内部：Engram、两个 mHC 接缝、CSA2 与 MoE">
+<text x="20" y="30" class="sub">4 路残差 R  [T, 4, 5120]  bf16</text>
+<path class="ln0" d="M20 54 H1030"/><path class="ln1" d="M20 62 H1030"/><path class="ln2" d="M20 70 H1030"/><path class="ln3" d="M20 78 H1030"/>
+<text x="1036" y="57" class="xs">0</text>
+<text x="1036" y="65" class="xs">1</text>
+<text x="1036" y="73" class="xs">2</text>
+<text x="1036" y="81" class="xs">3</text>
+<rect x="20" y="100" width="120" height="116" rx="8" fill="url(#gv)" stroke="var(--plum-mark)" filter="url(#sh)" stroke-dasharray="5 4"/>
+<text x="80" y="122" class="n" text-anchor="middle">Engram</text>
+<text x="80" y="140" class="pt pl" text-anchor="middle">仅第 1、14 层</text>
+<text x="30" y="162" class="pt">先 settle 写回 post</text>
+<text x="30" y="178" class="pt">R_m += gate_m · v</text>
+<text x="30" y="194" class="pt">4 路各一个门</text>
+<path d="M80 80 V100" stroke="var(--plum-mark)" stroke-width="1.4" stroke-dasharray="4 3"/>
+<rect x="154" y="100" width="172" height="116" rx="8" fill="url(#ga)" stroke="var(--amber-mark)" filter="url(#sh)"/>
+<text x="240" y="122" class="n" text-anchor="middle">attention 接缝</text>
+<text x="166" y="142" class="pt">① 补写上一子层的 post</text>
+<text x="166" y="158" class="pt">② 投影+Sinkhorn → 3 组系数</text>
+<text x="166" y="174" class="pt">③ 用带进来的 pre 合成 1 路</text>
+<text x="166" y="190" class="pt">④ attn_norm</text>
+<text x="240" y="208" class="xs am" text-anchor="middle">pre_delayed，一个 kernel</text>
+<path d="M194 54 V100" class="ln0" stroke-width="2" opacity=".65"/>
+<path d="M204 62 V100" class="ln1" stroke-width="2" opacity=".65"/>
+<path d="M214 70 V100" class="ln2" stroke-width="2" opacity=".65"/>
+<path d="M224 78 V100" class="ln3" stroke-width="2" opacity=".65"/>
+<path d="M326 158 H352" fill="none" stroke="var(--amber-mark)" stroke-width="1.6" marker-end="url(#ara)"/>
+<rect x="356" y="100" width="250" height="116" rx="8" fill="url(#gp)" stroke="var(--petrol-mark)" filter="url(#sh)"/>
+<text x="481" y="122" class="n" text-anchor="middle">CSA2 注意力</text>
+<text x="368" y="144" class="pt">q [T, 64, 512] · KV 1 头 512 维</text>
+<text x="368" y="160" class="pt">源 1：全局 KV 选中的 ≤512 行</text>
+<text x="368" y="176" class="pt">源 2：本层窗口最近 128 行</text>
+<text x="368" y="192" class="pt">+ attn_sink，同一个 softmax</text>
+<text x="481" y="208" class="xs pe" text-anchor="middle">[T, 5120] → [T, 5120]</text>
+<path d="M606 158 H632" fill="none" stroke="var(--petrol-mark)" stroke-width="1.6" marker-end="url(#arp)"/>
+<rect x="636" y="100" width="172" height="116" rx="8" fill="url(#ga)" stroke="var(--amber-mark)" filter="url(#sh)"/>
+<text x="722" y="122" class="n" text-anchor="middle">FFN 接缝</text>
+<text x="648" y="142" class="pt">① 补写上一子层的 post</text>
+<text x="648" y="158" class="pt">② 投影+Sinkhorn → 3 组系数</text>
+<text x="648" y="174" class="pt">③ 用带进来的 pre 合成 1 路</text>
+<text x="648" y="190" class="pt">④ ffn_norm</text>
+<text x="722" y="208" class="xs am" text-anchor="middle">① 写回的是 attention 输出</text>
+<path d="M676 54 V100" class="ln0" stroke-width="2" opacity=".65"/>
+<path d="M686 62 V100" class="ln1" stroke-width="2" opacity=".65"/>
+<path d="M696 70 V100" class="ln2" stroke-width="2" opacity=".65"/>
+<path d="M706 78 V100" class="ln3" stroke-width="2" opacity=".65"/>
+<path d="M808 158 H834" fill="none" stroke="var(--amber-mark)" stroke-width="1.6" marker-end="url(#ara)"/>
+<rect x="838" y="100" width="150" height="116" rx="8" fill="url(#gm)" stroke="var(--moss-mark)" filter="url(#sh)"/>
+<text x="913" y="122" class="n" text-anchor="middle">MoE</text>
+<text x="850" y="144" class="pt">384 路由专家 FP4 选 6</text>
+<text x="850" y="160" class="pt">+ 1 个共享专家 FP8</text>
+<text x="850" y="176" class="pt">sqrtsoftplus · ×1.5</text>
+<text x="913" y="208" class="xs mo" text-anchor="middle">[T, 5120] → [T, 5120]</text>
+<path d="M988 158 H1004" fill="none" stroke="var(--moss-mark)" stroke-width="1.6" marker-end="url(#arm)"/>
+<rect x="1006" y="120" width="40" height="76" rx="6" fill="url(#gn)" stroke="var(--line)"/>
+<text x="1026" y="154" class="n" text-anchor="middle">欠</text>
+<text x="1026" y="172" class="xs" text-anchor="middle">post</text>
+<text x="20" y="254" class="s">• 每个子层前都有一个接缝，40 层 × 2 = 80 个。只有 Engram 层的 attention 接缝拆成两半：先 settle，再 Engram，再做 ②③④。</text>
+<text x="20" y="274" class="s">• 子层本身只看 [T, 5120]：4 路残差的宽度与注意力、MoE 的设计解耦。</text>
+<text x="20" y="294" class="s">• FFN 子层的 post 不在本层写回，留给下一层的 attention 接缝一起算（「延迟」mHC，第 2 章）。</text>
+</svg>
+    <figcaption>
+      对应代码：<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/models/deepseek_v41/model.py#L40"><code>atom/models/deepseek_v41/model.py:40</code></a> 的 <code>Block</code>，<code>prepare_attention</code> → <code>attention_forward</code> →
+      <code>prepare_ffn</code> → <code>ffn_forward</code> → <code>finish_ffn</code>。接缝细节见第 2 章，Engram 见第 3 章，CSA2 见第 4 章。
+    </figcaption>
+  </figure>
+</section>
+
+<section id="encdec">
+  <hr class="rule">
+  <p class="eyebrow">整网 · 分工</p>
+  <h2>不是 T5 那种 encoder–decoder：一条序列，两段分工</h2>
+  <p>
+    runtime 文档的原话是 “V4.1 is a causal encoder (layers 0..19) and a decoder (layers 20..39) whose global KV layer 20 projects from the encoder's output”。
+    它仍是 decoder-only 的自回归模型——每个 token、包括新生成的 token，都依次穿过 40 层。所谓 encoder–decoder，说的是<strong>远程信息怎么流动</strong>：
+  </p>
+  <figure>
+    <p class="fignum">图 4 · encoder 写记忆，decoder 检索记忆</p>
+    <svg viewBox="0 0 1060 380" class="svg-min" role="img" aria-label="encoder 写记忆、decoder 检索记忆的分工">
+<rect x="20" y="40" width="400" height="300" rx="10" fill="url(#genc)" stroke="var(--petrol-mark)" filter="url(#sh)"/>
+<text x="36" y="66" class="sub pe">ENCODER · 第 0–19 层</text>
+<text x="36" y="88" class="s">因果：位置 t 只依赖 ≤ t 的 token</text>
+<rect x="36" y="104" width="236" height="40" rx="6" fill="var(--sunk)" stroke="var(--line)"/>
+<text x="48" y="129" class="n">第 0–1 层</text>
+<text x="260" y="129" class="pt" text-anchor="end">只有窗口</text>
+<rect x="36" y="154" width="236" height="40" rx="6" fill="var(--petrol-bg)" stroke="var(--line)"/>
+<text x="48" y="179" class="n">第 2–7 层</text>
+<text x="260" y="179" class="pt" text-anchor="end">窗口 + main_2</text>
+<rect x="36" y="204" width="236" height="40" rx="6" fill="var(--petrol-bg)" stroke="var(--line)"/>
+<text x="48" y="229" class="n">第 8–13 层</text>
+<text x="260" y="229" class="pt" text-anchor="end">窗口 + main_8</text>
+<rect x="36" y="254" width="236" height="40" rx="6" fill="var(--petrol-bg)" stroke="var(--line)"/>
+<text x="48" y="279" class="n">第 14–19 层</text>
+<text x="260" y="279" class="pt" text-anchor="end">窗口 + main_14</text>
+<g class="slab p"><path class="st" d="M296 157 l7 -7 h96 l-7 7 z"/><path class="ss" d="M392 157 l7 -7 v26 l-7 7 z"/><path class="sf" d="M296 157 h96 v26 h-96 z"/></g>
+<text x="344" y="172" class="pt" text-anchor="middle">main_2</text>
+<path d="M272 174 H294" stroke="var(--petrol-mark)" stroke-width="1.2" stroke-dasharray="3 2"/>
+<g class="slab p"><path class="st" d="M296 207 l7 -7 h96 l-7 7 z"/><path class="ss" d="M392 207 l7 -7 v26 l-7 7 z"/><path class="sf" d="M296 207 h96 v26 h-96 z"/></g>
+<text x="344" y="222" class="pt" text-anchor="middle">main_8</text>
+<path d="M272 224 H294" stroke="var(--petrol-mark)" stroke-width="1.2" stroke-dasharray="3 2"/>
+<g class="slab p"><path class="st" d="M296 257 l7 -7 h96 l-7 7 z"/><path class="ss" d="M392 257 l7 -7 v26 l-7 7 z"/><path class="sf" d="M296 257 h96 v26 h-96 z"/></g>
+<text x="344" y="272" class="pt" text-anchor="middle">main_14</text>
+<path d="M272 274 H294" stroke="var(--petrol-mark)" stroke-width="1.2" stroke-dasharray="3 2"/>
+<text x="36" y="326" class="xs">三份记忆只在本段内使用</text>
+<path d="M420 190 H496" fill="none" stroke="var(--amber-mark)" stroke-width="2" marker-end="url(#ara)"/>
+<rect class="pill-a" x="422" y="163.5" width="72" height="17" rx="8.5"/><text x="458" y="175.3" class="pt" text-anchor="middle">encoder 输出</text>
+<rect x="500" y="136" width="146" height="108" rx="8" fill="url(#ga)" stroke="var(--amber-mark)" filter="url(#sh)"/>
+<text x="573" y="160" class="n" text-anchor="middle">第 20 层压缩</text>
+<text x="573" y="180" class="pt" text-anchor="middle">每个 token 一行</text>
+<text x="573" y="196" class="pt" text-anchor="middle">latent 512 → main_20</text>
+<text x="573" y="212" class="pt" text-anchor="middle">→ wk 128 → index key</text>
+<text x="573" y="232" class="xs am" text-anchor="middle">全部行都要算</text>
+<g class="slab a"><path class="st" d="M676 152 l12 -12 h110 l-12 12 z"/><path class="ss" d="M786 152 l12 -12 v100 l-12 12 z"/><path class="sf" d="M676 152 h110 v100 h-110 z"/></g>
+<text x="737" y="206" class="t" text-anchor="middle">main_20</text>
+<text x="737" y="226" class="pt" text-anchor="middle">[L, 512]</text>
+<path d="M646 190 H672" fill="none" stroke="var(--amber-mark)" stroke-width="1.6" marker-end="url(#ara)"/>
+<rect x="820" y="40" width="220" height="300" rx="10" fill="url(#gdec)" stroke="var(--amber-mark)" filter="url(#sh)"/>
+<text x="836" y="66" class="sub am">DECODER · 第 20–39 层</text>
+<rect x="836" y="84" width="190" height="40" rx="6" fill="var(--surface)" stroke="var(--amber-mark)"/>
+<text x="848" y="109" class="n">第 20 层</text>
+<text x="1016" y="109" class="pt" text-anchor="end">全量打分 + 选候选</text>
+<path d="M800 190 C 814 190 812 104 832 104" fill="none" stroke="var(--plum-mark)" stroke-width="1.2" marker-end="url(#arv)"/>
+<rect x="836" y="134" width="190" height="40" rx="6" fill="var(--surface)" stroke="var(--amber-mark)"/>
+<text x="848" y="159" class="n">第 24 层</text>
+<text x="1016" y="159" class="pt" text-anchor="end">候选内重选</text>
+<path d="M800 190 C 814 190 812 154 832 154" fill="none" stroke="var(--plum-mark)" stroke-width="1.2" marker-end="url(#arv)"/>
+<rect x="836" y="184" width="190" height="40" rx="6" fill="var(--surface)" stroke="var(--amber-mark)"/>
+<text x="848" y="209" class="n">第 28 层</text>
+<text x="1016" y="209" class="pt" text-anchor="end">候选内重选</text>
+<path d="M800 190 C 814 190 812 204 832 204" fill="none" stroke="var(--plum-mark)" stroke-width="1.2" marker-end="url(#arv)"/>
+<rect x="836" y="234" width="190" height="40" rx="6" fill="var(--surface)" stroke="var(--amber-mark)"/>
+<text x="848" y="259" class="n">第 32 层</text>
+<text x="1016" y="259" class="pt" text-anchor="end">候选内重选</text>
+<path d="M800 190 C 814 190 812 254 832 254" fill="none" stroke="var(--plum-mark)" stroke-width="1.2" marker-end="url(#arv)"/>
+<rect x="836" y="284" width="190" height="40" rx="6" fill="var(--surface)" stroke="var(--amber-mark)"/>
+<text x="848" y="309" class="n">第 36 层</text>
+<text x="1016" y="309" class="pt" text-anchor="end">候选内重选</text>
+<path d="M800 190 C 814 190 812 304 832 304" fill="none" stroke="var(--plum-mark)" stroke-width="1.2" marker-end="url(#arv)"/>
+<text x="836" y="344" class="xs">其余 15 层复用最近一次的选择</text>
+<text x="560" y="300" class="s" text-anchor="middle">decoder 之间没有远程连接：</text>
+<text x="560" y="318" class="s" text-anchor="middle">远处的信息只能从 main_20 检索，近处只靠 128 窗口</text>
+</svg>
+    <figcaption>
+      decoder 层之间没有远程连接：第 21–39 层的 <code>kv_owner</code> 全是 20，没有一层自己生产全局 KV。
+      这一条由 <a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/models/deepseek_v41/bounded_replay.py#L68"><code>atom/models/deepseek_v41/bounded_replay.py:68</code></a> 的 <code>decoder_replay_unsupported</code> 守着：第 20 层之后不许有 Engram，也不许有新的 KV source。
+    </figcaption>
+  </figure>
+  <div class="tscroll"><table>
+    <thead><tr><th></th><th>经典 encoder–decoder（T5）</th><th>V4.1</th></tr></thead>
+    <tbody>
+      <tr><td>序列</td><td>源序列、目标序列两条</td><td><strong>一条</strong>，每个 token 两段都要过</td></tr>
+      <tr><td>encoder 注意力</td><td>双向</td><td><strong>因果</strong>：窗口 + 本段的压缩全局 KV</td></tr>
+      <tr><td>encoder 输出怎么用</td><td>交叉注意力读全部输出</td><td>第 20 层把它逐 token 存成 <code>main_20</code>，decoder <strong>稀疏地</strong>读其中 512 行</td></tr>
+      <tr><td>decoder 自注意力</td><td>对全部目标 token</td><td><strong>只有 128 行窗口</strong></td></tr>
+      <tr><td>生成新 token</td><td>encoder 不再运行</td><td>新 token 先过 encoder，把自己写进记忆</td></tr>
+    </tbody>
+  </table></div>
+  <div class="grid2">
+    <div class="card good"><p class="eyebrow">带来的好处</p><h3>prefill 少算一半，decode 每 token 常数开销</h3>
+      <p>decoder 只读窗口，所以 prefill 只需在每个请求的最后 128 行上跑 decoder（第 10 章）；随历史增长的只有 4 份全局 KV，decoder 的 20 层只占窗口 ring。</p></div>
+    <div class="card warn"><p class="eyebrow">严格说不止 128</p><h3>窗口会逐层接力</h3>
+      <p>第 21 层在 t 读到的窗口行，是第 20 层在 t−127…t 的输出，它们又各自读了更早的窗口。沿 decoder 20 层传下去，水平感受野可到约 20 × 127 ≈ 2500。bounded replay 把这条链截断在 tail 起点，模型在后训练时适应了这种截断。</p></div>
+  </div>
+</section>
+
+<section id="modes">
+  <hr class="rule">
+  <p class="eyebrow">速查</p>
+  <h2>四种注意力层：谁是自己的，谁是借来的</h2>
+  <p>四种模式共用同一套 query / 输出投影和同一个双源注意力 kernel，<strong>每一层都有自己的 query 和自己的窗口 KV</strong>。能借的只有三样：全局压缩 KV、index key、top-k 选择。</p>
+  <div class="tscroll"><table>
+    <thead><tr><th>模式</th><th>层</th><th>ratio</th><th>全局 KV</th><th>index key</th><th>top-k</th><th>每 token 打分行数</th><th>章节</th></tr></thead>
+    <tbody>
+      <tr><td><strong>WINDOW</strong></td><td class="num">0, 1</td><td class="num">0</td><td class="off">无</td><td class="off">无</td><td class="off">无</td><td class="num">0</td><td><a href="window.html">第 5 章</a></td></tr>
+      <tr><td><strong>FULL</strong></td><td class="num">2, 8, 14</td><td class="num">2</td><td class="on">自己生产</td><td class="on">自己生产</td><td class="on">自己选（全量）</td><td class="num">L / 2</td><td><a href="full.html">第 6 章</a></td></tr>
+      <tr><td><strong>FULL</strong></td><td class="num">20</td><td class="num">1</td><td class="on">自己生产</td><td class="on">自己生产</td><td class="on">自己选 + 选候选</td><td class="num">L</td><td><a href="layer20.html">第 7 章</a></td></tr>
+      <tr><td><strong>REUSE</strong></td><td class="num">其余 30 层</td><td class="num">2 / 1</td><td>借 owner 的</td><td class="off">—</td><td>借组首层的</td><td class="num">0</td><td><a href="reuse.html">第 8 章</a></td></tr>
+      <tr><td><strong>REINDEX</strong></td><td class="num">24, 28, 32, 36</td><td class="num">1</td><td>借第 20 层</td><td>借第 20 层</td><td class="on">自己选（候选内）</td><td class="num">≤ 16,384</td><td><a href="reindex.html">第 9 章</a></td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="codemap">
+  <hr class="rule">
+  <p class="eyebrow">读码</p>
+  <h2>ATOM 里的四层目录：数学、算子、缓存、插件</h2>
+  <p>V4.1 是三个 PR 进的 main：#2314（2026-09-21，原生文本、视觉、paged runtime、DSpark）、#2479（10-06，mono decode 与 FP4 index plane）、#2494（10-16，vLLM 插件）。V4 的文件一个都没改，V4.1 只是借用。</p>
+  <div class="tscroll"><table>
+    <thead><tr><th>目录</th><th>管什么</th><th>关键入口</th><th>章节</th></tr></thead>
+    <tbody>
+      <tr><td class="k">atom/models/deepseek_v41/</td><td>模型数学：拓扑、Block、注意力投影、MoE、runtime、bounded replay、DSpark、视觉；<code>mono/</code> 是 decode 融合内核</td><td><a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/models/deepseek_v41/config.py#L75"><code>atom/models/deepseek_v41/config.py:75</code></a><br><a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/models/deepseek_v41/model.py#L40"><code>atom/models/deepseek_v41/model.py:40</code></a><br><a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/models/deepseek_v41/attention.py#L223"><code>atom/models/deepseek_v41/attention.py:223</code></a><br><a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/models/deepseek_v41/runtime.py#L234"><code>atom/models/deepseek_v41/runtime.py:234</code></a></td><td>1, 4–9</td></tr>
+      <tr><td class="k">atom/model_ops/deepseek_v41/</td><td>V4.1 专属算子：mHC、Compressor、Indexer 两级选择、打分工作区、RoPE+量化+写窗口融合</td><td><a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/model_ops/deepseek_v41/mhc.py#L86"><code>atom/model_ops/deepseek_v41/mhc.py:86</code></a><br><a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/model_ops/deepseek_v41/compressor.py#L103"><code>atom/model_ops/deepseek_v41/compressor.py:103</code></a><br><a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/model_ops/deepseek_v41/indexer.py#L189"><code>atom/model_ops/deepseek_v41/indexer.py:189</code></a></td><td>2, 6, 7, 9</td></tr>
+      <tr><td class="k">atom/model_ops/attentions/deepseek_v41/</td><td>调度与缓存：元数据、PAGE / STATE 视图、下标、checkpoint、FP8 注意力</td><td><a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/model_ops/attentions/deepseek_v41/backend.py#L66"><code>atom/model_ops/attentions/deepseek_v41/backend.py:66</code></a><br><a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/model_ops/attentions/deepseek_v41/cache.py#L47"><code>atom/model_ops/attentions/deepseek_v41/cache.py:47</code></a><br><a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/model_ops/attentions/pool_layout/v41_pool_geometry.py#L79"><code>atom/model_ops/attentions/pool_layout/v41_pool_geometry.py:79</code></a></td><td>4, 5, 10</td></tr>
+      <tr><td class="k">atom/model_ops/engram/</td><td>Engram：host 半边（哈希、mmap 表、锁页）与 <code>device/</code>（GPU 哈希、UVA 查表、旁路 stream、门控）</td><td><a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/model_ops/engram/mapping.py"><code>atom/model_ops/engram/mapping.py</code></a><br><a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/model_ops/engram/device/layer.py#L17"><code>atom/model_ops/engram/device/layer.py:17</code></a></td><td>3</td></tr>
+      <tr><td class="k">atom/plugin/vllm/</td><td>vLLM 插件：一个假注意力层当字节 arena，从块池尾部扣 STATE；不支持前缀缓存</td><td><a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/plugin/vllm/deepseek_v41_bridge.py"><code>atom/plugin/vllm/deepseek_v41_bridge.py</code></a><br><a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/plugin/vllm/models/deepseek_v41.py#L26"><code>atom/plugin/vllm/models/deepseek_v41.py:26</code></a></td><td>10</td></tr>
+    </tbody>
+  </table></div>
+  <div class="callout p">
+    <p class="eyebrow">注册点</p>
+    <p>
+      <a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/models/registry.py#L17"><code>atom/models/registry.py:17</code></a> 把 <code>DeepseekV41ForCausalLM</code> 指到 <code>runtime.DeepseekV41RuntimeModel</code>；
+      <a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/utils/selector.py#L154"><code>atom/utils/selector.py:154</code></a> 选 <code>DeepseekV41Backend</code>；
+      <a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/config.py#L2754"><code>atom/config.py:2754</code></a> 起把 index plane 默认设为 FP8、把 PAGE 强制成 128 token；插件路径由 <a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/plugin/vllm/model_wrapper.py#L183"><code>atom/plugin/vllm/model_wrapper.py:183</code></a> 指到 <code>DeepseekV41RuntimeModelVllm</code>，PAGE 是 256。
+    </p>
+  </div>
+</section>
+
+<section id="conventions">
+  <hr class="rule">
+  <p class="eyebrow">约定</p>
+  <h2>本组文档的符号与出处</h2>
+  <dl class="kv">
+    <dt>T</dt><dd>一次 forward 的 token 行数（所有请求拼在一起）。</dd>
+    <dt>L</dt><dd>某个请求到当前位置为止的上下文长度。</dd>
+    <dt>t / pos</dt><dd>某一行 token 的绝对位置，从 0 开始。</dd>
+    <dt>s</dt><dd>压缩行号：ratio 2 时第 s 行覆盖 token 2s、2s+1；ratio 1 时就是 token s。</dd>
+    <dt>R_m</dt><dd>4 路残差中的第 m 路，<code>[T, 5120]</code>。</dd>
+    <dt>main_k</dt><dd>第 k 层（KV owner）写的全局压缩 KV 平面，每行 512 维。</dd>
+    <dt>TP4</dt><dd>举例时默认的张量并行度；按头切的权重在每卡上是 1/4。</dd>
+  </dl>
+  <p class="note" style="margin-top:16px">
+    形状、dtype、默认值都在 ATOM <code>99ebf63</code> 上逐条核对过；配置数字来自 ATOM 测试里钉住的 HF 配置。
+    标注「推断」的是从代码与文档推出的设计意图，源码里没有直接写明。字节数、FLOP 这类估算会注明是按形状算的。
+  </p>
+</section>
+<nav class="pager" aria-label="翻页"><a class="next" href="residual.html"><span>下一章 →</span>2 · 四路残差 mHC</a></nav>
+<footer>
+  <p>
+    源码 <a href="https://github.com/ROCm/ATOM/tree/99ebf633ac7a327c54282c3b244ea8519f3eef29">ROCm/ATOM@99ebf633a</a>（2026-11-01）·
+    文中 <code>文件:行号</code> 均指这一提交 ·
+    模型配置取自 <code>tests/models/deepseek_v41/fixtures/config.json</code>（钉在 <code>deepseek-ai/DeepSeek-V4.1-Flash@dba1be0</code>）·
+    mHC 与 CSA 的出处是 DeepSeek-V4 论文 §2.2、§2.3 ·
+    仓库 <a href="https://github.com/PerryZhang01/LLM">PerryZhang01/LLM</a>
+  </p>
+</footer>
+</div>
+</body>
+</html>
