@@ -1,0 +1,1030 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DeepSeek-V4.1-Flash 结构解剖 · Reindex 层</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
+<style>
+:root{
+  --bg:#E8EBEA; --surface:#F6F8F7; --surface-2:#DDE3E2; --sunk:#D3DAD9;
+  --ink:#141A1C; --ink-2:#4B5A5C; --ink-3:#75858880;
+  --line:#C3CDCC; --line-soft:#D4DCDB;
+  --amber:#8A5D0C; --amber-mark:#C79433; --amber-bg:#EFE2C2;
+  --petrol:#1D5A74; --petrol-mark:#3D87A6; --petrol-bg:#D3E3EA;
+  --brick:#8E3629; --brick-bg:#F0DAD5;
+  --moss:#3F6034; --moss-mark:#6E9A5C; --moss-bg:#DDE8D6;
+  --mute-mark:#9FADAF;
+  --c1:#1F7AB0; --c2:#B5700F;
+  --shadow:0 1px 2px rgba(20,26,28,.06), 0 8px 24px -14px rgba(20,26,28,.24);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0D1315; --surface:#141C1E; --surface-2:#1C2629; --sunk:#101819;
+    --ink:#E3EAE9; --ink-2:#94A4A6; --ink-3:#6E7E8080;
+    --line:#283437; --line-soft:#1F2B2E;
+    --amber:#E0AB53; --amber-mark:#D69B36; --amber-bg:#3B2E13;
+    --petrol:#6FB6D5; --petrol-mark:#4C93B4; --petrol-bg:#12303D;
+    --brick:#E58472; --brick-bg:#3A1D18;
+    --moss:#A8CE96; --moss-mark:#7FAE6B; --moss-bg:#22301B;
+    --mute-mark:#3C4A4D;
+    --c1:#3A90C8; --c2:#BF7E22;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 30px -18px rgba(0,0,0,.8);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0D1315; --surface:#141C1E; --surface-2:#1C2629; --sunk:#101819;
+  --ink:#E3EAE9; --ink-2:#94A4A6; --ink-3:#6E7E8080;
+  --line:#283437; --line-soft:#1F2B2E;
+  --amber:#E0AB53; --amber-mark:#D69B36; --amber-bg:#3B2E13;
+  --petrol:#6FB6D5; --petrol-mark:#4C93B4; --petrol-bg:#12303D;
+  --brick:#E58472; --brick-bg:#3A1D18;
+  --moss:#A8CE96; --moss-mark:#7FAE6B; --moss-bg:#22301B;
+  --mute-mark:#3C4A4D;
+  --c1:#3A90C8; --c2:#BF7E22;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 30px -18px rgba(0,0,0,.8);
+}
+*{box-sizing:border-box}
+body{margin:0; background:var(--bg); color:var(--ink);
+  font-family:"Source Serif 4", "Songti SC", "Noto Serif CJK SC", "Source Han Serif SC", Georgia, serif;
+  font-size:16.5px; line-height:1.72; -webkit-font-smoothing:antialiased}
+.wrap{max-width:1140px; margin:0 auto; padding:0 28px 96px}
+h1,h2,h3,.eyebrow,.stat-n,.lgd,.tag,th,.chapnav,.pager{font-family:Archivo, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif}
+h1{font-size:clamp(2.2rem,5.2vw,3.6rem); line-height:1.04; letter-spacing:-.028em; font-weight:700; margin:0; text-wrap:balance}
+h2{font-size:clamp(1.3rem,2.5vw,1.68rem); line-height:1.22; letter-spacing:-.014em; font-weight:600; margin:0 0 .3em; text-wrap:balance}
+h3{font-size:1.0rem; letter-spacing:.005em; font-weight:600; margin:0 0 .35em}
+p{margin:0 0 1em; max-width:72ch}
+a{color:var(--petrol)}
+code,.mono{font-family:"IBM Plex Mono", ui-monospace, monospace; font-size:.855em; font-variant-ligatures:none}
+:not(pre) > code{background:var(--surface-2); padding:.1em .38em; border-radius:3px; color:var(--ink); overflow-wrap:anywhere}
+.eyebrow{font-size:.66rem; font-weight:600; letter-spacing:.16em; text-transform:uppercase; color:var(--ink-2); margin:0 0 .55em}
+.lede{font-size:1.1rem; color:var(--ink-2); max-width:70ch}
+.note{font-size:.9rem; color:var(--ink-2)}
+header.mast{border-bottom:1px solid var(--line); margin-bottom:52px; padding:24px 0 34px}
+.mast-id{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:22px}
+.tag{font-size:.68rem; font-weight:600; letter-spacing:.09em; text-transform:uppercase; padding:.32em .7em; border:1px solid var(--line); border-radius:2px; color:var(--ink-2); background:var(--surface)}
+.tag.hot{border-color:var(--amber); color:var(--amber); background:var(--amber-bg)}
+.mast p.lede{margin-top:18px}
+.stats{display:grid; grid-template-columns:repeat(auto-fit,minmax(128px,1fr)); gap:1px; background:var(--line-soft); border:1px solid var(--line-soft); margin-top:34px}
+.stat{background:var(--surface); padding:14px 16px 16px}
+.stat-n{display:block; font-size:1.45rem; font-weight:700; letter-spacing:-.02em; font-variant-numeric:tabular-nums; line-height:1.15}
+.stat-l{display:block; font-size:.74rem; color:var(--ink-2); letter-spacing:.02em; margin-top:3px; font-family:"IBM Plex Mono", monospace}
+section{margin:0 0 68px; scroll-margin-top:20px}
+.rule{border:0; border-top:1px solid var(--line); margin:0 0 34px}
+figure{margin:26px 0 0; background:var(--surface); border:1px solid var(--line); padding:24px 22px 16px; box-shadow:var(--shadow); overflow-x:auto}
+figure svg{max-width:100%; height:auto; display:block; margin:0 auto; color:var(--ink-2); font-family:"IBM Plex Mono", ui-monospace, monospace; font-size:10.5px}
+figure svg text{fill:var(--ink)}
+figure .fignum{font-family:Archivo,sans-serif; font-size:.66rem; font-weight:600; letter-spacing:.16em; text-transform:uppercase; color:var(--ink-2); margin:0 0 14px}
+figcaption{font-size:.86rem; color:var(--ink-2); margin-top:16px; padding-top:12px; border-top:1px solid var(--line-soft); max-width:80ch}
+figcaption strong{color:var(--ink)}
+.svg-min{min-width:760px}
+figure svg.chart{max-width:760px}
+.tscroll{overflow-x:auto; margin-top:22px; border:1px solid var(--line); background:var(--surface); box-shadow:var(--shadow)}
+table{border-collapse:collapse; width:100%; min-width:640px; font-size:.9rem}
+th{text-align:left; font-size:.68rem; letter-spacing:.11em; text-transform:uppercase; font-weight:600; color:var(--ink-2); padding:11px 16px; background:var(--surface-2); border-bottom:1px solid var(--line); white-space:nowrap}
+td{padding:10px 16px; border-bottom:1px solid var(--line-soft); vertical-align:top; line-height:1.55}
+tbody tr:last-child td{border-bottom:0}
+td.num{font-family:"IBM Plex Mono",monospace; font-variant-numeric:tabular-nums; white-space:nowrap}
+td.k{font-family:"IBM Plex Mono",monospace; font-size:.8rem}
+.hl{color:var(--amber); font-weight:600}
+.dim{color:var(--ink-2)}
+.pos{color:var(--moss); font-weight:600}
+.neg{color:var(--brick); font-weight:600}
+.grid2{display:grid; grid-template-columns:repeat(auto-fit,minmax(310px,1fr)); gap:18px; margin-top:24px}
+.grid3{display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:16px; margin-top:24px}
+.card{background:var(--surface); border:1px solid var(--line); padding:18px 20px 16px; box-shadow:var(--shadow)}
+.card h3{color:var(--ink)}
+.card p:last-child{margin-bottom:0}
+.card.warn{border-left:3px solid var(--brick)}
+.card.good{border-left:3px solid var(--petrol)}
+.card.key{border-left:3px solid var(--amber-mark)}
+.card.moss{border-left:3px solid var(--moss-mark)}
+.card .eyebrow{margin-bottom:.4em}
+a.card{display:block; text-decoration:none; color:inherit; transition:transform .12s ease, border-color .12s ease}
+a.card:hover{transform:translateY(-2px); border-color:var(--amber-mark)}
+a.card .go{font-family:"IBM Plex Mono",monospace; font-size:.76rem; color:var(--amber); font-weight:600}
+ul.tight,ol.tight{margin:0; padding-left:1.25em}
+ul.tight li,ol.tight li{margin-bottom:.42em}
+ul.tight li:last-child,ol.tight li:last-child{margin-bottom:0}
+.pathline{font-family:"IBM Plex Mono",monospace; font-size:.76rem; color:var(--ink-2); background:var(--sunk); padding:5px 9px; display:inline-block; margin-top:10px; border-radius:2px; word-break:break-all}
+.callout{background:var(--amber-bg); border:1px solid var(--amber-mark); padding:16px 20px; margin-top:24px}
+.callout .eyebrow{color:var(--amber)}
+.callout p:last-child{margin-bottom:0}
+.callout.p{background:var(--petrol-bg); border-color:var(--petrol-mark)}
+.callout.p .eyebrow{color:var(--petrol)}
+pre.code{background:var(--sunk); border:1px solid var(--line-soft); padding:14px 16px; overflow-x:auto; font-family:"IBM Plex Mono",monospace; font-size:.78rem; line-height:1.6; margin:20px 0 0; color:var(--ink)}
+pre.code .c{color:var(--ink-2)}
+pre.code .h{color:var(--amber); font-weight:600}
+footer{border-top:1px solid var(--line); padding-top:22px; color:var(--ink-2); font-size:.85rem}
+.backnav{padding:22px 0 0; font-family:Archivo,"PingFang SC",system-ui,sans-serif; font-size:.8rem}
+.backnav a{color:var(--ink-2); text-decoration:none}
+.backnav a:hover{color:var(--amber)}
+.chapnav{display:flex; flex-wrap:wrap; gap:6px; margin:14px 0 0; font-size:.74rem}
+.chapnav a{padding:.36em .8em; border:1px solid var(--line); background:var(--surface); color:var(--ink-2); text-decoration:none; border-radius:2px; white-space:nowrap}
+.chapnav a:hover{border-color:var(--amber-mark); color:var(--ink)}
+.chapnav a.on{border-color:var(--amber); color:var(--amber); background:var(--amber-bg); font-weight:600}
+.pager{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin:12px 0 40px}
+.pager a{display:block; text-decoration:none; color:var(--ink); background:var(--surface); border:1px solid var(--line); padding:14px 18px; box-shadow:var(--shadow)}
+.pager a:hover{border-color:var(--amber-mark)}
+.pager a span{display:block; font-size:.66rem; letter-spacing:.14em; text-transform:uppercase; color:var(--ink-2)}
+.pager a.next{text-align:right; grid-column:2}
+/* svg 语义类 */
+.sv-band{fill:var(--surface-2)}
+.sv-box{fill:var(--surface); stroke:var(--line); stroke-width:1.2}
+.sv-a{fill:var(--amber-bg); stroke:var(--amber-mark); stroke-width:1.3}
+.sv-p{fill:var(--petrol-bg); stroke:var(--petrol-mark); stroke-width:1.3}
+.sv-m{fill:var(--moss-bg); stroke:var(--moss-mark); stroke-width:1.3}
+.sv-r{fill:var(--brick-bg); stroke:var(--brick); stroke-width:1.3}
+.sv-sunk{fill:var(--sunk); stroke:var(--line); stroke-width:1}
+.sv-dash{fill:none; stroke:var(--ink-2); stroke-width:1.1; stroke-dasharray:5 4}
+.sv-hatch{fill:url(#hatch); stroke:var(--line); stroke-width:1}
+.sv-ln{stroke:var(--ink-2); stroke-width:1.3; fill:none}
+.sv-ln-d{stroke:var(--ink-2); stroke-width:1.2; fill:none; stroke-dasharray:4 3}
+.sv-ln-a{stroke:var(--amber-mark); stroke-width:1.6; fill:none}
+.sv-ln-p{stroke:var(--petrol-mark); stroke-width:1.6; fill:none}
+.sv-grid{stroke:var(--line-soft); stroke-width:1}
+.sv-axis{stroke:var(--ink-2); stroke-width:1}
+figure svg text.n{font-size:11.5px; font-weight:600}
+figure svg text.s{fill:var(--ink-2); font-size:9.5px}
+figure svg text.xs{fill:var(--ink-2); font-size:9px}
+figure svg text.h{font-family:Archivo,"PingFang SC",system-ui,sans-serif; font-size:12px; font-weight:600}
+figure svg text.am{fill:var(--amber)}
+figure svg text.pe{fill:var(--petrol)}
+.mk{fill:var(--ink-2)} .mka{fill:var(--amber-mark)} .mkp{fill:var(--petrol-mark)}
+.hatch-l{stroke:var(--line); stroke-width:2}
+.c1l{stroke:var(--c1); stroke-width:2; fill:none} .c2l{stroke:var(--c2); stroke-width:2; fill:none}
+.c1d{fill:var(--c1); stroke:var(--surface); stroke-width:2} .c2d{fill:var(--c2); stroke:var(--surface); stroke-width:2}
+.hit{fill:transparent; cursor:default}
+.hit:hover + .c1d, .hit:hover + .c2d{stroke:var(--ink)}
+@media (max-width:640px){ .wrap{padding:0 16px 64px} .pager{grid-template-columns:1fr} .pager a.next{grid-column:1} }
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+:focus-visible{outline:2px solid var(--petrol); outline-offset:2px}
+/* ===== V4.1 章节扩展：配色 ===== */
+:root{
+  --plum:#5E3C78; --plum-mark:#9A72B8; --plum-bg:#E9E0F0;
+  --s0:#C79433; --s1:#3D87A6; --s2:#6E9A5C; --s3:#B0584A;
+  --enc:#D3E3EA; --dec:#EFE2C2;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --plum:#CDAEE6; --plum-mark:#9C78BA; --plum-bg:#2A1F35;
+    --s0:#D69B36; --s1:#4C93B4; --s2:#7FAE6B; --s3:#D17562;
+    --enc:#12303D; --dec:#3B2E13;
+  }
+}
+:root[data-theme="dark"]{
+  --plum:#CDAEE6; --plum-mark:#9C78BA; --plum-bg:#2A1F35;
+  --s0:#D69B36; --s1:#4C93B4; --s2:#7FAE6B; --s3:#D17562;
+  --enc:#12303D; --dec:#3B2E13;
+}
+/* ===== 页面小件 ===== */
+.toc{display:flex; flex-wrap:wrap; gap:6px 14px; margin:18px 0 0; font-family:Archivo,"PingFang SC",system-ui,sans-serif; font-size:.78rem}
+.toc a{color:var(--ink-2); text-decoration:none; border-bottom:1px dotted var(--line)}
+.toc a:hover{color:var(--amber)}
+.kv{display:grid; grid-template-columns:max-content 1fr; gap:4px 16px; font-size:.9rem; margin:10px 0 0}
+.kv dt{font-family:"IBM Plex Mono",monospace; font-size:.8rem; color:var(--ink-2)}
+.kv dd{margin:0}
+.step{counter-increment:st; position:relative; padding-left:2.1em; margin:0 0 .8em}
+.step::before{content:counter(st); position:absolute; left:0; top:.1em; width:1.45em; height:1.45em; border-radius:50%;
+  background:var(--amber-bg); color:var(--amber); border:1px solid var(--amber-mark);
+  font:600 .72rem/1.45em Archivo,system-ui,sans-serif; text-align:center}
+.steps{counter-reset:st; margin:16px 0 0; padding:0; list-style:none}
+.ex{background:var(--surface); border:1px dashed var(--amber-mark); padding:16px 20px; margin-top:22px}
+.ex .eyebrow{color:var(--amber)}
+.ex p:last-child{margin-bottom:0}
+td.on{color:var(--moss); font-weight:600} td.off{color:var(--ink-3)}
+/* ===== SVG 图元：在 sv-* 之外新增 ===== */
+.sv-v{fill:var(--plum-bg); stroke:var(--plum-mark); stroke-width:1.3}
+.sv-ln-m{stroke:var(--moss-mark); stroke-width:1.6; fill:none}
+.sv-ln-r{stroke:var(--brick); stroke-width:1.6; fill:none}
+.sv-ln-v{stroke:var(--plum-mark); stroke-width:1.6; fill:none}
+.sv-flow{stroke:var(--ink-2); stroke-width:2.2; fill:none; stroke-linecap:round}
+.sv-enc{fill:var(--enc)} .sv-dec{fill:var(--dec)}
+/* 四路残差的四条泳道 */
+.ln0,.ln1,.ln2,.ln3{fill:none; stroke-width:3.2; stroke-linecap:round}
+.ln0{stroke:var(--s0)} .ln1{stroke:var(--s1)} .ln2{stroke:var(--s2)} .ln3{stroke:var(--s3)}
+.lf0{fill:var(--s0)} .lf1{fill:var(--s1)} .lf2{fill:var(--s2)} .lf3{fill:var(--s3)}
+/* 形状标签（贴在箭头上的 [T, 5120]） */
+.pill{fill:var(--surface); stroke:var(--line); stroke-width:1}
+.pill-a{fill:var(--amber-bg); stroke:var(--amber-mark); stroke-width:1}
+.pill-p{fill:var(--petrol-bg); stroke:var(--petrol-mark); stroke-width:1}
+.pill-m{fill:var(--moss-bg); stroke:var(--moss-mark); stroke-width:1}
+.pill-v{fill:var(--plum-bg); stroke:var(--plum-mark); stroke-width:1}
+figure svg text.pt{font-size:9.5px; fill:var(--ink-2)}
+figure svg text.t{font-family:Archivo,"PingFang SC",system-ui,sans-serif; font-size:13.5px; font-weight:700}
+figure svg text.sub{font-family:Archivo,"PingFang SC",system-ui,sans-serif; font-size:10px; font-weight:600; letter-spacing:.14em; fill:var(--ink-2)}
+figure svg text.big{font-family:Archivo,system-ui,sans-serif; font-size:20px; font-weight:700}
+figure svg text.sym{font-family:"Source Serif 4",Georgia,serif; font-size:15px; font-weight:600}
+figure svg text.pl{fill:var(--plum)} figure svg text.mo{fill:var(--moss)} figure svg text.br{fill:var(--brick)} figure svg text.dm{fill:var(--ink-2)}
+/* 运算节点（∑ σ ⊙ 之类） */
+.op{fill:var(--surface); stroke:var(--ink-2); stroke-width:1.3}
+.op-a{fill:var(--amber-bg); stroke:var(--amber-mark); stroke-width:1.4}
+.op-p{fill:var(--petrol-bg); stroke:var(--petrol-mark); stroke-width:1.4}
+/* 立体张量块：front / top / side 三个面，配色由外层 class 决定 */
+.slab .sf{stroke-width:1.2} .slab .st{stroke-width:1} .slab .ss{stroke-width:1}
+.slab.a .sf{fill:var(--amber-bg); stroke:var(--amber-mark)} .slab.a .st{fill:var(--surface); stroke:var(--amber-mark)} .slab.a .ss{fill:var(--amber-mark); fill-opacity:.38; stroke:var(--amber-mark)}
+.slab.p .sf{fill:var(--petrol-bg); stroke:var(--petrol-mark)} .slab.p .st{fill:var(--surface); stroke:var(--petrol-mark)} .slab.p .ss{fill:var(--petrol-mark); fill-opacity:.38; stroke:var(--petrol-mark)}
+.slab.m .sf{fill:var(--moss-bg); stroke:var(--moss-mark)} .slab.m .st{fill:var(--surface); stroke:var(--moss-mark)} .slab.m .ss{fill:var(--moss-mark); fill-opacity:.38; stroke:var(--moss-mark)}
+.slab.v .sf{fill:var(--plum-bg); stroke:var(--plum-mark)} .slab.v .st{fill:var(--surface); stroke:var(--plum-mark)} .slab.v .ss{fill:var(--plum-mark); fill-opacity:.38; stroke:var(--plum-mark)}
+.slab.r .sf{fill:var(--brick-bg); stroke:var(--brick)} .slab.r .st{fill:var(--surface); stroke:var(--brick)} .slab.r .ss{fill:var(--brick); fill-opacity:.32; stroke:var(--brick)}
+.slab.n .sf{fill:var(--surface-2); stroke:var(--ink-2)} .slab.n .st{fill:var(--surface); stroke:var(--ink-2)} .slab.n .ss{fill:var(--ink-2); fill-opacity:.25; stroke:var(--ink-2)}
+/* 网格单元：PAGE / tile / 候选块 / top-k 位图 */
+.cell{fill:var(--surface); stroke:var(--line); stroke-width:.8}
+.cell-a{fill:var(--amber-mark); fill-opacity:.85; stroke:var(--surface); stroke-width:.8}
+.cell-p{fill:var(--petrol-mark); fill-opacity:.85; stroke:var(--surface); stroke-width:.8}
+.cell-m{fill:var(--moss-mark); fill-opacity:.85; stroke:var(--surface); stroke-width:.8}
+.cell-v{fill:var(--plum-mark); fill-opacity:.85; stroke:var(--surface); stroke-width:.8}
+.cell-r{fill:var(--brick); fill-opacity:.75; stroke:var(--surface); stroke-width:.8}
+.cell-d{fill:var(--sunk); stroke:var(--line-soft); stroke-width:.8}
+
+</style>
+
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
+<marker id="ar" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path class="mk" d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z"/></marker>
+<marker id="ara" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path class="mka" d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z"/></marker>
+<marker id="arp" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path class="mkp" d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z"/></marker>
+<marker id="arm" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z" fill="var(--moss-mark)"/></marker>
+<marker id="arr" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z" fill="var(--brick)"/></marker>
+<marker id="arv" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z" fill="var(--plum-mark)"/></marker>
+<linearGradient id="gn" x1="0" y1="0" x2=".4" y2="1"><stop offset="0%" stop-color="var(--surface)"/><stop offset="100%" stop-color="var(--surface-2)"/></linearGradient>
+<linearGradient id="ga" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--amber-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+<linearGradient id="gp" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--petrol-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+<linearGradient id="gm" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--moss-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+<linearGradient id="gr" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--brick-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+<linearGradient id="gv" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--plum-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+<linearGradient id="genc" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="var(--petrol-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+<linearGradient id="gdec" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="var(--surface)"/><stop offset="100%" stop-color="var(--amber-bg)"/></linearGradient>
+<filter id="sh" x="-8%" y="-12%" width="116%" height="140%"><feDropShadow dx="0" dy="1.4" stdDeviation="2.2" flood-opacity=".14"/></filter>
+<pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line class="hatch-l" x1="0" y1="0" x2="0" y2="6"/></pattern>
+<pattern id="dots" width="8" height="8" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1" fill="var(--line)"/></pattern>
+</defs></svg>
+<div class="wrap">
+<nav class="backnav"><a href="../../../index.html">← LLM 模型与框架结构手册</a> · <a href="../v41_flash_anatomy.html">单页速览版</a></nav>
+<nav class="chapnav" aria-label="章节"><a href="index.html">1 · 总览</a><a href="residual.html">2 · 四路残差 mHC</a><a href="engram.html">3 · Engram</a><a href="csa2.html">4 · CSA2 注意力骨架</a><a href="window.html">5 · Window 层</a><a href="full.html">6 · Full 层</a><a href="layer20.html">7 · 第 20 层</a><a href="reuse.html">8 · Reuse 层</a><a href="reindex.html" class="on">9 · Reindex 层</a><a href="replay.html">10 · 缓存与 Bounded Replay</a></nav>
+<header class="mast">
+  <div class="mast-id">
+    <span class="tag">deepseek-ai/DeepSeek-V4.1-Flash</span>
+    <span class="tag">REINDEX · 第 24 / 28 / 32 / 36 层</span>
+    <span class="tag hot">两级 top-k 的第二级</span>
+    <span class="tag hot">≤ 16,384 列</span>
+  </div>
+  <h1>Reindex 层</h1>
+  <p class="lede">
+    decoder 只有一份全局记忆 <code>main_20</code>，但它不想让 20 层都用同一批 512 行。办法是每 4 层重选一次：
+    REINDEX 层用<strong>自己的</strong> index query 去打<strong>第 20 层的</strong> index key，只打第 20 层挑好的 2048 个候选块。
+    打分器和第 20 层是同一个，区别只是把「整个请求的 PAGE 表」换成「只含候选块的紧凑块表」，选完再把列号换算回 token 位置。
+  </p>
+  <div class="stats">
+    <div class="stat"><span class="stat-n">4</span><span class="stat-l">REINDEX 层：24 · 28 · 32 · 36</span></div>
+    <div class="stat"><span class="stat-n">2048 × 8</span><span class="stat-l">候选块 × 每块行数</span></div>
+    <div class="stat"><span class="stat-n">16,384</span><span class="stat-l">每行最多打分列数</span></div>
+    <div class="stat"><span class="stat-n">32 × 128</span><span class="stat-l">自己的 index query</span></div>
+    <div class="stat"><span class="stat-n">0</span><span class="stat-l">自己写的 KV / index key</span></div>
+    <div class="stat"><span class="stat-n">1 次</span><span class="stat-l">候选翻译 / forward，四层共用</span></div>
+  </div>
+  <nav class="toc" aria-label="本页目录">
+    <a href="#own">自己的与借来的</a><a href="#chain">调用链</a><a href="#table">第 1 步：翻译</a>
+    <a href="#score">第 2 步：打分</a><a href="#lift">第 3 步：换算</a><a href="#example">例子：t = 100,000</a>
+    <a href="#bound">边界与成本</a><a href="#read">读码路线</a>
+  </nav>
+</header>
+
+<section id="own">
+  <p class="eyebrow">分工</p>
+  <h2>query 和头权重是自己的，key、候选和全局 KV 都是第 20 层的</h2>
+  <p>
+    第 24 层是 index source 但不是 KV source，所以拓扑给它 <code>REINDEX</code>（<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/models/deepseek_v41/config.py#L137"><code>atom/models/deepseek_v41/config.py:137</code></a>）：
+    <code>kv_owner = 20</code>、<code>topk_owner = 24</code>、<code>candidate_owner = 20</code>。建模块时它拿到一个 <code>Indexer</code>，
+    但 <code>wk</code> 与 <code>k_norm</code> 只在 FULL 层创建（<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/models/deepseek_v41/attention.py#L71"><code>atom/models/deepseek_v41/attention.py:71</code></a>），Compressor 也没有。
+  </p>
+  <figure>
+    <p class="fignum">图 1 · 第 24 层：自己的（紫）与借来的（黄虚线）</p>
+    <svg viewBox="0 0 1060 420" class="svg-min" role="img" aria-label="第 24 层自己的与借来的：index query 与头权重自己算，key、候选、全局 KV 借第 20 层">
+<text x="20" y="30" class="sub">第 24 层（第 28 / 32 / 36 层同构）</text>
+<g class="slab a"><path class="st" d="M20 79 l9 -9 h60 l-9 9 z"/><path class="ss" d="M80 79 l9 -9 v64 l-9 9 z"/><path class="sf" d="M20 79 h60 v64 h-60 z"/></g>
+<text x="54" y="164" class="n" text-anchor="middle">h₂₄</text>
+<text x="54" y="180" class="pt" text-anchor="middle">[T, 5120]</text>
+<g class="slab a"><path class="st" d="M20 225 l9 -9 h60 l-9 9 z"/><path class="ss" d="M80 225 l9 -9 v46 l-9 9 z"/><path class="sf" d="M20 225 h60 v46 h-60 z"/></g>
+<text x="54" y="292" class="n" text-anchor="middle">qr₂₄</text>
+<text x="54" y="308" class="pt" text-anchor="middle">[T, 1280]</text>
+<text x="54" y="322" class="xs" text-anchor="middle">本层 q_norm 输出</text>
+<rect x="130" y="60" width="230" height="92" rx="7" fill="url(#gv)" stroke="var(--plum-mark)" filter="url(#sh)"/>
+<text x="245" y="82" class="n" text-anchor="middle">weights_proj（自己的）</text>
+<text x="245" y="100" class="pt" text-anchor="middle">5120 → 32，BF16，复制</text>
+<text x="245" y="118" class="pt pl" text-anchor="middle">w [T, 32]</text>
+<text x="245" y="136" class="xs" text-anchor="middle">每个 token 给 32 个头的权重</text>
+<path d="M92 104 H126" fill="none" stroke="var(--plum-mark)" stroke-width="1.6" marker-end="url(#arv)"/>
+<rect x="130" y="196" width="230" height="104" rx="7" fill="url(#gv)" stroke="var(--plum-mark)" filter="url(#sh)"/>
+<text x="245" y="218" class="n" text-anchor="middle">indexer.wq_b（自己的）</text>
+<text x="245" y="236" class="pt" text-anchor="middle">1280 → 32 × 128，FP8，复制</text>
+<text x="245" y="254" class="pt" text-anchor="middle">RoPE @ t，量化成 FP8</text>
+<text x="245" y="272" class="pt pl" text-anchor="middle">iq [T, 32, 128]</text>
+<text x="245" y="290" class="xs" text-anchor="middle">scale 折进 w</text>
+<path d="M92 244 H126" fill="none" stroke="var(--plum-mark)" stroke-width="1.6" marker-end="url(#arv)"/>
+<rect x="410" y="120" width="230" height="124" rx="7" fill="url(#gv)" stroke="var(--plum-mark)" filter="url(#sh)"/>
+<text x="525" y="144" class="n" text-anchor="middle">打分 + top-512</text>
+<text x="424" y="166" class="pt">Σ_h w·ReLU(iq·K)·k_scale</text>
+<text x="424" y="184" class="pt">只在 2048 个候选块里</text>
+<text x="424" y="202" class="pt">宽度 ≤ 16,384 列</text>
+<text x="424" y="222" class="pt pl">→ lift → selected[24]</text>
+<text x="424" y="236" class="xs">[T, 512] int32</text>
+<path d="M360 106 C384 106 386 150 406 158" fill="none" stroke="var(--plum-mark)" stroke-width="1.6" marker-end="url(#arv)"/>
+<path d="M360 248 C384 248 386 214 406 206" fill="none" stroke="var(--plum-mark)" stroke-width="1.6" marker-end="url(#arv)"/>
+<rect x="690" y="40" width="350" height="236" rx="7" fill="url(#ga)" stroke="var(--amber-mark)" stroke-dasharray="5 4"/>
+<text x="706" y="62" class="sub am">借第 20 层的（虚线）</text>
+<g class="slab a"><path class="st" d="M706 83 l7 -7 h120 l-7 7 z"/><path class="ss" d="M826 83 l7 -7 v36 l-7 7 z"/><path class="sf" d="M706 83 h120 v36 h-120 z"/></g>
+<text x="766" y="104" class="pt" text-anchor="middle">index plane[20]</text>
+<text x="840" y="98" class="pt">K [L, 128] FP8，每 token 一行</text>
+<g class="slab v"><path class="st" d="M706 143 l7 -7 h120 l-7 7 z"/><path class="ss" d="M826 143 l7 -7 v36 l-7 7 z"/><path class="sf" d="M706 143 h120 v36 h-120 z"/></g>
+<text x="766" y="164" class="pt" text-anchor="middle">candidates[20]</text>
+<text x="840" y="158" class="pt">[T, 2048] 升序块号，−1 补齐</text>
+<g class="slab a"><path class="st" d="M706 203 l7 -7 h120 l-7 7 z"/><path class="ss" d="M826 203 l7 -7 v36 l-7 7 z"/><path class="sf" d="M706 203 h120 v36 h-120 z"/></g>
+<text x="766" y="224" class="pt" text-anchor="middle">main_20</text>
+<text x="840" y="218" class="pt">[L, 512] MXFP8，G 步才读</text>
+<text x="706" y="262" class="xs am">候选块翻译成块表每 forward 只做一次，四层共用</text>
+<path d="M702 96 C670 96 664 160 644 168" fill="none" stroke="var(--amber-mark)" stroke-width="1.4" stroke-dasharray="4 3" marker-end="url(#ara)"/>
+<path d="M702 156 C676 156 668 190 644 196" fill="none" stroke="var(--plum-mark)" stroke-width="1.4" stroke-dasharray="4 3" marker-end="url(#arv)"/>
+<rect x="130" y="330" width="510" height="56" rx="7" fill="var(--sunk)" stroke="var(--line)" stroke-dasharray="5 4"/>
+<text x="146" y="352" class="n dm">没有：compressor.wkv / wgate / norm　·　indexer.wk / k_norm</text>
+<text x="146" y="372" class="pt">不写 main_*，不写 index plane；schema 里也没有这些张量（weights.py:166 只列给 FULL）</text>
+<path d="M525 244 V284 H860 V296" fill="none" stroke="var(--ink-2)" stroke-width="1.2" marker-end="url(#ar)"/>
+<rect x="690" y="300" width="350" height="94" rx="7" fill="url(#gn)" stroke="var(--line)"/>
+<text x="706" y="322" class="n">交给下标组 [24, 28)</text>
+<text x="706" y="342" class="pt">第 24 层的 F：build_indices(selected[24],</text>
+<text x="706" y="358" class="pt">owner = 20) → 第 24–27 层都读 main_20</text>
+<text x="706" y="376" class="pt">的这 512 行 + 各自的窗口</text>
+</svg>
+    <figcaption>
+      两个输入都是第 24 层自己的：<code>h₂₄</code> 是本层 attention 的输入（mHC 接缝之后），<code>qr₂₄</code> 是本层 q_norm 的输出（与主 query 共用）。
+      越深的层，query 里的上下文越多，所以同一批候选里选出来的 512 行可能和第 20 层不同。
+    </figcaption>
+  </figure>
+  <div class="tscroll"><table>
+    <thead><tr><th></th><th>REINDEX 第 24 层</th><th>FULL 第 20 层</th></tr></thead>
+    <tbody>
+      <tr><td>index query</td><td class="on">自己的 <code>indexer.wq_b(qr₂₄)</code></td><td>自己的</td></tr>
+      <tr><td>头权重</td><td class="on">自己的 <code>weights_proj(h₂₄)</code></td><td>自己的</td></tr>
+      <tr><td>index key</td><td>借 index plane[20]，本层没有 <code>wk</code> / <code>k_norm</code></td><td class="on">自己写</td></tr>
+      <tr><td>打分范围</td><td>第 20 层选的 2048 个候选块</td><td>全部可见行</td></tr>
+      <tr><td>产出</td><td><code>selected[24]</code></td><td><code>selected[20]</code> + <code>candidates[20]</code></td></tr>
+      <tr><td>全局 KV（G 步）</td><td>读 <code>main_20</code></td><td>读 <code>main_20</code></td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="chain">
+  <hr class="rule">
+  <p class="eyebrow">调用链</p>
+  <h2>和第 20 层走同一个打分器，只在入口换了块表、出口多一步换算</h2>
+  <figure>
+    <p class="fignum">图 2 · REINDEX 打分的调用链与张量形状</p>
+    <svg viewBox="0 0 1060 330" class="svg-min" role="img" aria-label="REINDEX 打分的调用链与每一步的张量形状">
+<rect x="20" y="50" width="150" height="90" rx="7" fill="url(#gv)" stroke="var(--plum-mark)" filter="url(#sh)"/>
+<text x="95" y="74" class="n" text-anchor="middle" style="font-size:9.5px">Indexer.score</text>
+<text x="95" y="94" class="xs" text-anchor="middle">attention.py:122</text>
+<text x="95" y="116" class="pt" text-anchor="middle">_bounds：候选来源 = 20</text>
+<rect x="196" y="50" width="150" height="90" rx="7" fill="url(#ga)" stroke="var(--amber-mark)" filter="url(#sh)"/>
+<text x="271" y="74" class="n" text-anchor="middle" style="font-size:9.5px">cache.candidate_blocks</text>
+<text x="271" y="94" class="xs" text-anchor="middle">cache.py:674</text>
+<text x="271" y="116" class="pt" text-anchor="middle">每 forward 一次，记在 step</text>
+<path d="M170 95 H192" fill="none" stroke="var(--ink-2)" stroke-width="1.4" marker-end="url(#ar)"/>
+<rect x="372" y="50" width="150" height="90" rx="7" fill="url(#ga)" stroke="var(--amber-mark)" filter="url(#sh)"/>
+<text x="447" y="74" class="n" text-anchor="middle" style="font-size:9.5px">candidate_block_table</text>
+<text x="447" y="94" class="xs" text-anchor="middle">candidate_table.py:111</text>
+<text x="447" y="116" class="pt" text-anchor="middle">块号 → 物理 tile + 可见长度</text>
+<path d="M346 95 H368" fill="none" stroke="var(--ink-2)" stroke-width="1.4" marker-end="url(#ar)"/>
+<rect x="548" y="50" width="150" height="90" rx="7" fill="url(#gv)" stroke="var(--plum-mark)" filter="url(#sh)"/>
+<text x="623" y="74" class="n" text-anchor="middle" style="font-size:9.5px">score_topk_quantized</text>
+<text x="623" y="94" class="xs" text-anchor="middle">paged_scoring.py:102</text>
+<text x="623" y="116" class="pt" text-anchor="middle">宽 2048×8，上界 context</text>
+<path d="M522 95 H544" fill="none" stroke="var(--ink-2)" stroke-width="1.4" marker-end="url(#ar)"/>
+<rect x="724" y="50" width="150" height="90" rx="7" fill="url(#gv)" stroke="var(--plum-mark)" filter="url(#sh)"/>
+<text x="799" y="74" class="n" text-anchor="middle" style="font-size:9.5px">_score_paged</text>
+<text x="799" y="94" class="xs" text-anchor="middle">indexer/score.py:144</text>
+<text x="799" y="116" class="pt" text-anchor="middle">logits → top_k_per_row</text>
+<path d="M698 95 H720" fill="none" stroke="var(--ink-2)" stroke-width="1.4" marker-end="url(#ar)"/>
+<rect x="900" y="50" width="150" height="90" rx="7" fill="url(#gm)" stroke="var(--moss-mark)" filter="url(#sh)"/>
+<text x="975" y="74" class="n" text-anchor="middle" style="font-size:9.5px">lift_candidate_selection</text>
+<text x="975" y="94" class="xs" text-anchor="middle">candidate_table.py:172</text>
+<text x="975" y="116" class="pt" text-anchor="middle">压缩列号 → token 位置</text>
+<path d="M874 95 H896" fill="none" stroke="var(--ink-2)" stroke-width="1.4" marker-end="url(#ar)"/>
+<path d="M95 140 V160" stroke="var(--line)" stroke-dasharray="3 2"/>
+<rect class="pill-v" x="15" y="163.5" width="160" height="17" rx="8.5"/><text x="95" y="175.3" class="pt" text-anchor="middle">iq [T,32,128] · w [T,32]</text>
+<path d="M271 140 V160" stroke="var(--line)" stroke-dasharray="3 2"/>
+<rect class="pill-v" x="191" y="163.5" width="160" height="17" rx="8.5"/><text x="271" y="175.3" class="pt" text-anchor="middle">candidates[20] [T,2048]</text>
+<path d="M447 140 V160" stroke="var(--line)" stroke-dasharray="3 2"/>
+<rect class="pill-a" x="367" y="163.5" width="160" height="17" rx="8.5"/><text x="447" y="175.3" class="pt" text-anchor="middle">table [T,2048] · context [T]</text>
+<path d="M623 140 V160" stroke="var(--line)" stroke-dasharray="3 2"/>
+<rect class="pill-v" x="543" y="163.5" width="160" height="17" rx="8.5"/><text x="623" y="175.3" class="pt" text-anchor="middle">logits [T, ≤16,384]</text>
+<path d="M799 140 V160" stroke="var(--line)" stroke-dasharray="3 2"/>
+<rect class="pill-v" x="719" y="163.5" width="160" height="17" rx="8.5"/><text x="799" y="175.3" class="pt" text-anchor="middle">列号 [T,512]（压缩宽度）</text>
+<path d="M975 140 V160" stroke="var(--line)" stroke-dasharray="3 2"/>
+<rect class="pill-m" x="895" y="163.5" width="160" height="17" rx="8.5"/><text x="975" y="175.3" class="pt" text-anchor="middle">selected[24] [T,512]</text>
+<text x="20" y="222" class="s">约束：score_topk_quantized 第 133 行 assert not (candidate_count and candidates is not None)</text>
+<text x="20" y="240" class="s">——一层要么产出候选（第 20 层），要么在候选里打分（REINDEX），两者不能同时，否则「列号」会有两种含义。</text>
+<text x="20" y="268" class="s">另一条约束在拓扑里：candidate_topk_blocks × candidate_block_size ≥ index_topk（2048 × 8 ≥ 512），</text>
+<text x="20" y="286" class="s">保证候选块装得下一整个 top-k；否则一行选出的数少于为它预留的槽位，下标里会留洞（config.py:102）。</text>
+</svg>
+    <figcaption>
+      入口在 <a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/models/deepseek_v41/attention.py#L204"><code>atom/models/deepseek_v41/attention.py:204</code></a> 的 <code>_bounds</code>：<code>spec.candidate_source</code> 不为空，就调
+      <code>cache.candidate_blocks(step, 20, ratio)</code>（<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/model_ops/attentions/deepseek_v41/cache.py#L674"><code>atom/model_ops/attentions/deepseek_v41/cache.py:674</code></a>），结果记在
+      <code>step.candidate_blocks[20]</code>，第 28、32、36 层直接复用。打分本身走 <a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/model_ops/deepseek_v41/paged_scoring.py#L63"><code>atom/model_ops/deepseek_v41/paged_scoring.py:63</code></a> → <a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/model_ops/indexer/score.py#L144"><code>atom/model_ops/indexer/score.py:144</code></a>。
+    </figcaption>
+  </figure>
+</section>
+
+<section id="table">
+  <hr class="rule">
+  <p class="eyebrow">第 1 步 · 翻译</p>
+  <h2>候选块号散在请求的各个 PAGE 里，先翻译成一张紧凑块表</h2>
+  <p>
+    <code>candidates[20]</code> 存的是<strong>逻辑块号</strong>：请求内第几个 8 行块。打分器要的是<strong>物理 tile</strong>（index plane 里的位置）和每行能读多远。
+    <code>_candidate_table_kernel</code> 每个 token 一个 program，把两样一起算出来（<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/model_ops/deepseek_v41/candidate_table.py#L28"><code>atom/model_ops/deepseek_v41/candidate_table.py:28</code></a>）：
+  </p>
+  <pre class="code"><span class="c"># ratio 1：一个 PAGE = 128 token = 16 块，每块 8 行</span>
+page        = block_tables[req, c // 16]
+table[t, j] = page × 16 + c % 16                       <span class="c"># 第 j 个候选的物理 tile</span>
+
+kept        = 有效候选数（非 −1）
+last_span   = min(max(visible − last × 8, 0), 8)       <span class="c"># 最后一个候选块里真正可见的行数</span>
+context[t]  = (kept − 1) × 8 + last_span              <span class="h"># candidate_table.py:71–72</span></pre>
+  <figure>
+    <p class="fignum">图 3 · 从逻辑块到紧凑块表（示意：K = 8）</p>
+    <svg viewBox="0 0 1060 600" class="svg-min" role="img" aria-label="候选块翻译成紧凑块表：块号到物理 tile，以及可见长度">
+<text x="20" y="30" class="sub">示意：一个请求 visible = 1003 行（ratio 1），K = 8 个候选块（实际 2048）</text>
+<text x="20" y="62" class="s">逻辑块（每块 8 行；每页 16 块 = 128 token）</text>
+<rect class="cell" x="20.0" y="74" width="6.5" height="22"/>
+<rect class="cell" x="27.3" y="74" width="6.5" height="22"/>
+<rect class="cell" x="34.6" y="74" width="6.5" height="22"/>
+<rect class="cell-v" x="41.9" y="74" width="6.5" height="22"/>
+<rect class="cell" x="49.2" y="74" width="6.5" height="22"/>
+<rect class="cell" x="56.5" y="74" width="6.5" height="22"/>
+<rect class="cell" x="63.8" y="74" width="6.5" height="22"/>
+<rect class="cell" x="71.1" y="74" width="6.5" height="22"/>
+<rect class="cell" x="78.4" y="74" width="6.5" height="22"/>
+<rect class="cell" x="85.7" y="74" width="6.5" height="22"/>
+<rect class="cell" x="93.0" y="74" width="6.5" height="22"/>
+<rect class="cell" x="100.3" y="74" width="6.5" height="22"/>
+<rect class="cell" x="107.6" y="74" width="6.5" height="22"/>
+<rect class="cell" x="114.9" y="74" width="6.5" height="22"/>
+<rect class="cell" x="122.2" y="74" width="6.5" height="22"/>
+<rect class="cell" x="129.5" y="74" width="6.5" height="22"/>
+<rect class="cell" x="144.8" y="74" width="6.5" height="22"/>
+<rect class="cell" x="152.1" y="74" width="6.5" height="22"/>
+<rect class="cell-v" x="159.4" y="74" width="6.5" height="22"/>
+<rect class="cell" x="166.7" y="74" width="6.5" height="22"/>
+<rect class="cell" x="174.0" y="74" width="6.5" height="22"/>
+<rect class="cell" x="181.3" y="74" width="6.5" height="22"/>
+<rect class="cell" x="188.6" y="74" width="6.5" height="22"/>
+<rect class="cell" x="195.9" y="74" width="6.5" height="22"/>
+<rect class="cell" x="203.2" y="74" width="6.5" height="22"/>
+<rect class="cell" x="210.5" y="74" width="6.5" height="22"/>
+<rect class="cell" x="217.8" y="74" width="6.5" height="22"/>
+<rect class="cell" x="225.1" y="74" width="6.5" height="22"/>
+<rect class="cell" x="232.4" y="74" width="6.5" height="22"/>
+<rect class="cell" x="239.7" y="74" width="6.5" height="22"/>
+<rect class="cell" x="247.0" y="74" width="6.5" height="22"/>
+<rect class="cell" x="254.3" y="74" width="6.5" height="22"/>
+<rect class="cell" x="269.6" y="74" width="6.5" height="22"/>
+<rect class="cell" x="276.9" y="74" width="6.5" height="22"/>
+<rect class="cell" x="284.2" y="74" width="6.5" height="22"/>
+<rect class="cell" x="291.5" y="74" width="6.5" height="22"/>
+<rect class="cell" x="298.8" y="74" width="6.5" height="22"/>
+<rect class="cell-v" x="306.1" y="74" width="6.5" height="22"/>
+<rect class="cell" x="313.4" y="74" width="6.5" height="22"/>
+<rect class="cell" x="320.7" y="74" width="6.5" height="22"/>
+<rect class="cell-v" x="328.0" y="74" width="6.5" height="22"/>
+<rect class="cell" x="335.3" y="74" width="6.5" height="22"/>
+<rect class="cell" x="342.6" y="74" width="6.5" height="22"/>
+<rect class="cell" x="349.9" y="74" width="6.5" height="22"/>
+<rect class="cell" x="357.2" y="74" width="6.5" height="22"/>
+<rect class="cell" x="364.5" y="74" width="6.5" height="22"/>
+<rect class="cell" x="371.8" y="74" width="6.5" height="22"/>
+<rect class="cell" x="379.1" y="74" width="6.5" height="22"/>
+<rect class="cell" x="394.4" y="74" width="6.5" height="22"/>
+<rect class="cell" x="401.7" y="74" width="6.5" height="22"/>
+<rect class="cell" x="409.0" y="74" width="6.5" height="22"/>
+<rect class="cell" x="416.3" y="74" width="6.5" height="22"/>
+<rect class="cell" x="423.6" y="74" width="6.5" height="22"/>
+<rect class="cell" x="430.9" y="74" width="6.5" height="22"/>
+<rect class="cell" x="438.2" y="74" width="6.5" height="22"/>
+<rect class="cell" x="445.5" y="74" width="6.5" height="22"/>
+<rect class="cell" x="452.8" y="74" width="6.5" height="22"/>
+<rect class="cell" x="460.1" y="74" width="6.5" height="22"/>
+<rect class="cell" x="467.4" y="74" width="6.5" height="22"/>
+<rect class="cell" x="474.7" y="74" width="6.5" height="22"/>
+<rect class="cell" x="482.0" y="74" width="6.5" height="22"/>
+<rect class="cell" x="489.3" y="74" width="6.5" height="22"/>
+<rect class="cell" x="496.6" y="74" width="6.5" height="22"/>
+<rect class="cell" x="503.9" y="74" width="6.5" height="22"/>
+<rect class="cell" x="519.2" y="74" width="6.5" height="22"/>
+<rect class="cell" x="526.5" y="74" width="6.5" height="22"/>
+<rect class="cell-v" x="533.8" y="74" width="6.5" height="22"/>
+<rect class="cell" x="541.1" y="74" width="6.5" height="22"/>
+<rect class="cell" x="548.4" y="74" width="6.5" height="22"/>
+<rect class="cell" x="555.7" y="74" width="6.5" height="22"/>
+<rect class="cell" x="563.0" y="74" width="6.5" height="22"/>
+<rect class="cell" x="570.3" y="74" width="6.5" height="22"/>
+<rect class="cell" x="577.6" y="74" width="6.5" height="22"/>
+<rect class="cell" x="584.9" y="74" width="6.5" height="22"/>
+<rect class="cell" x="592.2" y="74" width="6.5" height="22"/>
+<rect class="cell" x="599.5" y="74" width="6.5" height="22"/>
+<rect class="cell" x="606.8" y="74" width="6.5" height="22"/>
+<rect class="cell" x="614.1" y="74" width="6.5" height="22"/>
+<rect class="cell" x="621.4" y="74" width="6.5" height="22"/>
+<rect class="cell" x="628.7" y="74" width="6.5" height="22"/>
+<rect class="cell" x="644.0" y="74" width="6.5" height="22"/>
+<rect class="cell" x="651.3" y="74" width="6.5" height="22"/>
+<rect class="cell" x="658.6" y="74" width="6.5" height="22"/>
+<rect class="cell" x="665.9" y="74" width="6.5" height="22"/>
+<rect class="cell" x="673.2" y="74" width="6.5" height="22"/>
+<rect class="cell" x="680.5" y="74" width="6.5" height="22"/>
+<rect class="cell" x="687.8" y="74" width="6.5" height="22"/>
+<rect class="cell" x="695.1" y="74" width="6.5" height="22"/>
+<rect class="cell" x="702.4" y="74" width="6.5" height="22"/>
+<rect class="cell" x="709.7" y="74" width="6.5" height="22"/>
+<rect class="cell-v" x="717.0" y="74" width="6.5" height="22"/>
+<rect class="cell" x="724.3" y="74" width="6.5" height="22"/>
+<rect class="cell" x="731.6" y="74" width="6.5" height="22"/>
+<rect class="cell" x="738.9" y="74" width="6.5" height="22"/>
+<rect class="cell" x="746.2" y="74" width="6.5" height="22"/>
+<rect class="cell" x="753.5" y="74" width="6.5" height="22"/>
+<rect class="cell" x="768.8" y="74" width="6.5" height="22"/>
+<rect class="cell" x="776.1" y="74" width="6.5" height="22"/>
+<rect class="cell" x="783.4" y="74" width="6.5" height="22"/>
+<rect class="cell" x="790.7" y="74" width="6.5" height="22"/>
+<rect class="cell" x="798.0" y="74" width="6.5" height="22"/>
+<rect class="cell-v" x="805.3" y="74" width="6.5" height="22"/>
+<rect class="cell" x="812.6" y="74" width="6.5" height="22"/>
+<rect class="cell" x="819.9" y="74" width="6.5" height="22"/>
+<rect class="cell" x="827.2" y="74" width="6.5" height="22"/>
+<rect class="cell" x="834.5" y="74" width="6.5" height="22"/>
+<rect class="cell" x="841.8" y="74" width="6.5" height="22"/>
+<rect class="cell" x="849.1" y="74" width="6.5" height="22"/>
+<rect class="cell" x="856.4" y="74" width="6.5" height="22"/>
+<rect class="cell" x="863.7" y="74" width="6.5" height="22"/>
+<rect class="cell" x="871.0" y="74" width="6.5" height="22"/>
+<rect class="cell" x="878.3" y="74" width="6.5" height="22"/>
+<rect class="cell" x="893.6" y="74" width="6.5" height="22"/>
+<rect class="cell" x="900.9" y="74" width="6.5" height="22"/>
+<rect class="cell" x="908.2" y="74" width="6.5" height="22"/>
+<rect class="cell" x="915.5" y="74" width="6.5" height="22"/>
+<rect class="cell" x="922.8" y="74" width="6.5" height="22"/>
+<rect class="cell" x="930.1" y="74" width="6.5" height="22"/>
+<rect class="cell" x="937.4" y="74" width="6.5" height="22"/>
+<rect class="cell" x="944.7" y="74" width="6.5" height="22"/>
+<rect class="cell" x="952.0" y="74" width="6.5" height="22"/>
+<rect class="cell" x="959.3" y="74" width="6.5" height="22"/>
+<rect class="cell" x="966.6" y="74" width="6.5" height="22"/>
+<rect class="cell" x="973.9" y="74" width="6.5" height="22"/>
+<rect class="cell" x="981.2" y="74" width="6.5" height="22"/>
+<rect class="cell-v" x="988.5" y="74" width="6.5" height="22"/>
+<rect class="cell-d" x="995.8" y="74" width="6.5" height="22"/>
+<rect class="cell-d" x="1003.1" y="74" width="6.5" height="22"/>
+<text x="78.4" y="112" class="xs" text-anchor="middle">页列 0</text>
+<text x="78.4" y="126" class="xs pe" text-anchor="middle">→ 物理页 41</text>
+<text x="203.2" y="112" class="xs" text-anchor="middle">页列 1</text>
+<text x="203.2" y="126" class="xs pe" text-anchor="middle">→ 物理页 7</text>
+<text x="328" y="112" class="xs" text-anchor="middle">页列 2</text>
+<text x="328" y="126" class="xs pe" text-anchor="middle">→ 物理页 93</text>
+<text x="452.8" y="112" class="xs" text-anchor="middle">页列 3</text>
+<text x="452.8" y="126" class="xs pe" text-anchor="middle">→ 物理页 12</text>
+<text x="577.6" y="112" class="xs" text-anchor="middle">页列 4</text>
+<text x="577.6" y="126" class="xs pe" text-anchor="middle">→ 物理页 58</text>
+<text x="702.4" y="112" class="xs" text-anchor="middle">页列 5</text>
+<text x="702.4" y="126" class="xs pe" text-anchor="middle">→ 物理页 3</text>
+<text x="827.2" y="112" class="xs" text-anchor="middle">页列 6</text>
+<text x="827.2" y="126" class="xs pe" text-anchor="middle">→ 物理页 77</text>
+<text x="952" y="112" class="xs" text-anchor="middle">页列 7</text>
+<text x="952" y="126" class="xs pe" text-anchor="middle">→ 物理页 25</text>
+<path d="M991.5 60 V72" fill="none" stroke="var(--plum-mark)" stroke-width="1.2" marker-end="url(#arv)"/>
+<text x="984.5" y="56" class="xs pl" text-anchor="end">块 125：行 1000–1002，只装了 3 行（最新块，强制入选）</text>
+<text x="20" y="170" class="s">candidate_block_table：每个候选一行（_candidate_table_kernel，每个 token 一个 program）</text>
+<text x="40" y="194" class="sub">槽 j</text>
+<text x="120" y="194" class="sub">块号 c</text>
+<text x="220" y="194" class="sub">页列 c // 16</text>
+<text x="330" y="194" class="sub">物理页</text>
+<text x="420" y="194" class="sub">c % 16</text>
+<text x="540" y="194" class="sub">tile = 页×16 + c%16</text>
+<rect x="24" y="201" width="640" height="22" fill="var(--surface-2)"/>
+<text x="40" y="216" class="pt">0</text>
+<text x="120" y="216" class="pt">3</text>
+<text x="220" y="216" class="pt">0</text>
+<text x="330" y="216" class="pt">41</text>
+<text x="420" y="216" class="pt">3</text>
+<text x="540" y="216" class="pt pl">659</text>
+<text x="40" y="240" class="pt">1</text>
+<text x="120" y="240" class="pt">18</text>
+<text x="220" y="240" class="pt">1</text>
+<text x="330" y="240" class="pt">7</text>
+<text x="420" y="240" class="pt">2</text>
+<text x="540" y="240" class="pt pl">114</text>
+<rect x="24" y="249" width="640" height="22" fill="var(--surface-2)"/>
+<text x="40" y="264" class="pt">2</text>
+<text x="120" y="264" class="pt">37</text>
+<text x="220" y="264" class="pt">2</text>
+<text x="330" y="264" class="pt">93</text>
+<text x="420" y="264" class="pt">5</text>
+<text x="540" y="264" class="pt pl">1493</text>
+<text x="40" y="288" class="pt">3</text>
+<text x="120" y="288" class="pt">40</text>
+<text x="220" y="288" class="pt">2</text>
+<text x="330" y="288" class="pt">93</text>
+<text x="420" y="288" class="pt">8</text>
+<text x="540" y="288" class="pt pl">1496</text>
+<rect x="24" y="297" width="640" height="22" fill="var(--surface-2)"/>
+<text x="40" y="312" class="pt">4</text>
+<text x="120" y="312" class="pt">66</text>
+<text x="220" y="312" class="pt">4</text>
+<text x="330" y="312" class="pt">58</text>
+<text x="420" y="312" class="pt">2</text>
+<text x="540" y="312" class="pt pl">930</text>
+<text x="40" y="336" class="pt">5</text>
+<text x="120" y="336" class="pt">90</text>
+<text x="220" y="336" class="pt">5</text>
+<text x="330" y="336" class="pt">3</text>
+<text x="420" y="336" class="pt">10</text>
+<text x="540" y="336" class="pt pl">58</text>
+<rect x="24" y="345" width="640" height="22" fill="var(--surface-2)"/>
+<text x="40" y="360" class="pt">6</text>
+<text x="120" y="360" class="pt">101</text>
+<text x="220" y="360" class="pt">6</text>
+<text x="330" y="360" class="pt">77</text>
+<text x="420" y="360" class="pt">5</text>
+<text x="540" y="360" class="pt pl">1237</text>
+<text x="40" y="384" class="pt">7</text>
+<text x="120" y="384" class="pt">125</text>
+<text x="220" y="384" class="pt">7</text>
+<text x="330" y="384" class="pt">25</text>
+<text x="420" y="384" class="pt">13</text>
+<text x="540" y="384" class="pt pl">413</text>
+<text x="720" y="170" class="s">得到的紧凑块表 table[t]</text>
+<rect x="720" y="200" width="56" height="24" rx="3" class="cell-v"/>
+<text x="748" y="216" class="pt" text-anchor="middle" style="fill:var(--surface)">659</text>
+<rect class="cell-p" x="786" y="202" width="20" height="20"/>
+<rect class="cell-p" x="808" y="202" width="20" height="20"/>
+<rect class="cell-p" x="830" y="202" width="20" height="20"/>
+<rect class="cell-p" x="852" y="202" width="20" height="20"/>
+<rect class="cell-p" x="874" y="202" width="20" height="20"/>
+<rect class="cell-p" x="896" y="202" width="20" height="20"/>
+<rect class="cell-p" x="918" y="202" width="20" height="20"/>
+<rect class="cell-p" x="940" y="202" width="20" height="20"/>
+<text x="970" y="216" class="xs">列 0–7</text>
+<rect x="720" y="230" width="56" height="24" rx="3" class="cell-v"/>
+<text x="748" y="246" class="pt" text-anchor="middle" style="fill:var(--surface)">114</text>
+<rect class="cell-p" x="786" y="232" width="20" height="20"/>
+<rect class="cell-p" x="808" y="232" width="20" height="20"/>
+<rect class="cell-p" x="830" y="232" width="20" height="20"/>
+<rect class="cell-p" x="852" y="232" width="20" height="20"/>
+<rect class="cell-p" x="874" y="232" width="20" height="20"/>
+<rect class="cell-p" x="896" y="232" width="20" height="20"/>
+<rect class="cell-p" x="918" y="232" width="20" height="20"/>
+<rect class="cell-p" x="940" y="232" width="20" height="20"/>
+<text x="970" y="246" class="xs">列 8–15</text>
+<rect x="720" y="260" width="56" height="24" rx="3" class="cell-v"/>
+<text x="748" y="276" class="pt" text-anchor="middle" style="fill:var(--surface)">1493</text>
+<rect class="cell-p" x="786" y="262" width="20" height="20"/>
+<rect class="cell-p" x="808" y="262" width="20" height="20"/>
+<rect class="cell-p" x="830" y="262" width="20" height="20"/>
+<rect class="cell-p" x="852" y="262" width="20" height="20"/>
+<rect class="cell-p" x="874" y="262" width="20" height="20"/>
+<rect class="cell-p" x="896" y="262" width="20" height="20"/>
+<rect class="cell-p" x="918" y="262" width="20" height="20"/>
+<rect class="cell-p" x="940" y="262" width="20" height="20"/>
+<text x="970" y="276" class="xs">列 16–23</text>
+<rect x="720" y="290" width="56" height="24" rx="3" class="cell-v"/>
+<text x="748" y="306" class="pt" text-anchor="middle" style="fill:var(--surface)">1496</text>
+<rect class="cell-p" x="786" y="292" width="20" height="20"/>
+<rect class="cell-p" x="808" y="292" width="20" height="20"/>
+<rect class="cell-p" x="830" y="292" width="20" height="20"/>
+<rect class="cell-p" x="852" y="292" width="20" height="20"/>
+<rect class="cell-p" x="874" y="292" width="20" height="20"/>
+<rect class="cell-p" x="896" y="292" width="20" height="20"/>
+<rect class="cell-p" x="918" y="292" width="20" height="20"/>
+<rect class="cell-p" x="940" y="292" width="20" height="20"/>
+<text x="970" y="306" class="xs">列 24–31</text>
+<rect x="720" y="320" width="56" height="24" rx="3" class="cell-v"/>
+<text x="748" y="336" class="pt" text-anchor="middle" style="fill:var(--surface)">930</text>
+<rect class="cell-p" x="786" y="322" width="20" height="20"/>
+<rect class="cell-p" x="808" y="322" width="20" height="20"/>
+<rect class="cell-p" x="830" y="322" width="20" height="20"/>
+<rect class="cell-p" x="852" y="322" width="20" height="20"/>
+<rect class="cell-p" x="874" y="322" width="20" height="20"/>
+<rect class="cell-p" x="896" y="322" width="20" height="20"/>
+<rect class="cell-p" x="918" y="322" width="20" height="20"/>
+<rect class="cell-p" x="940" y="322" width="20" height="20"/>
+<text x="970" y="336" class="xs">列 32–39</text>
+<rect x="720" y="350" width="56" height="24" rx="3" class="cell-v"/>
+<text x="748" y="366" class="pt" text-anchor="middle" style="fill:var(--surface)">58</text>
+<rect class="cell-p" x="786" y="352" width="20" height="20"/>
+<rect class="cell-p" x="808" y="352" width="20" height="20"/>
+<rect class="cell-p" x="830" y="352" width="20" height="20"/>
+<rect class="cell-p" x="852" y="352" width="20" height="20"/>
+<rect class="cell-p" x="874" y="352" width="20" height="20"/>
+<rect class="cell-p" x="896" y="352" width="20" height="20"/>
+<rect class="cell-p" x="918" y="352" width="20" height="20"/>
+<rect class="cell-p" x="940" y="352" width="20" height="20"/>
+<text x="970" y="366" class="xs">列 40–47</text>
+<rect x="720" y="380" width="56" height="24" rx="3" class="cell-v"/>
+<text x="748" y="396" class="pt" text-anchor="middle" style="fill:var(--surface)">1237</text>
+<rect class="cell-p" x="786" y="382" width="20" height="20"/>
+<rect class="cell-p" x="808" y="382" width="20" height="20"/>
+<rect class="cell-p" x="830" y="382" width="20" height="20"/>
+<rect class="cell-p" x="852" y="382" width="20" height="20"/>
+<rect class="cell-p" x="874" y="382" width="20" height="20"/>
+<rect class="cell-p" x="896" y="382" width="20" height="20"/>
+<rect class="cell-p" x="918" y="382" width="20" height="20"/>
+<rect class="cell-p" x="940" y="382" width="20" height="20"/>
+<text x="970" y="396" class="xs">列 48–55</text>
+<rect x="720" y="410" width="56" height="24" rx="3" class="cell-v"/>
+<text x="748" y="426" class="pt" text-anchor="middle" style="fill:var(--surface)">413</text>
+<rect class="cell-p" x="786" y="412" width="20" height="20"/>
+<rect class="cell-p" x="808" y="412" width="20" height="20"/>
+<rect class="cell-p" x="830" y="412" width="20" height="20"/>
+<rect class="cell-d" x="852" y="412" width="20" height="20"/>
+<rect class="cell-d" x="874" y="412" width="20" height="20"/>
+<rect class="cell-d" x="896" y="412" width="20" height="20"/>
+<rect class="cell-d" x="918" y="412" width="20" height="20"/>
+<rect class="cell-d" x="940" y="412" width="20" height="20"/>
+<text x="970" y="426" class="xs">列 56–63</text>
+<text x="720" y="456" class="xs">每槽 8 列 → 压缩宽度 8 × 8 = 64 列</text>
+<rect x="20" y="480" width="640" height="104" rx="7" fill="url(#gv)" stroke="var(--plum-mark)"/>
+<text x="36" y="504" class="n">可见长度 context[t]</text>
+<text x="36" y="526" class="pt">kept = 8，last = 125，last_span = min(max(1003 − 125×8, 0), 8) = 3</text>
+<text x="36" y="544" class="pt pl">context = (kept − 1) × 8 + last_span = 7 × 8 + 3 = 59 列</text>
+<text x="36" y="566" class="xs">成立的前提：候选升序、只有最新块可能不满且一定排最后——第 20 层把它的块分数置为 +inf。</text>
+<rect x="690" y="480" width="350" height="104" rx="7" fill="url(#gn)" stroke="var(--line)"/>
+<text x="706" y="504" class="n">padding 与 −1 槽位</text>
+<text x="706" y="526" class="pt">写成第 0 块而不是 −1：context 停在</text>
+<text x="706" y="542" class="pt">它们之前，打分器根本读不到；写 0 只是</text>
+<text x="706" y="558" class="pt">避免出现负地址。</text>
+</svg>
+    <figcaption>
+      示意里的块表 <code>[41, 7, 93, 12, 58, 3, 77, 25]</code> 和 8 个候选是编的，换算规则是真的；实际每行 2048 个候选，紧凑宽度 16,384 列。
+      结果是两个新张量 <code>table [T, 2048]</code> 与 <code>context [T]</code>，用 <code>CandidateBlocks</code> 打包（<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/model_ops/deepseek_v41/candidate_table.py#L145"><code>atom/model_ops/deepseek_v41/candidate_table.py:145</code></a>）。
+    </figcaption>
+  </figure>
+  <div class="callout">
+    <p class="eyebrow">为什么一个长度就够</p>
+    <p>
+      候选块按升序排列，除了最新的那一块都是满的 8 行，而最新块被第 20 层强制选中（块分数置 +inf），所以它一定排在最后。
+      于是紧凑宽度里的前 <code>context</code> 列恰好全是有效行，不需要逐列的掩码。万一最新块丢了，<code>last_span</code> 被夹到 8，最多读满一块，不会越界。
+    </p>
+  </div>
+</section>
+
+<section id="score">
+  <hr class="rule">
+  <p class="eyebrow">第 2 步 · 打分</p>
+  <h2>同一个公式，只是列数从 L 变成至多 16,384</h2>
+  <p>
+    <code>score_topk_quantized</code> 发现传进来的是 <code>candidates</code>，就把 <code>table</code> 当块表、<code>context</code> 当每行的上界、
+    <code>width = 2048 × 8</code>（<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/model_ops/deepseek_v41/paged_scoring.py#L102"><code>atom/model_ops/deepseek_v41/paged_scoring.py:102</code></a>）。之后与第 20 层完全一样：
+  </p>
+  <pre class="code">logit[t, c] = Σ_h  scaled₂₄[t, h] · ReLU( iq₂₄[t, h] · K₂₀[该列对应的行] ) · k_scale
+              c ∈ [0, context[t])                <span class="c"># 第 24 层的 query，第 20 层的 key</span>
+→ top_k_per_row_decode(k = 512, stable = True)  <span class="c"># 压缩宽度里的列号，升序，不足补 −1</span></pre>
+  <ul class="tight">
+    <li>FP8 index plane 的 tile 就是 8 行（后端把 <code>index_block_rows</code> 设成 <code>candidate_block_size</code>），所以候选块号可以直接当块表用；代码里有 assert 核对 <code>candidates.rows_per_block == tile</code>。</li>
+    <li>REINDEX 不产出候选：<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/model_ops/deepseek_v41/paged_scoring.py#L133"><code>atom/model_ops/deepseek_v41/paged_scoring.py:133</code></a> 断言 <code>candidate_count</code> 与 <code>candidates</code> 不能同时给。</li>
+    <li>FP4 index plane 下，REINDEX 不走「整请求 ragged」那条路（<code>_ragged</code> 只给没有候选来源的 FULL 层），每行照样用自己的候选表。</li>
+  </ul>
+</section>
+
+<section id="lift">
+  <hr class="rule">
+  <p class="eyebrow">第 3 步 · 换算</p>
+  <h2>压缩列号 → 候选槽 → 逻辑块 → token 位置，顺序不变</h2>
+  <figure>
+    <p class="fignum">图 4 · lift：把压缩宽度里的列号换回 token 位置（接图 3）</p>
+    <svg viewBox="0 0 1060 390" class="svg-min" role="img" aria-label="把压缩宽度里的列号换算回 token 位置">
+<text x="20" y="30" class="sub">接上图：在 59 个有效列上打分，取 top-k（这里示意 k = 6，实际 512）</text>
+<rect class="cell" x="40" y="56" width="14" height="22"/>
+<rect class="cell" x="55" y="56" width="14" height="22"/>
+<rect class="cell-v" x="70" y="56" width="14" height="22"/>
+<rect class="cell" x="85" y="56" width="14" height="22"/>
+<rect class="cell" x="100" y="56" width="14" height="22"/>
+<rect class="cell" x="115" y="56" width="14" height="22"/>
+<rect class="cell" x="130" y="56" width="14" height="22"/>
+<rect class="cell" x="145" y="56" width="14" height="22"/>
+<rect class="cell" x="166" y="56" width="14" height="22"/>
+<rect class="cell" x="181" y="56" width="14" height="22"/>
+<rect class="cell" x="196" y="56" width="14" height="22"/>
+<rect class="cell" x="211" y="56" width="14" height="22"/>
+<rect class="cell" x="226" y="56" width="14" height="22"/>
+<rect class="cell-v" x="241" y="56" width="14" height="22"/>
+<rect class="cell" x="256" y="56" width="14" height="22"/>
+<rect class="cell" x="271" y="56" width="14" height="22"/>
+<rect class="cell" x="292" y="56" width="14" height="22"/>
+<rect class="cell" x="307" y="56" width="14" height="22"/>
+<rect class="cell" x="322" y="56" width="14" height="22"/>
+<rect class="cell" x="337" y="56" width="14" height="22"/>
+<rect class="cell" x="352" y="56" width="14" height="22"/>
+<rect class="cell" x="367" y="56" width="14" height="22"/>
+<rect class="cell" x="382" y="56" width="14" height="22"/>
+<rect class="cell" x="397" y="56" width="14" height="22"/>
+<rect class="cell" x="418" y="56" width="14" height="22"/>
+<rect class="cell" x="433" y="56" width="14" height="22"/>
+<rect class="cell" x="448" y="56" width="14" height="22"/>
+<rect class="cell" x="463" y="56" width="14" height="22"/>
+<rect class="cell" x="478" y="56" width="14" height="22"/>
+<rect class="cell-v" x="493" y="56" width="14" height="22"/>
+<rect class="cell-v" x="508" y="56" width="14" height="22"/>
+<rect class="cell" x="523" y="56" width="14" height="22"/>
+<rect class="cell" x="544" y="56" width="14" height="22"/>
+<rect class="cell" x="559" y="56" width="14" height="22"/>
+<rect class="cell" x="574" y="56" width="14" height="22"/>
+<rect class="cell" x="589" y="56" width="14" height="22"/>
+<rect class="cell" x="604" y="56" width="14" height="22"/>
+<rect class="cell" x="619" y="56" width="14" height="22"/>
+<rect class="cell" x="634" y="56" width="14" height="22"/>
+<rect class="cell" x="649" y="56" width="14" height="22"/>
+<rect class="cell" x="670" y="56" width="14" height="22"/>
+<rect class="cell" x="685" y="56" width="14" height="22"/>
+<rect class="cell" x="700" y="56" width="14" height="22"/>
+<rect class="cell" x="715" y="56" width="14" height="22"/>
+<rect class="cell" x="730" y="56" width="14" height="22"/>
+<rect class="cell-v" x="745" y="56" width="14" height="22"/>
+<rect class="cell" x="760" y="56" width="14" height="22"/>
+<rect class="cell" x="775" y="56" width="14" height="22"/>
+<rect class="cell" x="796" y="56" width="14" height="22"/>
+<rect class="cell" x="811" y="56" width="14" height="22"/>
+<rect class="cell" x="826" y="56" width="14" height="22"/>
+<rect class="cell" x="841" y="56" width="14" height="22"/>
+<rect class="cell" x="856" y="56" width="14" height="22"/>
+<rect class="cell" x="871" y="56" width="14" height="22"/>
+<rect class="cell" x="886" y="56" width="14" height="22"/>
+<rect class="cell" x="901" y="56" width="14" height="22"/>
+<rect class="cell" x="922" y="56" width="14" height="22"/>
+<rect class="cell" x="937" y="56" width="14" height="22"/>
+<rect class="cell-v" x="952" y="56" width="14" height="22"/>
+<rect class="cell-d" x="967" y="56" width="14" height="22"/>
+<rect class="cell-d" x="982" y="56" width="14" height="22"/>
+<rect class="cell-d" x="997" y="56" width="14" height="22"/>
+<rect class="cell-d" x="1012" y="56" width="14" height="22"/>
+<rect class="cell-d" x="1027" y="56" width="14" height="22"/>
+<text x="100" y="96" class="xs" text-anchor="middle">槽 0</text>
+<text x="226" y="96" class="xs" text-anchor="middle">槽 1</text>
+<text x="352" y="96" class="xs" text-anchor="middle">槽 2</text>
+<text x="478" y="96" class="xs" text-anchor="middle">槽 3</text>
+<text x="604" y="96" class="xs" text-anchor="middle">槽 4</text>
+<text x="730" y="96" class="xs" text-anchor="middle">槽 5</text>
+<text x="856" y="96" class="xs" text-anchor="middle">槽 6</text>
+<text x="982" y="96" class="xs" text-anchor="middle">槽 7</text>
+<text x="1042" y="50" class="xs dm" text-anchor="end">列 59–63 超出 context</text>
+<text x="60" y="140" class="sub">压缩列 c</text>
+<text x="200" y="140" class="sub">槽 c // 8</text>
+<text x="330" y="140" class="sub">块内 c % 8</text>
+<text x="470" y="140" class="sub">候选块 b = cand[槽]</text>
+<text x="700" y="140" class="sub">token 位置 = b×8 + c%8</text>
+<rect x="44" y="149" width="900" height="22" fill="var(--surface-2)"/>
+<text x="60" y="164" class="pt">2</text>
+<text x="200" y="164" class="pt">0</text>
+<text x="330" y="164" class="pt">2</text>
+<text x="470" y="164" class="pt">3</text>
+<text x="700" y="164" class="pt mo">26</text>
+<text x="60" y="188" class="pt">13</text>
+<text x="200" y="188" class="pt">1</text>
+<text x="330" y="188" class="pt">5</text>
+<text x="470" y="188" class="pt">18</text>
+<text x="700" y="188" class="pt mo">149</text>
+<rect x="44" y="197" width="900" height="22" fill="var(--surface-2)"/>
+<text x="60" y="212" class="pt">29</text>
+<text x="200" y="212" class="pt">3</text>
+<text x="330" y="212" class="pt">5</text>
+<text x="470" y="212" class="pt">40</text>
+<text x="700" y="212" class="pt mo">325</text>
+<text x="60" y="236" class="pt">30</text>
+<text x="200" y="236" class="pt">3</text>
+<text x="330" y="236" class="pt">6</text>
+<text x="470" y="236" class="pt">40</text>
+<text x="700" y="236" class="pt mo">326</text>
+<rect x="44" y="245" width="900" height="22" fill="var(--surface-2)"/>
+<text x="60" y="260" class="pt">45</text>
+<text x="200" y="260" class="pt">5</text>
+<text x="330" y="260" class="pt">5</text>
+<text x="470" y="260" class="pt">90</text>
+<text x="700" y="260" class="pt mo">725</text>
+<text x="60" y="284" class="pt">58</text>
+<text x="200" y="284" class="pt">7</text>
+<text x="330" y="284" class="pt">2</text>
+<text x="470" y="284" class="pt">125</text>
+<text x="700" y="284" class="pt mo">1002</text>
+<text x="60" y="330" class="s">压缩列 2 &lt; 13 &lt; 29 &lt; 30 &lt; 45 &lt; 58，换算后 26 &lt; 149 &lt; 325 &lt; 326 &lt; 725 &lt; 1002：</text>
+<text x="60" y="348" class="s">候选块本身升序，所以换算不改变顺序，结果仍是 attention 累加 prefix 时要求的升序，不用重排。</text>
+<text x="60" y="366" class="s">_lift_kernel 原地改写 selected，−1 原样保留。</text>
+</svg>
+    <figcaption>
+      <a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/model_ops/deepseek_v41/candidate_table.py#L77"><code>atom/model_ops/deepseek_v41/candidate_table.py:77</code></a> 的 <code>_lift_kernel</code>：<code>block = candidates[t, c // 8]</code>，
+      <code>row = block × 8 + c % 8</code>，原地写回 <code>selected</code>。ratio 1 下压缩行号就是 token 位置。
+      换算结果写进 <code>step.selected[24]</code>（<code>_publish</code>，<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/models/deepseek_v41/attention.py#L217"><code>atom/models/deepseek_v41/attention.py:217</code></a>）。
+    </figcaption>
+  </figure>
+</section>
+
+<section id="example">
+  <hr class="rule">
+  <p class="eyebrow">例子</p>
+  <h2>decode 到第 100,000 个位置时，第 24 层怎么选</h2>
+  <div class="ex">
+    <p class="eyebrow">例子 · decode，t = 100,000</p>
+    <ol class="steps">
+      <li class="step"><strong>第 20 层</strong>：<code>visible = 100,001</code> 行，共 12,501 块。最后一块是第 12,500 块，里面只有第 100,000 行这一行，块分数置 +inf。
+        <code>candidates[20]</code> 是 2048 个升序块号，最后一个一定是 12,500。</li>
+      <li class="step"><strong>翻译</strong>：例如候选块 c = 37 → 页列 37 // 16 = 2 → 查块表得物理页 p → tile = p × 16 + 5。
+        <code>context = 2047 × 8 + min(100,001 − 12,500 × 8, 8) = 16,376 + 1 = 16,377</code>。</li>
+      <li class="step"><strong>打分</strong>：第 24 层的 32 头 query 对这 16,377 列打分，每列 8,192 FLOP，约 134 MFLOP，取 top-512。</li>
+      <li class="step"><strong>换算</strong>：例如压缩列 16,376 → 槽 16,376 // 8 = 2047、块内 0 → 块 12,500 → 行 12,500 × 8 = <strong>100,000</strong>，也就是当前 token 自己。</li>
+      <li class="step"><strong>第 28 层</strong>：直接复用第 2 步的表（<code>step.candidate_blocks[20]</code> 已经有了），只用自己的 query 再打一遍。</li>
+    </ol>
+  </div>
+</section>
+
+<section id="bound">
+  <hr class="rule">
+  <p class="eyebrow">边界与成本</p>
+  <h2>上下文不到 16,384 时它就是全量重打；超过之后成本封顶</h2>
+  <figure>
+    <p class="fignum">图 5 · 每个 query 行要打分的行数</p>
+    <svg viewBox="0 0 1060 330" class="svg-min" role="img" aria-label="打分宽度随上下文长度的变化：第 20 层线性，REINDEX 封顶 16384">
+<path d="M90 270.0 H1000" class="sv-grid"/>
+<text x="82" y="273" class="xs" text-anchor="end">0k</text>
+<text x="90" y="286" class="xs" text-anchor="middle">0k</text>
+<path d="M90 224.0 H1000" class="sv-grid"/>
+<text x="82" y="227" class="xs" text-anchor="end">20k</text>
+<text x="272" y="286" class="xs" text-anchor="middle">20k</text>
+<path d="M90 178.0 H1000" class="sv-grid"/>
+<text x="82" y="181" class="xs" text-anchor="end">40k</text>
+<text x="454" y="286" class="xs" text-anchor="middle">40k</text>
+<path d="M90 132.0 H1000" class="sv-grid"/>
+<text x="82" y="135" class="xs" text-anchor="end">60k</text>
+<text x="636" y="286" class="xs" text-anchor="middle">60k</text>
+<path d="M90 86.0 H1000" class="sv-grid"/>
+<text x="82" y="89" class="xs" text-anchor="end">80k</text>
+<text x="818" y="286" class="xs" text-anchor="middle">80k</text>
+<path d="M90 40.0 H1000" class="sv-grid"/>
+<text x="82" y="43" class="xs" text-anchor="end">100k</text>
+<text x="1000" y="286" class="xs" text-anchor="middle">100k</text>
+<path d="M90 270 H1000" class="sv-axis"/>
+<path d="M90 270 V40" class="sv-axis"/>
+<text x="1000" y="304" class="s" text-anchor="end">上下文长度 L（token）</text>
+<text x="90" y="26" class="s">每个 query 行要打分的行数</text>
+<path d="M90.0 270.0 L1000.0 40.0" stroke="var(--amber-mark)" stroke-width="2.4" fill="none"/>
+<text x="812" y="78" class="n am" text-anchor="end">第 20 层：L</text>
+<path d="M90.0 270.0 L1000.0 155.0" stroke="var(--petrol-mark)" stroke-width="2" stroke-dasharray="6 4" fill="none"/>
+<text x="963.6" y="149.6" class="n pe" text-anchor="end">第 2/8/14 层：L / 2</text>
+<path d="M90.0 270.0 L239.1 232.3 H1000.0" stroke="var(--plum-mark)" stroke-width="2.6" fill="none"/>
+<text x="981.8" y="224.317" class="n pl" text-anchor="end">REINDEX：min(L, 16,384)</text>
+<path d="M239.1 270.0 V232.3" stroke="var(--plum-mark)" stroke-dasharray="3 3"/>
+<text x="245.094" y="262" class="xs pl">L = 16,384：候选块数 = 2048，开始真正筛选</text>
+<text x="126.4" y="201" class="pt">L &lt; 16,384：全部块都是候选，</text>
+<text x="126.4" y="215" class="pt">REINDEX = 用自己的 query 全量重打</text>
+</svg>
+    <figcaption>
+      可见块数 ≤ 2048 时，第 20 层会把所有块都选为候选，REINDEX 实际上就是用自己的 query 把全部可见行打一遍；两级筛选只在上下文超过 16,384 个 token 后才真正起作用。
+      拓扑里还有一条保证：<code>2048 × 8 ≥ 512</code>，候选一定装得下一整个 top-k（<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/models/deepseek_v41/config.py#L102"><code>atom/models/deepseek_v41/config.py:102</code></a>）。
+    </figcaption>
+  </figure>
+  <div class="grid3">
+    <div class="card moss"><p class="eyebrow">成本</p><h3>常数</h3><p>每行最多 16,384 列 × 8,192 FLOP ≈ 134 MFLOP，加上 <code>wq_b</code> 与 <code>weights_proj</code> 约 11 MFLOP（四卡合计，估算），与上下文长度无关。</p></div>
+    <div class="card"><p class="eyebrow">对比</p><h3>第 20 层线性增长</h3><p>同样在 t = 100,000，第 20 层要打 100,001 列，约 819 MFLOP；四个 REINDEX 层加起来约 537 MFLOP。</p></div>
+    <div class="card key"><p class="eyebrow">换来的</p><h3>decoder 不同深度看不同的历史</h3><p>同一份 <code>main_20</code>，被选了 5 次：第 20 层一次全量，第 24/28/32/36 层各一次候选内重选，每次用的 query 更深一层。</p></div>
+  </div>
+</section>
+
+<section id="read">
+  <hr class="rule">
+  <p class="eyebrow">读码路线</p>
+  <h2>从 _bounds 到 lift</h2>
+  <ol class="steps">
+    <li class="step"><a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/models/deepseek_v41/config.py#L137"><code>atom/models/deepseek_v41/config.py:137</code></a>：REINDEX 的判定；<code>candidate_owner</code> 在同一个循环里填。</li>
+    <li class="step"><a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/models/deepseek_v41/attention.py#L122"><code>atom/models/deepseek_v41/attention.py:122</code></a> <code>Indexer.score</code> → <a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/models/deepseek_v41/attention.py#L204"><code>atom/models/deepseek_v41/attention.py:204</code></a> <code>_bounds</code>：<code>candidates</code> 与 <code>candidate_count</code> 二选一。</li>
+    <li class="step"><a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/model_ops/attentions/deepseek_v41/cache.py#L674"><code>atom/model_ops/attentions/deepseek_v41/cache.py:674</code></a> <code>candidate_blocks</code> → <a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/model_ops/deepseek_v41/candidate_table.py#L160"><code>atom/model_ops/deepseek_v41/candidate_table.py:160</code></a> <code>bind_candidates</code> → <a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/model_ops/deepseek_v41/candidate_table.py#L111"><code>atom/model_ops/deepseek_v41/candidate_table.py:111</code></a> <code>candidate_block_table</code>。</li>
+    <li class="step"><a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/model_ops/deepseek_v41/paged_scoring.py#L102"><code>atom/model_ops/deepseek_v41/paged_scoring.py:102</code></a> <code>score_topk_quantized</code>：候选分支设 <code>table / bound / width</code>，第 182 行调 lift。</li>
+    <li class="step"><a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/model_ops/deepseek_v41/candidate_table.py#L172"><code>atom/model_ops/deepseek_v41/candidate_table.py:172</code></a> <code>lift_candidate_selection</code>；两个 kernel 各有一个纯 torch 的 <code>*_reference</code> 版本，逐 token 循环写，读起来最直白。</li>
+  </ol>
+  <div class="callout">
+    <p class="eyebrow">读码坑</p>
+    <p>
+      候选块号、index tile、PAGE 内的块编号是三套东西，只有在「candidate_block_size == index tile 行数」时才能互相当块表用；
+      这个相等是后端显式声明的（<code>index_block_rows = candidate_block_size</code>，<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/model_ops/attentions/deepseek_v41/backend.py#L164"><code>atom/model_ops/attentions/deepseek_v41/backend.py:164</code></a>），不是推出来的，改 V4.1 的候选块大小必须同时改 index plane 的分块。
+    </p>
+  </div>
+</section>
+<nav class="pager" aria-label="翻页"><a class="prev" href="reuse.html"><span>← 上一章</span>8 · Reuse 层</a><a class="next" href="replay.html"><span>下一章 →</span>10 · 缓存与 Bounded Replay</a></nav>
+<footer>
+  <p>
+    源码 <a href="https://github.com/ROCm/ATOM/tree/99ebf633ac7a327c54282c3b244ea8519f3eef29">ROCm/ATOM@99ebf633a</a>（2026-11-01）·
+    文中 <code>文件:行号</code> 均指这一提交 ·
+    模型配置取自 <code>tests/models/deepseek_v41/fixtures/config.json</code>（钉在 <code>deepseek-ai/DeepSeek-V4.1-Flash@dba1be0</code>）·
+    mHC 与 CSA 的出处是 DeepSeek-V4 论文 §2.2、§2.3 ·
+    仓库 <a href="https://github.com/PerryZhang01/LLM">PerryZhang01/LLM</a>
+  </p>
+</footer>
+</div>
+</body>
+</html>

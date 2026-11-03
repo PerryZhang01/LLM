@@ -1,0 +1,761 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DeepSeek-V4.1-Flash 结构解剖 · Reuse 层</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
+<style>
+:root{
+  --bg:#E8EBEA; --surface:#F6F8F7; --surface-2:#DDE3E2; --sunk:#D3DAD9;
+  --ink:#141A1C; --ink-2:#4B5A5C; --ink-3:#75858880;
+  --line:#C3CDCC; --line-soft:#D4DCDB;
+  --amber:#8A5D0C; --amber-mark:#C79433; --amber-bg:#EFE2C2;
+  --petrol:#1D5A74; --petrol-mark:#3D87A6; --petrol-bg:#D3E3EA;
+  --brick:#8E3629; --brick-bg:#F0DAD5;
+  --moss:#3F6034; --moss-mark:#6E9A5C; --moss-bg:#DDE8D6;
+  --mute-mark:#9FADAF;
+  --c1:#1F7AB0; --c2:#B5700F;
+  --shadow:0 1px 2px rgba(20,26,28,.06), 0 8px 24px -14px rgba(20,26,28,.24);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0D1315; --surface:#141C1E; --surface-2:#1C2629; --sunk:#101819;
+    --ink:#E3EAE9; --ink-2:#94A4A6; --ink-3:#6E7E8080;
+    --line:#283437; --line-soft:#1F2B2E;
+    --amber:#E0AB53; --amber-mark:#D69B36; --amber-bg:#3B2E13;
+    --petrol:#6FB6D5; --petrol-mark:#4C93B4; --petrol-bg:#12303D;
+    --brick:#E58472; --brick-bg:#3A1D18;
+    --moss:#A8CE96; --moss-mark:#7FAE6B; --moss-bg:#22301B;
+    --mute-mark:#3C4A4D;
+    --c1:#3A90C8; --c2:#BF7E22;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 30px -18px rgba(0,0,0,.8);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0D1315; --surface:#141C1E; --surface-2:#1C2629; --sunk:#101819;
+  --ink:#E3EAE9; --ink-2:#94A4A6; --ink-3:#6E7E8080;
+  --line:#283437; --line-soft:#1F2B2E;
+  --amber:#E0AB53; --amber-mark:#D69B36; --amber-bg:#3B2E13;
+  --petrol:#6FB6D5; --petrol-mark:#4C93B4; --petrol-bg:#12303D;
+  --brick:#E58472; --brick-bg:#3A1D18;
+  --moss:#A8CE96; --moss-mark:#7FAE6B; --moss-bg:#22301B;
+  --mute-mark:#3C4A4D;
+  --c1:#3A90C8; --c2:#BF7E22;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 30px -18px rgba(0,0,0,.8);
+}
+*{box-sizing:border-box}
+body{margin:0; background:var(--bg); color:var(--ink);
+  font-family:"Source Serif 4", "Songti SC", "Noto Serif CJK SC", "Source Han Serif SC", Georgia, serif;
+  font-size:16.5px; line-height:1.72; -webkit-font-smoothing:antialiased}
+.wrap{max-width:1140px; margin:0 auto; padding:0 28px 96px}
+h1,h2,h3,.eyebrow,.stat-n,.lgd,.tag,th,.chapnav,.pager{font-family:Archivo, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif}
+h1{font-size:clamp(2.2rem,5.2vw,3.6rem); line-height:1.04; letter-spacing:-.028em; font-weight:700; margin:0; text-wrap:balance}
+h2{font-size:clamp(1.3rem,2.5vw,1.68rem); line-height:1.22; letter-spacing:-.014em; font-weight:600; margin:0 0 .3em; text-wrap:balance}
+h3{font-size:1.0rem; letter-spacing:.005em; font-weight:600; margin:0 0 .35em}
+p{margin:0 0 1em; max-width:72ch}
+a{color:var(--petrol)}
+code,.mono{font-family:"IBM Plex Mono", ui-monospace, monospace; font-size:.855em; font-variant-ligatures:none}
+:not(pre) > code{background:var(--surface-2); padding:.1em .38em; border-radius:3px; color:var(--ink); overflow-wrap:anywhere}
+.eyebrow{font-size:.66rem; font-weight:600; letter-spacing:.16em; text-transform:uppercase; color:var(--ink-2); margin:0 0 .55em}
+.lede{font-size:1.1rem; color:var(--ink-2); max-width:70ch}
+.note{font-size:.9rem; color:var(--ink-2)}
+header.mast{border-bottom:1px solid var(--line); margin-bottom:52px; padding:24px 0 34px}
+.mast-id{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:22px}
+.tag{font-size:.68rem; font-weight:600; letter-spacing:.09em; text-transform:uppercase; padding:.32em .7em; border:1px solid var(--line); border-radius:2px; color:var(--ink-2); background:var(--surface)}
+.tag.hot{border-color:var(--amber); color:var(--amber); background:var(--amber-bg)}
+.mast p.lede{margin-top:18px}
+.stats{display:grid; grid-template-columns:repeat(auto-fit,minmax(128px,1fr)); gap:1px; background:var(--line-soft); border:1px solid var(--line-soft); margin-top:34px}
+.stat{background:var(--surface); padding:14px 16px 16px}
+.stat-n{display:block; font-size:1.45rem; font-weight:700; letter-spacing:-.02em; font-variant-numeric:tabular-nums; line-height:1.15}
+.stat-l{display:block; font-size:.74rem; color:var(--ink-2); letter-spacing:.02em; margin-top:3px; font-family:"IBM Plex Mono", monospace}
+section{margin:0 0 68px; scroll-margin-top:20px}
+.rule{border:0; border-top:1px solid var(--line); margin:0 0 34px}
+figure{margin:26px 0 0; background:var(--surface); border:1px solid var(--line); padding:24px 22px 16px; box-shadow:var(--shadow); overflow-x:auto}
+figure svg{max-width:100%; height:auto; display:block; margin:0 auto; color:var(--ink-2); font-family:"IBM Plex Mono", ui-monospace, monospace; font-size:10.5px}
+figure svg text{fill:var(--ink)}
+figure .fignum{font-family:Archivo,sans-serif; font-size:.66rem; font-weight:600; letter-spacing:.16em; text-transform:uppercase; color:var(--ink-2); margin:0 0 14px}
+figcaption{font-size:.86rem; color:var(--ink-2); margin-top:16px; padding-top:12px; border-top:1px solid var(--line-soft); max-width:80ch}
+figcaption strong{color:var(--ink)}
+.svg-min{min-width:760px}
+figure svg.chart{max-width:760px}
+.tscroll{overflow-x:auto; margin-top:22px; border:1px solid var(--line); background:var(--surface); box-shadow:var(--shadow)}
+table{border-collapse:collapse; width:100%; min-width:640px; font-size:.9rem}
+th{text-align:left; font-size:.68rem; letter-spacing:.11em; text-transform:uppercase; font-weight:600; color:var(--ink-2); padding:11px 16px; background:var(--surface-2); border-bottom:1px solid var(--line); white-space:nowrap}
+td{padding:10px 16px; border-bottom:1px solid var(--line-soft); vertical-align:top; line-height:1.55}
+tbody tr:last-child td{border-bottom:0}
+td.num{font-family:"IBM Plex Mono",monospace; font-variant-numeric:tabular-nums; white-space:nowrap}
+td.k{font-family:"IBM Plex Mono",monospace; font-size:.8rem}
+.hl{color:var(--amber); font-weight:600}
+.dim{color:var(--ink-2)}
+.pos{color:var(--moss); font-weight:600}
+.neg{color:var(--brick); font-weight:600}
+.grid2{display:grid; grid-template-columns:repeat(auto-fit,minmax(310px,1fr)); gap:18px; margin-top:24px}
+.grid3{display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:16px; margin-top:24px}
+.card{background:var(--surface); border:1px solid var(--line); padding:18px 20px 16px; box-shadow:var(--shadow)}
+.card h3{color:var(--ink)}
+.card p:last-child{margin-bottom:0}
+.card.warn{border-left:3px solid var(--brick)}
+.card.good{border-left:3px solid var(--petrol)}
+.card.key{border-left:3px solid var(--amber-mark)}
+.card.moss{border-left:3px solid var(--moss-mark)}
+.card .eyebrow{margin-bottom:.4em}
+a.card{display:block; text-decoration:none; color:inherit; transition:transform .12s ease, border-color .12s ease}
+a.card:hover{transform:translateY(-2px); border-color:var(--amber-mark)}
+a.card .go{font-family:"IBM Plex Mono",monospace; font-size:.76rem; color:var(--amber); font-weight:600}
+ul.tight,ol.tight{margin:0; padding-left:1.25em}
+ul.tight li,ol.tight li{margin-bottom:.42em}
+ul.tight li:last-child,ol.tight li:last-child{margin-bottom:0}
+.pathline{font-family:"IBM Plex Mono",monospace; font-size:.76rem; color:var(--ink-2); background:var(--sunk); padding:5px 9px; display:inline-block; margin-top:10px; border-radius:2px; word-break:break-all}
+.callout{background:var(--amber-bg); border:1px solid var(--amber-mark); padding:16px 20px; margin-top:24px}
+.callout .eyebrow{color:var(--amber)}
+.callout p:last-child{margin-bottom:0}
+.callout.p{background:var(--petrol-bg); border-color:var(--petrol-mark)}
+.callout.p .eyebrow{color:var(--petrol)}
+pre.code{background:var(--sunk); border:1px solid var(--line-soft); padding:14px 16px; overflow-x:auto; font-family:"IBM Plex Mono",monospace; font-size:.78rem; line-height:1.6; margin:20px 0 0; color:var(--ink)}
+pre.code .c{color:var(--ink-2)}
+pre.code .h{color:var(--amber); font-weight:600}
+footer{border-top:1px solid var(--line); padding-top:22px; color:var(--ink-2); font-size:.85rem}
+.backnav{padding:22px 0 0; font-family:Archivo,"PingFang SC",system-ui,sans-serif; font-size:.8rem}
+.backnav a{color:var(--ink-2); text-decoration:none}
+.backnav a:hover{color:var(--amber)}
+.chapnav{display:flex; flex-wrap:wrap; gap:6px; margin:14px 0 0; font-size:.74rem}
+.chapnav a{padding:.36em .8em; border:1px solid var(--line); background:var(--surface); color:var(--ink-2); text-decoration:none; border-radius:2px; white-space:nowrap}
+.chapnav a:hover{border-color:var(--amber-mark); color:var(--ink)}
+.chapnav a.on{border-color:var(--amber); color:var(--amber); background:var(--amber-bg); font-weight:600}
+.pager{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin:12px 0 40px}
+.pager a{display:block; text-decoration:none; color:var(--ink); background:var(--surface); border:1px solid var(--line); padding:14px 18px; box-shadow:var(--shadow)}
+.pager a:hover{border-color:var(--amber-mark)}
+.pager a span{display:block; font-size:.66rem; letter-spacing:.14em; text-transform:uppercase; color:var(--ink-2)}
+.pager a.next{text-align:right; grid-column:2}
+/* svg 语义类 */
+.sv-band{fill:var(--surface-2)}
+.sv-box{fill:var(--surface); stroke:var(--line); stroke-width:1.2}
+.sv-a{fill:var(--amber-bg); stroke:var(--amber-mark); stroke-width:1.3}
+.sv-p{fill:var(--petrol-bg); stroke:var(--petrol-mark); stroke-width:1.3}
+.sv-m{fill:var(--moss-bg); stroke:var(--moss-mark); stroke-width:1.3}
+.sv-r{fill:var(--brick-bg); stroke:var(--brick); stroke-width:1.3}
+.sv-sunk{fill:var(--sunk); stroke:var(--line); stroke-width:1}
+.sv-dash{fill:none; stroke:var(--ink-2); stroke-width:1.1; stroke-dasharray:5 4}
+.sv-hatch{fill:url(#hatch); stroke:var(--line); stroke-width:1}
+.sv-ln{stroke:var(--ink-2); stroke-width:1.3; fill:none}
+.sv-ln-d{stroke:var(--ink-2); stroke-width:1.2; fill:none; stroke-dasharray:4 3}
+.sv-ln-a{stroke:var(--amber-mark); stroke-width:1.6; fill:none}
+.sv-ln-p{stroke:var(--petrol-mark); stroke-width:1.6; fill:none}
+.sv-grid{stroke:var(--line-soft); stroke-width:1}
+.sv-axis{stroke:var(--ink-2); stroke-width:1}
+figure svg text.n{font-size:11.5px; font-weight:600}
+figure svg text.s{fill:var(--ink-2); font-size:9.5px}
+figure svg text.xs{fill:var(--ink-2); font-size:9px}
+figure svg text.h{font-family:Archivo,"PingFang SC",system-ui,sans-serif; font-size:12px; font-weight:600}
+figure svg text.am{fill:var(--amber)}
+figure svg text.pe{fill:var(--petrol)}
+.mk{fill:var(--ink-2)} .mka{fill:var(--amber-mark)} .mkp{fill:var(--petrol-mark)}
+.hatch-l{stroke:var(--line); stroke-width:2}
+.c1l{stroke:var(--c1); stroke-width:2; fill:none} .c2l{stroke:var(--c2); stroke-width:2; fill:none}
+.c1d{fill:var(--c1); stroke:var(--surface); stroke-width:2} .c2d{fill:var(--c2); stroke:var(--surface); stroke-width:2}
+.hit{fill:transparent; cursor:default}
+.hit:hover + .c1d, .hit:hover + .c2d{stroke:var(--ink)}
+@media (max-width:640px){ .wrap{padding:0 16px 64px} .pager{grid-template-columns:1fr} .pager a.next{grid-column:1} }
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+:focus-visible{outline:2px solid var(--petrol); outline-offset:2px}
+/* ===== V4.1 章节扩展：配色 ===== */
+:root{
+  --plum:#5E3C78; --plum-mark:#9A72B8; --plum-bg:#E9E0F0;
+  --s0:#C79433; --s1:#3D87A6; --s2:#6E9A5C; --s3:#B0584A;
+  --enc:#D3E3EA; --dec:#EFE2C2;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --plum:#CDAEE6; --plum-mark:#9C78BA; --plum-bg:#2A1F35;
+    --s0:#D69B36; --s1:#4C93B4; --s2:#7FAE6B; --s3:#D17562;
+    --enc:#12303D; --dec:#3B2E13;
+  }
+}
+:root[data-theme="dark"]{
+  --plum:#CDAEE6; --plum-mark:#9C78BA; --plum-bg:#2A1F35;
+  --s0:#D69B36; --s1:#4C93B4; --s2:#7FAE6B; --s3:#D17562;
+  --enc:#12303D; --dec:#3B2E13;
+}
+/* ===== 页面小件 ===== */
+.toc{display:flex; flex-wrap:wrap; gap:6px 14px; margin:18px 0 0; font-family:Archivo,"PingFang SC",system-ui,sans-serif; font-size:.78rem}
+.toc a{color:var(--ink-2); text-decoration:none; border-bottom:1px dotted var(--line)}
+.toc a:hover{color:var(--amber)}
+.kv{display:grid; grid-template-columns:max-content 1fr; gap:4px 16px; font-size:.9rem; margin:10px 0 0}
+.kv dt{font-family:"IBM Plex Mono",monospace; font-size:.8rem; color:var(--ink-2)}
+.kv dd{margin:0}
+.step{counter-increment:st; position:relative; padding-left:2.1em; margin:0 0 .8em}
+.step::before{content:counter(st); position:absolute; left:0; top:.1em; width:1.45em; height:1.45em; border-radius:50%;
+  background:var(--amber-bg); color:var(--amber); border:1px solid var(--amber-mark);
+  font:600 .72rem/1.45em Archivo,system-ui,sans-serif; text-align:center}
+.steps{counter-reset:st; margin:16px 0 0; padding:0; list-style:none}
+.ex{background:var(--surface); border:1px dashed var(--amber-mark); padding:16px 20px; margin-top:22px}
+.ex .eyebrow{color:var(--amber)}
+.ex p:last-child{margin-bottom:0}
+td.on{color:var(--moss); font-weight:600} td.off{color:var(--ink-3)}
+/* ===== SVG 图元：在 sv-* 之外新增 ===== */
+.sv-v{fill:var(--plum-bg); stroke:var(--plum-mark); stroke-width:1.3}
+.sv-ln-m{stroke:var(--moss-mark); stroke-width:1.6; fill:none}
+.sv-ln-r{stroke:var(--brick); stroke-width:1.6; fill:none}
+.sv-ln-v{stroke:var(--plum-mark); stroke-width:1.6; fill:none}
+.sv-flow{stroke:var(--ink-2); stroke-width:2.2; fill:none; stroke-linecap:round}
+.sv-enc{fill:var(--enc)} .sv-dec{fill:var(--dec)}
+/* 四路残差的四条泳道 */
+.ln0,.ln1,.ln2,.ln3{fill:none; stroke-width:3.2; stroke-linecap:round}
+.ln0{stroke:var(--s0)} .ln1{stroke:var(--s1)} .ln2{stroke:var(--s2)} .ln3{stroke:var(--s3)}
+.lf0{fill:var(--s0)} .lf1{fill:var(--s1)} .lf2{fill:var(--s2)} .lf3{fill:var(--s3)}
+/* 形状标签（贴在箭头上的 [T, 5120]） */
+.pill{fill:var(--surface); stroke:var(--line); stroke-width:1}
+.pill-a{fill:var(--amber-bg); stroke:var(--amber-mark); stroke-width:1}
+.pill-p{fill:var(--petrol-bg); stroke:var(--petrol-mark); stroke-width:1}
+.pill-m{fill:var(--moss-bg); stroke:var(--moss-mark); stroke-width:1}
+.pill-v{fill:var(--plum-bg); stroke:var(--plum-mark); stroke-width:1}
+figure svg text.pt{font-size:9.5px; fill:var(--ink-2)}
+figure svg text.t{font-family:Archivo,"PingFang SC",system-ui,sans-serif; font-size:13.5px; font-weight:700}
+figure svg text.sub{font-family:Archivo,"PingFang SC",system-ui,sans-serif; font-size:10px; font-weight:600; letter-spacing:.14em; fill:var(--ink-2)}
+figure svg text.big{font-family:Archivo,system-ui,sans-serif; font-size:20px; font-weight:700}
+figure svg text.sym{font-family:"Source Serif 4",Georgia,serif; font-size:15px; font-weight:600}
+figure svg text.pl{fill:var(--plum)} figure svg text.mo{fill:var(--moss)} figure svg text.br{fill:var(--brick)} figure svg text.dm{fill:var(--ink-2)}
+/* 运算节点（∑ σ ⊙ 之类） */
+.op{fill:var(--surface); stroke:var(--ink-2); stroke-width:1.3}
+.op-a{fill:var(--amber-bg); stroke:var(--amber-mark); stroke-width:1.4}
+.op-p{fill:var(--petrol-bg); stroke:var(--petrol-mark); stroke-width:1.4}
+/* 立体张量块：front / top / side 三个面，配色由外层 class 决定 */
+.slab .sf{stroke-width:1.2} .slab .st{stroke-width:1} .slab .ss{stroke-width:1}
+.slab.a .sf{fill:var(--amber-bg); stroke:var(--amber-mark)} .slab.a .st{fill:var(--surface); stroke:var(--amber-mark)} .slab.a .ss{fill:var(--amber-mark); fill-opacity:.38; stroke:var(--amber-mark)}
+.slab.p .sf{fill:var(--petrol-bg); stroke:var(--petrol-mark)} .slab.p .st{fill:var(--surface); stroke:var(--petrol-mark)} .slab.p .ss{fill:var(--petrol-mark); fill-opacity:.38; stroke:var(--petrol-mark)}
+.slab.m .sf{fill:var(--moss-bg); stroke:var(--moss-mark)} .slab.m .st{fill:var(--surface); stroke:var(--moss-mark)} .slab.m .ss{fill:var(--moss-mark); fill-opacity:.38; stroke:var(--moss-mark)}
+.slab.v .sf{fill:var(--plum-bg); stroke:var(--plum-mark)} .slab.v .st{fill:var(--surface); stroke:var(--plum-mark)} .slab.v .ss{fill:var(--plum-mark); fill-opacity:.38; stroke:var(--plum-mark)}
+.slab.r .sf{fill:var(--brick-bg); stroke:var(--brick)} .slab.r .st{fill:var(--surface); stroke:var(--brick)} .slab.r .ss{fill:var(--brick); fill-opacity:.32; stroke:var(--brick)}
+.slab.n .sf{fill:var(--surface-2); stroke:var(--ink-2)} .slab.n .st{fill:var(--surface); stroke:var(--ink-2)} .slab.n .ss{fill:var(--ink-2); fill-opacity:.25; stroke:var(--ink-2)}
+/* 网格单元：PAGE / tile / 候选块 / top-k 位图 */
+.cell{fill:var(--surface); stroke:var(--line); stroke-width:.8}
+.cell-a{fill:var(--amber-mark); fill-opacity:.85; stroke:var(--surface); stroke-width:.8}
+.cell-p{fill:var(--petrol-mark); fill-opacity:.85; stroke:var(--surface); stroke-width:.8}
+.cell-m{fill:var(--moss-mark); fill-opacity:.85; stroke:var(--surface); stroke-width:.8}
+.cell-v{fill:var(--plum-mark); fill-opacity:.85; stroke:var(--surface); stroke-width:.8}
+.cell-r{fill:var(--brick); fill-opacity:.75; stroke:var(--surface); stroke-width:.8}
+.cell-d{fill:var(--sunk); stroke:var(--line-soft); stroke-width:.8}
+
+</style>
+
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
+<marker id="ar" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path class="mk" d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z"/></marker>
+<marker id="ara" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path class="mka" d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z"/></marker>
+<marker id="arp" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path class="mkp" d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z"/></marker>
+<marker id="arm" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z" fill="var(--moss-mark)"/></marker>
+<marker id="arr" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z" fill="var(--brick)"/></marker>
+<marker id="arv" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="6.2" markerHeight="6.2" orient="auto-start-reverse"><path d="M0.6,1.4 L8.6,5 L0.6,8.6 L2.2,5 Z" fill="var(--plum-mark)"/></marker>
+<linearGradient id="gn" x1="0" y1="0" x2=".4" y2="1"><stop offset="0%" stop-color="var(--surface)"/><stop offset="100%" stop-color="var(--surface-2)"/></linearGradient>
+<linearGradient id="ga" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--amber-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+<linearGradient id="gp" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--petrol-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+<linearGradient id="gm" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--moss-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+<linearGradient id="gr" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--brick-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+<linearGradient id="gv" x1="0" y1="0" x2=".35" y2="1"><stop offset="0%" stop-color="var(--plum-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+<linearGradient id="genc" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="var(--petrol-bg)"/><stop offset="100%" stop-color="var(--surface)"/></linearGradient>
+<linearGradient id="gdec" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="var(--surface)"/><stop offset="100%" stop-color="var(--amber-bg)"/></linearGradient>
+<filter id="sh" x="-8%" y="-12%" width="116%" height="140%"><feDropShadow dx="0" dy="1.4" stdDeviation="2.2" flood-opacity=".14"/></filter>
+<pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line class="hatch-l" x1="0" y1="0" x2="0" y2="6"/></pattern>
+<pattern id="dots" width="8" height="8" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1" fill="var(--line)"/></pattern>
+</defs></svg>
+<div class="wrap">
+<nav class="backnav"><a href="../../../index.html">← LLM 模型与框架结构手册</a> · <a href="../v41_flash_anatomy.html">单页速览版</a></nav>
+<nav class="chapnav" aria-label="章节"><a href="index.html">1 · 总览</a><a href="residual.html">2 · 四路残差 mHC</a><a href="engram.html">3 · Engram</a><a href="csa2.html">4 · CSA2 注意力骨架</a><a href="window.html">5 · Window 层</a><a href="full.html">6 · Full 层</a><a href="layer20.html">7 · 第 20 层</a><a href="reuse.html" class="on">8 · Reuse 层</a><a href="reindex.html">9 · Reindex 层</a><a href="replay.html">10 · 缓存与 Bounded Replay</a></nav>
+<header class="mast">
+  <div class="mast-id">
+    <span class="tag">deepseek-ai/DeepSeek-V4.1-Flash</span>
+    <span class="tag">REUSE · 30 层</span>
+    <span class="tag hot">不压缩 · 不打分</span>
+    <span class="tag hot">下标组共用</span>
+  </div>
+  <h1>Reuse 层</h1>
+  <p class="lede">
+    40 层里有 30 层是 REUSE：它们没有 Compressor，也没有 Indexer，全局 KV 和 top-k 选择都借组首层的。
+    但它们仍然有<strong>自己的 query、自己的窗口 KV、自己的输出投影</strong>，所以同一组里的几层看到同一批全局行，算出来的东西却各不相同。
+    这一章讲 REUSE 层还剩哪些计算、下标组怎样一次生成给整组用，以及它和 FULL 层差了多少算力。
+  </p>
+  <div class="stats">
+    <div class="stat"><span class="stat-n">30</span><span class="stat-l">REUSE 层（encoder 15 + decoder 15）</span></div>
+    <div class="stat"><span class="stat-n">5 / 8</span><span class="stat-l">A–H 里自己跑的步数</span></div>
+    <div class="stat"><span class="stat-n">0</span><span class="stat-l">F 步启动的 kernel 数</span></div>
+    <div class="stat"><span class="stat-n">640</span><span class="stat-l">每 token 的 key 数（512 + 128）</span></div>
+    <div class="stat"><span class="stat-n">≈ 337</span><span class="stat-l">MFLOP / token / 层（估算）</span></div>
+    <div class="stat"><span class="stat-n">≈ 44%</span><span class="stat-l">相对 FULL 层（L=100k，估算）</span></div>
+  </div>
+  <nav class="toc" aria-label="本页目录">
+    <a href="#which">哪 30 层</a><a href="#path">自己算什么</a><a href="#group">下标组</a>
+    <a href="#encdec">encoder 与 decoder</a><a href="#example">例子：第 5 层</a><a href="#cost">算力对比</a><a href="#read">读码路线</a>
+  </nav>
+</header>
+
+<section id="which">
+  <p class="eyebrow">范围</p>
+  <h2>既不是 KV owner、也不是 index source 的层，全是 REUSE</h2>
+  <p>
+    <code>build_attention_topology</code> 给每一层定模式时只问两件事：这一层是不是 KV source（是就是 FULL），是不是 index source（是就是 REINDEX）；
+    ratio 非 0 且两样都不是，就是 REUSE（<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/models/deepseek_v41/config.py#L137"><code>atom/models/deepseek_v41/config.py:137</code></a>）。Flash 上一共 30 层：
+  </p>
+  <div class="tscroll"><table>
+    <thead><tr><th>段</th><th>REUSE 层</th><th>ratio</th><th>全局 KV</th><th>top-k 选择</th><th>下标组</th></tr></thead>
+    <tbody>
+      <tr><td>encoder</td><td class="num">3–7</td><td class="num">2</td><td><code>main_2</code></td><td>第 2 层</td><td class="num">[2, 8)</td></tr>
+      <tr><td>encoder</td><td class="num">9–13</td><td class="num">2</td><td><code>main_8</code></td><td>第 8 层</td><td class="num">[8, 14)</td></tr>
+      <tr><td>encoder</td><td class="num">15–19</td><td class="num">2</td><td><code>main_14</code></td><td>第 14 层</td><td class="num">[14, 20)</td></tr>
+      <tr><td>decoder</td><td class="num">21–23</td><td class="num">1</td><td><code>main_20</code></td><td>第 20 层</td><td class="num">[20, 24)</td></tr>
+      <tr><td>decoder</td><td class="num">25–27 · 29–31 · 33–35 · 37–39</td><td class="num">1</td><td><code>main_20</code></td><td>第 24 / 28 / 32 / 36 层</td><td class="num">[24,28) … [36,40)</td></tr>
+    </tbody>
+  </table></div>
+  <p style="margin-top:16px">
+    checkpoint 里 REUSE 层本来就没有 <code>compressor.*</code> 和 <code>indexer.*</code> 张量：schema 只给 FULL 层列 compressor 与 <code>indexer.wk</code>，
+    只给 FULL 和 REINDEX 列 <code>indexer.wq_b</code> / <code>weights_proj</code>（<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/models/deepseek_v41/weights.py#L166"><code>atom/models/deepseek_v41/weights.py:166</code></a>、<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/models/deepseek_v41/weights.py#L179"><code>atom/models/deepseek_v41/weights.py:179</code></a>）。
+    建模块时也一样：<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/models/deepseek_v41/attention.py#L290"><code>atom/models/deepseek_v41/attention.py:290</code></a> 起两行决定 <code>self.compressor</code> 与 <code>self.indexer</code> 是不是 <code>None</code>。
+  </p>
+</section>
+
+<section id="path">
+  <hr class="rule">
+  <p class="eyebrow">一层的路径</p>
+  <h2>A、B、C、G、H 自己跑；D、E 没有；F 只是取一份现成的下标</h2>
+  <p>
+    第 4 章把一层 CSA2 拆成 A–H 八步。REUSE 层走的是同一个 <code>Attention.forward</code>（<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/models/deepseek_v41/attention.py#L402"><code>atom/models/deepseek_v41/attention.py:402</code></a>），
+    只是其中两步碰到 <code>None</code> 就直接返回：<code>_compress_batch</code> 在 <code>self.compressor is None</code> 时返回（<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/models/deepseek_v41/attention.py#L310"><code>atom/models/deepseek_v41/attention.py:310</code></a>），
+    <code>_fork_select</code> 在 <code>self.indexer is None</code> 时什么都不做。
+  </p>
+  <figure>
+    <p class="fignum">图 1 · 一个 REUSE 层：自己的部分与借来的部分</p>
+    <svg viewBox="0 0 1060 470" class="svg-min" role="img" aria-label="一个 REUSE 层的执行路径：自己的 query 和窗口，借来的选择和全局 KV">
+<text x="20" y="30" class="sub">以第 5 层为例（组 [2,8)，owner = 2）</text>
+<g class="slab a"><path class="st" d="M20 69 l9 -9 h64 l-9 9 z"/><path class="ss" d="M84 69 l9 -9 v70 l-9 9 z"/><path class="sf" d="M20 69 h64 v70 h-64 z"/></g>
+<text x="56" y="160" class="n" text-anchor="middle">h</text>
+<text x="56" y="176" class="pt" text-anchor="middle">[T, 5120]</text>
+<text x="56" y="190" class="xs" text-anchor="middle">attn_norm 之后</text>
+<path d="M96 100 H126" fill="none" stroke="var(--ink-2)" stroke-width="1.4" marker-end="url(#ar)"/>
+<rect x="130" y="60" width="150" height="84" rx="7" fill="url(#gn)" stroke="var(--line)" filter="url(#sh)"/>
+<text x="205" y="82" class="n" text-anchor="middle">A · wqkv_a</text>
+<text x="205" y="100" class="pt" text-anchor="middle">5120 → 1280 + 512</text>
+<text x="205" y="116" class="pt" text-anchor="middle">DualRMSNorm</text>
+<text x="205" y="132" class="xs" text-anchor="middle">qr · kv_normed</text>
+<path d="M280 86 H326" fill="none" stroke="var(--ink-2)" stroke-width="1.4" marker-end="url(#ar)"/>
+<rect class="pill" x="272" y="63.5" width="62" height="17" rx="8.5"/><text x="303" y="75.3" class="pt" text-anchor="middle">[T,1280]</text>
+<rect x="330" y="50" width="176" height="70" rx="7" fill="url(#gn)" stroke="var(--line)" filter="url(#sh)"/>
+<text x="418" y="72" class="n" text-anchor="middle">B · wq_b</text>
+<text x="418" y="90" class="pt" text-anchor="middle">1280 → 64 × 512</text>
+<text x="418" y="108" class="pt" text-anchor="middle">q [T, 64, 512]</text>
+<path d="M280 122 C304 122 304 166 326 166" fill="none" stroke="var(--ink-2)" stroke-width="1.4" marker-end="url(#ar)"/>
+<rect class="pill" x="271" y="177.5" width="54" height="17" rx="8.5"/><text x="298" y="189.3" class="pt" text-anchor="middle">[T,512]</text>
+<rect x="330" y="136" width="176" height="74" rx="7" fill="url(#gn)" stroke="var(--line)" filter="url(#sh)"/>
+<text x="418" y="158" class="n" text-anchor="middle">C · rope_quant_window</text>
+<text x="418" y="176" class="pt" text-anchor="middle">末 64 维 RoPE @ t</text>
+<text x="418" y="194" class="pt" text-anchor="middle">KV → MXFP8 528 B</text>
+<g class="slab n"><path class="st" d="M354 266 l8 -8 h130 l-8 8 z"/><path class="ss" d="M484 266 l8 -8 v40 l-8 8 z"/><path class="sf" d="M354 266 h130 v40 h-130 z"/></g>
+<text x="423" y="286" class="pt" text-anchor="middle">第 5 层自己的 ring</text>
+<text x="423" y="322" class="xs" text-anchor="middle">STATE · 128 行 × 528 B</text>
+<path d="M418 210 V254" fill="none" stroke="var(--ink-2)" stroke-width="1.4" stroke-dasharray="4 3" marker-end="url(#ar)"/>
+<text x="426" y="236" class="xs">decode 时这里就写</text>
+<rect x="20" y="226" width="300" height="84" rx="7" fill="var(--sunk)" stroke="var(--line)" stroke-dasharray="5 4"/>
+<text x="170" y="250" class="n dm" text-anchor="middle">D · Compressor   ✕</text>
+<text x="170" y="266" class="pt" text-anchor="middle">没有模块，不写全局 KV</text>
+<text x="170" y="286" class="n dm" text-anchor="middle">E · Indexer   ✕</text>
+<text x="170" y="302" class="pt" text-anchor="middle">没有模块，不打分</text>
+<rect x="536" y="128" width="220" height="78" rx="7" fill="url(#gp)" stroke="var(--petrol-mark)" stroke-dasharray="5 4"/>
+<text x="646" y="150" class="n pe" text-anchor="middle">F · 下标（借来的）</text>
+<text x="646" y="168" class="pt" text-anchor="middle">step.group_indices[2] 已有</text>
+<text x="646" y="184" class="pt" text-anchor="middle">selected[2] [T,512] + 窗口行</text>
+<text x="646" y="200" class="xs pe" text-anchor="middle">本层不启动任何 kernel</text>
+<text x="646" y="238" class="xs" text-anchor="middle">PAGE · 每页 64 行 × 528 B</text>
+<g class="slab p"><path class="st" d="M561 257 l9 -9 h170 l-9 9 z"/><path class="ss" d="M731 257 l9 -9 v52 l-9 9 z"/><path class="sf" d="M561 257 h170 v52 h-170 z"/></g>
+<text x="646" y="282" class="pt pe" text-anchor="middle">main_2（借来的）</text>
+<rect x="784" y="120" width="252" height="120" rx="7" fill="url(#gp)" stroke="var(--petrol-mark)" filter="url(#sh)"/>
+<text x="910" y="144" class="n" text-anchor="middle">G · 稀疏注意力</text>
+<text x="798" y="166" class="pt">源 1：main_2 的 ≤512 行</text>
+<text x="798" y="184" class="pt">源 2：本层 ring 的 ≤128 行</text>
+<text x="798" y="202" class="pt">+ attn_sink，同一个 softmax</text>
+<text x="798" y="222" class="pt pe">out [T, 64, 512]</text>
+<path d="M506 84 C650 84 740 96 800 118" fill="none" stroke="var(--ink-2)" stroke-width="1.4" marker-end="url(#ar)"/>
+<rect class="pill" x="608" y="67.5" width="84" height="17" rx="8.5"/><text x="650" y="79.3" class="pt" text-anchor="middle">q [T,64,512]</text>
+<path d="M756 168 H780" fill="none" stroke="var(--petrol-mark)" stroke-width="1.6" stroke-dasharray="4 3" marker-end="url(#arp)"/>
+<path d="M740 274 C760 274 766 238 784 232" fill="none" stroke="var(--petrol-mark)" stroke-width="1.6" stroke-dasharray="4 3" marker-end="url(#arp)"/>
+<path d="M492 290 C 560 380 780 380 820 244" fill="none" stroke="var(--ink-2)" stroke-width="1.4" marker-end="url(#ar)"/>
+<text x="640" y="372" class="xs" text-anchor="middle">ring 的 ≤128 行</text>
+<path d="M910 240 V276" fill="none" stroke="var(--ink-2)" stroke-width="1.4" marker-end="url(#ar)"/>
+<rect x="784" y="280" width="252" height="86" rx="7" fill="url(#gn)" stroke="var(--line)" filter="url(#sh)"/>
+<text x="910" y="302" class="n" text-anchor="middle">H · 输出投影</text>
+<text x="910" y="320" class="pt" text-anchor="middle">inverse RoPE + MXFP8</text>
+<text x="910" y="336" class="pt" text-anchor="middle">wo_a 8×(4096→1024) → wo_b</text>
+<text x="910" y="354" class="xs" text-anchor="middle">→ [T, 5120]，TP all-reduce</text>
+<rect x="20" y="404" width="26" height="14" rx="3" fill="url(#gn)" stroke="var(--line)"/>
+<text x="54" y="415" class="s">自己算：A B C G H，用本层权重</text>
+<rect x="300" y="404" width="26" height="14" rx="3" fill="var(--petrol-bg)" stroke="var(--petrol-mark)" stroke-dasharray="4 3"/>
+<text x="334" y="415" class="s">借来的：选择和全局 KV，来自组首层（第 2 层）</text>
+<rect x="640" y="404" width="26" height="14" rx="3" fill="var(--sunk)" stroke="var(--line)" stroke-dasharray="4 3"/>
+<text x="674" y="415" class="s">没有：D、E</text>
+<text x="20" y="444" class="s">REUSE 层的 checkpoint 里本来就没有 compressor.* 和 indexer.* 权重（weights.py 按 mode 列 schema）。</text>
+</svg>
+    <figcaption>
+      实线框用的是本层权重；虚线蓝框是从组首层借来的。<strong>F 不启动任何 kernel</strong>：<code>cache.attention_indices</code>
+      先查 <code>step.group_indices[first]</code>，组首层早已把整组的下标写在这里，后面的层只是取出来（<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/model_ops/attentions/deepseek_v41/cache.py#L911"><code>atom/model_ops/attentions/deepseek_v41/cache.py:911</code></a>）。
+    </figcaption>
+  </figure>
+  <ol class="steps">
+    <li class="step"><strong>A</strong>：<code>wqkv_a</code> 一次 FP8 GEMM 出 <code>q_lora [T,1280]</code> 和 <code>kv [T,512]</code>，<code>DualRMSNormMXFP8</code> 一次 launch 出 <code>qr</code> 和 <code>kv_normed</code>。</li>
+    <li class="step"><strong>B</strong>：<code>wq_b(qr)</code> → <code>q [T, 64, 512]</code>，TP4 下每卡 16 头。</li>
+    <li class="step"><strong>C</strong>：<code>rope_quant_window</code> 转 q 与 kv 的最后 64 维，kv 量化成 528 B 的 MXFP8 行；decode 时直接写进本层 ring，prefill 时留到 attention 之后。</li>
+    <li class="step"><strong>F</strong>：拿组首层建好的下标。prefill 拿 <code>prefix[layer − first]</code>（专属本层的一份），decode 拿全组共用的 <code>prefix[0]</code> 和 <code>window_rows</code>。</li>
+    <li class="step"><strong>G</strong>：双源稀疏注意力，源 1 是 owner 池里被选中的 ≤512 行，源 2 是本层窗口的 ≤128 行，加 sink 一起 softmax。</li>
+    <li class="step"><strong>H</strong>：inverse RoPE + MXFP8 量化 → <code>wo_a</code> 8 组 × (4096 → 1024) → <code>wo_b</code> 8192 → 5120，TP all-reduce。</li>
+  </ol>
+</section>
+
+<section id="group">
+  <hr class="rule">
+  <p class="eyebrow">下标组</p>
+  <h2>组首层一次把整组的下标建好，因为组首层正是做选择的那一层</h2>
+  <p>
+    <code>_tag_index_groups</code> 把 <code>(ratio, kv_owner, topk_owner)</code> 都相同的连续层归成一组（<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/models/deepseek_v41/config.py#L155"><code>atom/models/deepseek_v41/config.py:155</code></a>）。
+    这样分组有一个好处：组里第一层就是 <code>topk_owner</code> 本身——它的 Indexer 刚刚写完 <code>step.selected[owner]</code>，
+    同一层的 F 步紧接着就能把整组的下标建出来。<code>attention_indices</code> 的文档原话是 “Later layers find theirs written and launch nothing.”
+  </p>
+  <figure>
+    <p class="fignum">图 2 · 组 [2, 8) 的下标：prefill 与 decode 两种建法</p>
+    <svg viewBox="0 0 1060 500" class="svg-min" role="img" aria-label="下标组一次生成：prefill 每层一份 prefix，decode 全组共用一份选择与窗口行">
+<text x="20" y="30" class="sub">下标组 [2, 8)：第 2 层建一次，第 3–7 层直接取</text>
+<rect x="20" y="50" width="190" height="92" rx="7" fill="url(#gp)" stroke="var(--petrol-mark)" filter="url(#sh)"/>
+<text x="115" y="72" class="n" text-anchor="middle">第 2 层 Indexer</text>
+<text x="115" y="90" class="pt" text-anchor="middle">打分 → top-512</text>
+<text x="115" y="108" class="pt pe" text-anchor="middle">selected[2]</text>
+<text x="115" y="124" class="xs" text-anchor="middle">[T, 512] int32，升序</text>
+<path d="M210 96 H250" fill="none" stroke="var(--petrol-mark)" stroke-width="1.6" marker-end="url(#arp)"/>
+<rect x="254" y="50" width="230" height="92" rx="7" fill="url(#ga)" stroke="var(--amber-mark)" filter="url(#sh)"/>
+<text x="369" y="72" class="n" text-anchor="middle">第 2 层的 F：_index_group</text>
+<text x="369" y="90" class="pt" text-anchor="middle">build_indices(layers=6,</text>
+<text x="369" y="106" class="pt" text-anchor="middle">stride = 相邻 ring 起点差)</text>
+<text x="369" y="126" class="xs am" text-anchor="middle">存进 step.group_indices[2]</text>
+<rect x="20" y="168" width="500" height="300" rx="7" fill="url(#gn)" stroke="var(--line)" filter="url(#sh)"/>
+<text x="36" y="192" class="sub">PREFILL · 每层一份 prefix</text>
+<text x="36" y="226" class="n">第 2 层</text>
+<rect x="100" y="212" width="190" height="20" rx="3" fill="var(--petrol-mark)" fill-opacity=".85"/>
+<text x="195" y="226" class="pt" text-anchor="middle" style="fill:var(--surface)">selected[2] → main_2 行</text>
+<rect x="294" y="212" width="110" height="20" rx="3" fill="var(--sunk)" stroke="var(--line)"/>
+<text x="349" y="226" class="pt" text-anchor="middle">ring_2 历史行</text>
+<text x="36" y="260" class="n">第 3 层</text>
+<rect x="100" y="246" width="190" height="20" rx="3" fill="var(--petrol-mark)" fill-opacity=".85"/>
+<text x="195" y="260" class="pt" text-anchor="middle" style="fill:var(--surface)">selected[2] → main_2 行</text>
+<rect x="294" y="246" width="110" height="20" rx="3" fill="var(--sunk)" stroke="var(--line)"/>
+<text x="349" y="260" class="pt" text-anchor="middle">ring_3 历史行</text>
+<text x="36" y="294" class="n">第 4 层</text>
+<rect x="100" y="280" width="190" height="20" rx="3" fill="var(--petrol-mark)" fill-opacity=".85"/>
+<text x="195" y="294" class="pt" text-anchor="middle" style="fill:var(--surface)">selected[2] → main_2 行</text>
+<rect x="294" y="280" width="110" height="20" rx="3" fill="var(--sunk)" stroke="var(--line)"/>
+<text x="349" y="294" class="pt" text-anchor="middle">ring_4 历史行</text>
+<text x="36" y="328" class="n">第 5 层</text>
+<rect x="100" y="314" width="190" height="20" rx="3" fill="var(--petrol-mark)" fill-opacity=".85"/>
+<text x="195" y="328" class="pt" text-anchor="middle" style="fill:var(--surface)">selected[2] → main_2 行</text>
+<rect x="294" y="314" width="110" height="20" rx="3" fill="var(--sunk)" stroke="var(--line)"/>
+<text x="349" y="328" class="pt" text-anchor="middle">ring_5 历史行</text>
+<text x="36" y="362" class="n">第 6 层</text>
+<rect x="100" y="348" width="190" height="20" rx="3" fill="var(--petrol-mark)" fill-opacity=".85"/>
+<text x="195" y="362" class="pt" text-anchor="middle" style="fill:var(--surface)">selected[2] → main_2 行</text>
+<rect x="294" y="348" width="110" height="20" rx="3" fill="var(--sunk)" stroke="var(--line)"/>
+<text x="349" y="362" class="pt" text-anchor="middle">ring_6 历史行</text>
+<text x="36" y="396" class="n">第 7 层</text>
+<rect x="100" y="382" width="190" height="20" rx="3" fill="var(--petrol-mark)" fill-opacity=".85"/>
+<text x="195" y="396" class="pt" text-anchor="middle" style="fill:var(--surface)">selected[2] → main_2 行</text>
+<rect x="294" y="382" width="110" height="20" rx="3" fill="var(--sunk)" stroke="var(--line)"/>
+<text x="349" y="396" class="pt" text-anchor="middle">ring_7 历史行</text>
+<rect x="420" y="212" width="86" height="198" rx="4" fill="var(--amber-bg)" stroke="var(--amber-mark)"/>
+<text x="463" y="300" class="n" text-anchor="middle">extend</text>
+<text x="463" y="318" class="pt" text-anchor="middle">本 forward</text>
+<text x="463" y="334" class="pt" text-anchor="middle">自己的 KV 行</text>
+<text x="463" y="350" class="xs am" text-anchor="middle">6 层共用</text>
+<text x="36" y="436" class="s">选择部分 6 层一样；窗口历史各指向自己的 ring（地址差一个 stride）。</text>
+<text x="36" y="454" class="s">prefix 一次写 6 份：layers × T × (512 + 128)。</text>
+<rect x="540" y="168" width="500" height="300" rx="7" fill="url(#gn)" stroke="var(--line)" filter="url(#sh)"/>
+<text x="556" y="192" class="sub">DECODE（splits_window）· 全组一份</text>
+<rect x="556" y="212" width="220" height="28" rx="4" fill="var(--petrol-mark)" fill-opacity=".85"/>
+<text x="666" y="230" class="pt" text-anchor="middle" style="fill:var(--surface)">prefix[0]：选择平面</text>
+<text x="786" y="230" class="pt">[T, 512]，6 层共用</text>
+<rect x="556" y="250" width="220" height="28" rx="4" fill="var(--sunk)" stroke="var(--line)"/>
+<text x="666" y="268" class="pt" text-anchor="middle">window_rows：窗口行号</text>
+<text x="786" y="268" class="pt">相对 ring 起点，6 层共用</text>
+<rect x="560" y="304" width="68" height="64" rx="5" fill="var(--surface)" stroke="var(--line)"/>
+<text x="594" y="324" class="pt" text-anchor="middle">第 2 层</text>
+<text x="594" y="342" class="xs" text-anchor="middle">ring_view</text>
+<text x="594" y="356" class="xs" text-anchor="middle">(2)</text>
+<path d="M594 278 V302" stroke="var(--line)" stroke-width="1" stroke-dasharray="3 2"/>
+<rect x="638" y="304" width="68" height="64" rx="5" fill="var(--surface)" stroke="var(--line)"/>
+<text x="672" y="324" class="pt" text-anchor="middle">第 3 层</text>
+<text x="672" y="342" class="xs" text-anchor="middle">ring_view</text>
+<text x="672" y="356" class="xs" text-anchor="middle">(3)</text>
+<path d="M672 278 V302" stroke="var(--line)" stroke-width="1" stroke-dasharray="3 2"/>
+<rect x="716" y="304" width="68" height="64" rx="5" fill="var(--surface)" stroke="var(--line)"/>
+<text x="750" y="324" class="pt" text-anchor="middle">第 4 层</text>
+<text x="750" y="342" class="xs" text-anchor="middle">ring_view</text>
+<text x="750" y="356" class="xs" text-anchor="middle">(4)</text>
+<path d="M750 278 V302" stroke="var(--line)" stroke-width="1" stroke-dasharray="3 2"/>
+<rect x="794" y="304" width="68" height="64" rx="5" fill="var(--surface)" stroke="var(--line)"/>
+<text x="828" y="324" class="pt" text-anchor="middle">第 5 层</text>
+<text x="828" y="342" class="xs" text-anchor="middle">ring_view</text>
+<text x="828" y="356" class="xs" text-anchor="middle">(5)</text>
+<path d="M828 278 V302" stroke="var(--line)" stroke-width="1" stroke-dasharray="3 2"/>
+<rect x="872" y="304" width="68" height="64" rx="5" fill="var(--surface)" stroke="var(--line)"/>
+<text x="906" y="324" class="pt" text-anchor="middle">第 6 层</text>
+<text x="906" y="342" class="xs" text-anchor="middle">ring_view</text>
+<text x="906" y="356" class="xs" text-anchor="middle">(6)</text>
+<path d="M906 278 V302" stroke="var(--line)" stroke-width="1" stroke-dasharray="3 2"/>
+<rect x="950" y="304" width="68" height="64" rx="5" fill="var(--surface)" stroke="var(--line)"/>
+<text x="984" y="324" class="pt" text-anchor="middle">第 7 层</text>
+<text x="984" y="342" class="xs" text-anchor="middle">ring_view</text>
+<text x="984" y="356" class="xs" text-anchor="middle">(7)</text>
+<path d="M984 278 V302" stroke="var(--line)" stroke-width="1" stroke-dasharray="3 2"/>
+<text x="556" y="396" class="s">同一份行号，套在各层自己的 ring 视图上读。</text>
+<text x="556" y="414" class="s">window_row(pos) 相对于本层 ring 起点、与层号无关，</text>
+<text x="556" y="432" class="s">所以一张行号表就够 6 层用。</text>
+<text x="556" y="454" class="xs">（FP4 packed 池的 decode 不走 split，仍按 prefill 的方式建。）</text>
+</svg>
+    <figcaption>
+      建法在 <a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/model_ops/attentions/deepseek_v41/cache.py#L947"><code>atom/model_ops/attentions/deepseek_v41/cache.py:947</code></a> 的 <code>_index_group</code>：<code>stride</code> 取第 <code>first</code> 层与第 <code>first+1</code> 层 ring 起点之差，
+      交给 <a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/model_ops/attentions/deepseek_v41/indices.py#L370"><code>atom/model_ops/attentions/deepseek_v41/indices.py:370</code></a> 的 <code>build_indices(layers=6, stride=…)</code> 一次写 6 份。
+      decode 走哪种由 <a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/model_ops/attentions/deepseek_v41/indices.py#L276"><code>atom/model_ops/attentions/deepseek_v41/indices.py:276</code></a> 的 <code>splits_window</code> 决定：<code>step.decode and not geometry.packed</code>。
+    </figcaption>
+  </figure>
+  <div class="grid2">
+    <div class="card good"><p class="eyebrow">prefill</p><h3>每层一份 prefix，extend 共用</h3>
+      <p>prefix 里是「选中的全局行 + 本层 ring 里本 chunk 起点之前的窗口行」，后一部分按层错开一个 stride；extend 是本 forward 自己的 KV 行，6 层的行号一样，只写一份。
+      prefix 的总长是 <code>layers × T × (512 + 128)</code>（<code>plane = step.width × (topk + window_size)</code>）。</p></div>
+    <div class="card good"><p class="eyebrow">decode（split）</p><h3>选择一份、窗口行号一份</h3>
+      <p>窗口全部已经在 ring 里，所以不必为每层拷一份行号：<code>build_window_rows</code> 按组首层的 ring 生成一张相对行号表（<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/model_ops/attentions/deepseek_v41/indices.py#L345"><code>atom/model_ops/attentions/deepseek_v41/indices.py:345</code></a>），
+      每层调用 attention 时传自己的 <code>ring_view(layer)</code> 作基址（<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/model_ops/attentions/deepseek_v41/cache.py#L942"><code>atom/model_ops/attentions/deepseek_v41/cache.py:942</code></a>）。</p></div>
+  </div>
+</section>
+
+<section id="encdec">
+  <hr class="rule">
+  <p class="eyebrow">对照</p>
+  <h2>encoder 的 REUSE 每段换一份 KV；decoder 的 REUSE 一直读同一份</h2>
+  <p>
+    同样叫 REUSE，两段的处境不同。encoder 的三段各有自己的 owner 和自己的压缩 KV，下一段开始时整份换掉；
+    decoder 的 15 个 REUSE 层全部读 <code>main_20</code>，只是每 4 层换一次选择——第 20 层全量选一次，第 24、28、32、36 层在候选块里各重选一次（第 9 章）。
+  </p>
+  <figure>
+    <p class="fignum">图 3 · 两段 REUSE 的来源</p>
+    <svg viewBox="0 0 1060 330" class="svg-min" role="img" aria-label="encoder REUSE 与 decoder REUSE 的来源对照">
+<rect x="20" y="30" width="500" height="270" rx="10" fill="url(#genc)" stroke="var(--petrol-mark)" filter="url(#sh)"/>
+<text x="36" y="54" class="sub pe">ENCODER REUSE · 15 层</text>
+<g class="slab p"><path class="st" d="M40 81 l7 -7 h92 l-7 7 z"/><path class="ss" d="M132 81 l7 -7 v38 l-7 7 z"/><path class="sf" d="M40 81 h92 v38 h-92 z"/></g>
+<text x="90" y="104" class="pt" text-anchor="middle">main_2</text>
+<rect x="168" y="80" width="100" height="32" rx="5" fill="var(--petrol-mark)"/>
+<text x="218" y="100" class="pt" text-anchor="middle" style="fill:var(--surface)">选自第 2 层</text>
+<path d="M140 96 H164" fill="none" stroke="var(--petrol-mark)" stroke-width="1.6" marker-end="url(#arp)"/>
+<path d="M268 96 H296" fill="none" stroke="var(--petrol-mark)" stroke-width="1.6" marker-end="url(#arp)"/>
+<rect x="300" y="80" width="200" height="32" rx="5" fill="var(--petrol-bg)" stroke="var(--petrol-mark)"/>
+<text x="400" y="100" class="pt" text-anchor="middle">第 3–7 层（5 层）</text>
+<g class="slab p"><path class="st" d="M40 151 l7 -7 h92 l-7 7 z"/><path class="ss" d="M132 151 l7 -7 v38 l-7 7 z"/><path class="sf" d="M40 151 h92 v38 h-92 z"/></g>
+<text x="90" y="174" class="pt" text-anchor="middle">main_8</text>
+<rect x="168" y="150" width="100" height="32" rx="5" fill="var(--petrol-mark)"/>
+<text x="218" y="170" class="pt" text-anchor="middle" style="fill:var(--surface)">选自第 8 层</text>
+<path d="M140 166 H164" fill="none" stroke="var(--petrol-mark)" stroke-width="1.6" marker-end="url(#arp)"/>
+<path d="M268 166 H296" fill="none" stroke="var(--petrol-mark)" stroke-width="1.6" marker-end="url(#arp)"/>
+<rect x="300" y="150" width="200" height="32" rx="5" fill="var(--petrol-bg)" stroke="var(--petrol-mark)"/>
+<text x="400" y="170" class="pt" text-anchor="middle">第 9–13 层（5 层）</text>
+<g class="slab p"><path class="st" d="M40 221 l7 -7 h92 l-7 7 z"/><path class="ss" d="M132 221 l7 -7 v38 l-7 7 z"/><path class="sf" d="M40 221 h92 v38 h-92 z"/></g>
+<text x="90" y="244" class="pt" text-anchor="middle">main_14</text>
+<rect x="168" y="220" width="100" height="32" rx="5" fill="var(--petrol-mark)"/>
+<text x="218" y="240" class="pt" text-anchor="middle" style="fill:var(--surface)">选自第 14 层</text>
+<path d="M140 236 H164" fill="none" stroke="var(--petrol-mark)" stroke-width="1.6" marker-end="url(#arp)"/>
+<path d="M268 236 H296" fill="none" stroke="var(--petrol-mark)" stroke-width="1.6" marker-end="url(#arp)"/>
+<rect x="300" y="220" width="200" height="32" rx="5" fill="var(--petrol-bg)" stroke="var(--petrol-mark)"/>
+<text x="400" y="240" class="pt" text-anchor="middle">第 15–19 层（5 层）</text>
+<text x="36" y="290" class="xs">一份 KV 配一次选择：三段各自独立</text>
+<rect x="540" y="30" width="500" height="270" rx="10" fill="url(#gdec)" stroke="var(--amber-mark)" filter="url(#sh)"/>
+<text x="556" y="54" class="sub am">DECODER REUSE · 15 层</text>
+<g class="slab a"><path class="st" d="M560 130 l10 -10 h92 l-10 10 z"/><path class="ss" d="M652 130 l10 -10 v96 l-10 10 z"/><path class="sf" d="M560 130 h92 v96 h-92 z"/></g>
+<text x="610" y="172" class="pt" text-anchor="middle">main_20</text>
+<text x="610" y="188" class="xs" text-anchor="middle">唯一一份</text>
+<rect x="690" y="66" width="110" height="30" rx="5" fill="var(--amber-mark)"/>
+<text x="745" y="85" class="pt" text-anchor="middle" style="fill:var(--surface)">选自第 20 层</text>
+<path d="M664 168 C676 168 676 81 686 81" fill="none" stroke="var(--amber-mark)" stroke-width="1.2" marker-end="url(#ara)"/>
+<path d="M800 81 H826" fill="none" stroke="var(--amber-mark)" stroke-width="1.2" marker-end="url(#ara)"/>
+<rect x="830" y="66" width="190" height="30" rx="5" fill="var(--amber-bg)" stroke="var(--amber-mark)"/>
+<text x="925" y="85" class="pt" text-anchor="middle">第 21–23 层（3 层）</text>
+<rect x="690" y="108" width="110" height="30" rx="5" fill="var(--plum-mark)"/>
+<text x="745" y="127" class="pt" text-anchor="middle" style="fill:var(--surface)">选自第 24 层</text>
+<path d="M664 168 C676 168 676 123 686 123" fill="none" stroke="var(--plum-mark)" stroke-width="1.2" marker-end="url(#arv)"/>
+<path d="M800 123 H826" fill="none" stroke="var(--plum-mark)" stroke-width="1.2" marker-end="url(#arv)"/>
+<rect x="830" y="108" width="190" height="30" rx="5" fill="var(--amber-bg)" stroke="var(--amber-mark)"/>
+<text x="925" y="127" class="pt" text-anchor="middle">第 25–27 层（3 层）</text>
+<rect x="690" y="150" width="110" height="30" rx="5" fill="var(--plum-mark)"/>
+<text x="745" y="169" class="pt" text-anchor="middle" style="fill:var(--surface)">选自第 28 层</text>
+<path d="M664 168 C676 168 676 165 686 165" fill="none" stroke="var(--plum-mark)" stroke-width="1.2" marker-end="url(#arv)"/>
+<path d="M800 165 H826" fill="none" stroke="var(--plum-mark)" stroke-width="1.2" marker-end="url(#arv)"/>
+<rect x="830" y="150" width="190" height="30" rx="5" fill="var(--amber-bg)" stroke="var(--amber-mark)"/>
+<text x="925" y="169" class="pt" text-anchor="middle">第 29–31 层（3 层）</text>
+<rect x="690" y="192" width="110" height="30" rx="5" fill="var(--plum-mark)"/>
+<text x="745" y="211" class="pt" text-anchor="middle" style="fill:var(--surface)">选自第 32 层</text>
+<path d="M664 168 C676 168 676 207 686 207" fill="none" stroke="var(--plum-mark)" stroke-width="1.2" marker-end="url(#arv)"/>
+<path d="M800 207 H826" fill="none" stroke="var(--plum-mark)" stroke-width="1.2" marker-end="url(#arv)"/>
+<rect x="830" y="192" width="190" height="30" rx="5" fill="var(--amber-bg)" stroke="var(--amber-mark)"/>
+<text x="925" y="211" class="pt" text-anchor="middle">第 33–35 层（3 层）</text>
+<rect x="690" y="234" width="110" height="30" rx="5" fill="var(--plum-mark)"/>
+<text x="745" y="253" class="pt" text-anchor="middle" style="fill:var(--surface)">选自第 36 层</text>
+<path d="M664 168 C676 168 676 249 686 249" fill="none" stroke="var(--plum-mark)" stroke-width="1.2" marker-end="url(#arv)"/>
+<path d="M800 249 H826" fill="none" stroke="var(--plum-mark)" stroke-width="1.2" marker-end="url(#arv)"/>
+<rect x="830" y="234" width="190" height="30" rx="5" fill="var(--amber-bg)" stroke="var(--amber-mark)"/>
+<text x="925" y="253" class="pt" text-anchor="middle">第 37–39 层（3 层）</text>
+<text x="556" y="290" class="xs">一份 KV 配五次选择：越深的层，用越深的 query 重新检索</text>
+</svg>
+    <figcaption>
+      左边三条链互不相交；右边五条链都从同一个 <code>main_20</code> 出发。这也是「decoder 只检索 encoder 的记忆」在拓扑上的样子（总览图 4）。
+    </figcaption>
+  </figure>
+</section>
+
+<section id="example">
+  <hr class="rule">
+  <p class="eyebrow">例子</p>
+  <h2>第 5 层在位置 5000 看到 640 个 key，其中 512 个和第 2 层完全相同</h2>
+  <div class="ex">
+    <p class="eyebrow">例子 · decode，t = 5000，组 [2, 8)</p>
+    <ol class="steps">
+      <li class="step">第 2 层的 Indexer 对 <code>main_2</code> 的可见行打分：<code>visible = (5000 + 1) // 2 = 2500</code> 行，选出 512 行，写进 <code>selected[2]</code>。</li>
+      <li class="step">第 2 层的 F 步建好整组的下标：一份选择平面（512 个压缩行号），一张窗口行号表（位置 4873–5000 共 128 行，相对 ring 起点）。</li>
+      <li class="step">第 5 层跑完自己的 A、B、C：用自己的 <code>wq_b</code> 出 query，把自己在位置 5000 的 KV 写进自己的 ring。</li>
+      <li class="step">第 5 层的 F 直接取那两张表；G 步读 <code>main_2</code> 的 512 行 + 自己 ring 的 128 行，一共 <strong>640 个 key</strong>，再加一个 sink。</li>
+    </ol>
+    <p>512 个压缩行每行覆盖 2 个 token，所以这 640 个 key 大约代表 1024 + 128 个位置的信息。</p>
+  </div>
+  <figure>
+    <p class="fignum">图 4 · 第 2 层与第 5 层在 t = 5000 的可见范围</p>
+    <svg viewBox="0 0 1060 360" class="svg-min" role="img" aria-label="第 5 层在位置 5000 的 decode 例子：与第 2 层共用选择，窗口各自">
+<text x="20" y="30" class="sub">例：decode，位置 t = 5000，第 2 层与第 5 层各看到什么</text>
+<path d="M84 70 H1000" class="sv-axis"/>
+<path d="M84.0 66 V74" class="sv-axis"/>
+<text x="84" y="60" class="xs" text-anchor="middle">0</text>
+<path d="M267.2 66 V74" class="sv-axis"/>
+<text x="267.163" y="60" class="xs" text-anchor="middle">1000</text>
+<path d="M450.3 66 V74" class="sv-axis"/>
+<text x="450.327" y="60" class="xs" text-anchor="middle">2000</text>
+<path d="M633.5 66 V74" class="sv-axis"/>
+<text x="633.49" y="60" class="xs" text-anchor="middle">3000</text>
+<path d="M816.7 66 V74" class="sv-axis"/>
+<text x="816.653" y="60" class="xs" text-anchor="middle">4000</text>
+<path d="M999.8 66 V74" class="sv-axis"/>
+<text x="999.817" y="60" class="xs" text-anchor="middle">5000</text>
+<text x="1006" y="74" class="xs">token</text>
+<text x="20" y="104" class="pt pe">main_2</text>
+<rect x="84" y="90" width="915.8" height="22" rx="3" fill="var(--petrol-bg)" stroke="var(--petrol-mark)"/>
+<path d="M84.0 90v22M86.6 90v22M89.9 90v22M94.6 90v22M101.2 90v22M102.0 90v22M105.2 90v22M106.7 90v22M108.9 90v22M111.1 90v22M111.5 90v22M111.8 90v22M112.9 90v22M115.9 90v22M117.7 90v22M118.4 90v22M122.1 90v22M124.3 90v22M124.7 90v22M125.0 90v22M125.4 90v22M125.8 90v22M127.2 90v22M136.8 90v22M139.3 90v22M140.0 90v22M142.6 90v22M143.3 90v22M147.0 90v22M147.4 90v22M148.5 90v22M153.6 90v22M156.2 90v22M158.4 90v22M159.5 90v22M162.8 90v22M163.5 90v22M165.0 90v22M169.0 90v22M170.1 90v22M170.8 90v22M172.3 90v22M172.7 90v22M173.4 90v22M174.8 90v22M175.2 90v22M176.3 90v22M176.7 90v22M177.0 90v22M178.1 90v22M178.9 90v22M180.3 90v22M181.1 90v22M181.4 90v22M183.6 90v22M184.7 90v22M186.9 90v22M188.8 90v22M189.5 90v22M192.4 90v22M192.8 90v22M193.5 90v22M200.1 90v22M204.5 90v22M204.9 90v22M206.4 90v22M206.7 90v22M208.2 90v22M209.7 90v22M210.0 90v22M211.1 90v22M212.6 90v22M212.9 90v22M214.0 90v22M216.6 90v22M218.1 90v22M219.9 90v22M220.3 90v22M222.1 90v22M224.3 90v22M225.0 90v22M226.1 90v22M230.2 90v22M230.5 90v22M232.7 90v22M236.0 90v22M237.1 90v22M237.5 90v22M237.9 90v22M238.6 90v22M239.3 90v22M241.2 90v22M243.0 90v22M245.2 90v22M248.1 90v22M248.8 90v22M253.2 90v22M256.2 90v22M256.9 90v22M259.5 90v22M260.6 90v22M260.9 90v22M263.9 90v22M264.2 90v22M266.4 90v22M267.5 90v22M268.3 90v22M269.7 90v22M272.3 90v22M274.5 90v22M275.6 90v22M277.8 90v22M278.2 90v22M280.0 90v22M280.4 90v22M283.6 90v22M289.1 90v22M289.5 90v22M289.9 90v22M292.8 90v22M295.4 90v22M296.1 90v22M298.3 90v22M300.1 90v22M302.3 90v22M303.1 90v22M303.8 90v22M306.7 90v22M307.8 90v22M308.6 90v22M310.0 90v22M310.4 90v22M310.8 90v22M311.5 90v22M311.9 90v22M314.8 90v22M315.5 90v22M317.7 90v22M322.1 90v22M326.1 90v22M327.2 90v22M328.0 90v22M331.3 90v22M333.5 90v22M334.6 90v22M336.0 90v22M339.0 90v22M340.8 90v22M342.3 90v22M344.5 90v22M348.1 90v22M350.7 90v22M351.8 90v22M353.6 90v22M355.1 90v22M355.4 90v22M356.2 90v22M357.3 90v22M358.7 90v22M365.7 90v22M369.7 90v22M370.8 90v22M374.5 90v22M376.0 90v22M376.7 90v22M377.4 90v22M378.9 90v22M382.9 90v22M383.7 90v22M386.6 90v22M387.3 90v22M387.7 90v22M390.6 90v22M391.7 90v22M392.8 90v22M395.7 90v22M397.2 90v22M400.5 90v22M403.1 90v22M406.0 90v22M407.1 90v22M408.2 90v22M411.1 90v22M413.3 90v22M414.8 90v22M415.5 90v22M417.4 90v22M418.1 90v22M418.5 90v22M418.8 90v22M419.2 90v22M419.6 90v22M424.0 90v22M424.3 90v22M426.9 90v22M430.2 90v22M432.0 90v22M433.8 90v22M440.1 90v22M441.5 90v22M443.0 90v22M444.8 90v22M450.0 90v22M455.1 90v22M455.5 90v22M456.6 90v22M459.5 90v22M461.7 90v22M462.4 90v22M463.1 90v22M463.5 90v22M463.9 90v22M469.7 90v22M471.9 90v22M472.7 90v22M473.0 90v22M473.4 90v22M474.9 90v22M475.6 90v22M476.7 90v22M478.2 90v22M480.7 90v22M481.1 90v22M482.2 90v22M485.9 90v22M487.3 90v22M488.8 90v22M489.5 90v22M489.9 90v22M491.7 90v22M493.6 90v22M497.2 90v22M499.4 90v22M499.8 90v22M500.9 90v22M501.6 90v22M502.7 90v22M503.1 90v22M506.7 90v22M510.8 90v22M515.2 90v22M515.9 90v22M518.5 90v22M518.8 90v22M523.2 90v22M527.3 90v22M530.9 90v22M533.5 90v22M534.2 90v22M538.2 90v22M541.5 90v22M546.7 90v22M548.5 90v22M551.8 90v22M552.9 90v22M554.7 90v22M555.1 90v22M558.0 90v22M561.0 90v22M561.7 90v22M562.1 90v22M569.7 90v22M571.6 90v22M572.3 90v22M573.0 90v22M574.5 90v22M576.3 90v22M577.8 90v22M578.5 90v22M581.1 90v22M582.6 90v22M582.9 90v22M587.0 90v22M590.6 90v22M591.0 90v22M592.8 90v22M593.9 90v22M594.3 90v22M597.2 90v22M598.0 90v22M599.1 90v22M599.8 90v22M600.2 90v22M600.5 90v22M604.6 90v22M604.9 90v22M608.2 90v22M609.3 90v22M609.7 90v22M614.1 90v22M614.8 90v22M617.0 90v22M617.4 90v22M618.8 90v22M622.1 90v22M626.5 90v22M629.5 90v22M630.2 90v22M630.6 90v22M630.9 90v22M632.4 90v22M632.8 90v22M633.1 90v22M633.9 90v22M634.2 90v22M637.9 90v22M639.7 90v22M642.6 90v22M648.5 90v22M654.7 90v22M660.6 90v22M662.8 90v22M666.8 90v22M670.5 90v22M672.7 90v22M675.3 90v22M676.4 90v22M677.8 90v22M678.9 90v22M680.7 90v22M681.1 90v22M681.5 90v22M682.6 90v22M684.8 90v22M685.1 90v22M686.2 90v22M686.6 90v22M689.9 90v22M692.8 90v22M698.3 90v22M707.1 90v22M708.2 90v22M709.0 90v22M710.1 90v22M710.8 90v22M711.2 90v22M711.9 90v22M712.6 90v22M714.8 90v22M715.9 90v22M716.6 90v22M717.4 90v22M720.7 90v22M722.1 90v22M725.4 90v22M726.5 90v22M729.8 90v22M731.3 90v22M734.6 90v22M735.0 90v22M736.8 90v22M743.8 90v22M744.1 90v22M744.9 90v22M745.6 90v22M747.1 90v22M748.9 90v22M750.7 90v22M752.5 90v22M754.7 90v22M755.5 90v22M757.3 90v22M757.7 90v22M762.4 90v22M763.9 90v22M764.6 90v22M768.3 90v22M769.0 90v22M771.2 90v22M772.0 90v22M776.7 90v22M778.9 90v22M782.2 90v22M782.6 90v22M783.0 90v22M785.1 90v22M785.5 90v22M789.2 90v22M792.5 90v22M794.3 90v22M795.0 90v22M795.4 90v22M801.3 90v22M802.0 90v22M803.1 90v22M804.6 90v22M806.4 90v22M807.9 90v22M809.7 90v22M811.5 90v22M811.9 90v22M812.3 90v22M814.8 90v22M816.3 90v22M817.4 90v22M817.8 90v22M821.0 90v22M823.2 90v22M824.7 90v22M825.8 90v22M826.5 90v22M828.7 90v22M829.1 90v22M834.2 90v22M835.7 90v22M836.4 90v22M838.3 90v22M842.3 90v22M845.2 90v22M845.6 90v22M846.3 90v22M850.0 90v22M851.8 90v22M852.2 90v22M852.6 90v22M857.3 90v22M858.4 90v22M859.1 90v22M860.6 90v22M861.3 90v22M861.7 90v22M862.1 90v22M862.8 90v22M866.1 90v22M869.0 90v22M869.4 90v22M871.2 90v22M872.0 90v22M873.8 90v22M876.4 90v22M878.6 90v22M878.9 90v22M880.0 90v22M881.5 90v22M881.9 90v22M883.0 90v22M885.9 90v22M887.7 90v22M888.8 90v22M889.2 90v22M892.1 90v22M892.5 90v22M893.6 90v22M894.3 90v22M895.0 90v22M896.5 90v22M897.6 90v22M898.7 90v22M904.6 90v22M904.9 90v22M905.7 90v22M906.0 90v22M907.5 90v22M908.2 90v22M908.6 90v22M909.3 90v22M910.8 90v22M913.7 90v22M919.2 90v22M919.6 90v22M920.7 90v22M921.1 90v22M922.9 90v22M924.0 90v22M924.4 90v22M925.5 90v22M926.9 90v22M928.0 90v22M930.2 90v22M930.6 90v22M932.4 90v22M933.5 90v22M934.2 90v22M935.0 90v22M937.9 90v22M939.0 90v22M940.5 90v22M940.8 90v22M941.9 90v22M943.4 90v22M943.8 90v22M945.2 90v22M945.6 90v22M946.3 90v22M949.3 90v22M949.6 90v22M951.1 90v22M954.0 90v22M956.6 90v22M957.0 90v22M957.3 90v22M958.4 90v22M961.0 90v22M962.1 90v22M962.5 90v22M972.0 90v22M974.5 90v22M976.0 90v22M976.7 90v22M979.3 90v22M979.7 90v22M980.4 90v22M985.9 90v22M986.3 90v22M989.2 90v22M993.2 90v22M993.6 90v22M994.0 90v22M994.3 90v22M996.5 90v22M997.3 90v22M998.0 90v22" stroke="var(--petrol)" stroke-width="1.1"/>
+<text x="1006" y="105" class="xs">2500 行</text>
+<text x="84" y="128" class="pt">visible = (5000+1)//2 = 2500 行可见；第 2 层打分选出 512 行（深色竖线），每行覆盖 2 个 token ≈ 1024 token</text>
+<text x="20" y="167" class="n">第 2 层</text>
+<rect x="84" y="152" width="916" height="22" rx="3" fill="var(--surface)" stroke="var(--line)"/>
+<path d="M84.0 155v16M86.6 155v16M89.9 155v16M94.6 155v16M101.2 155v16M102.0 155v16M105.2 155v16M106.7 155v16M108.9 155v16M111.1 155v16M111.5 155v16M111.8 155v16M112.9 155v16M115.9 155v16M117.7 155v16M118.4 155v16M122.1 155v16M124.3 155v16M124.7 155v16M125.0 155v16M125.4 155v16M125.8 155v16M127.2 155v16M136.8 155v16M139.3 155v16M140.0 155v16M142.6 155v16M143.3 155v16M147.0 155v16M147.4 155v16M148.5 155v16M153.6 155v16M156.2 155v16M158.4 155v16M159.5 155v16M162.8 155v16M163.5 155v16M165.0 155v16M169.0 155v16M170.1 155v16M170.8 155v16M172.3 155v16M172.7 155v16M173.4 155v16M174.8 155v16M175.2 155v16M176.3 155v16M176.7 155v16M177.0 155v16M178.1 155v16M178.9 155v16M180.3 155v16M181.1 155v16M181.4 155v16M183.6 155v16M184.7 155v16M186.9 155v16M188.8 155v16M189.5 155v16M192.4 155v16M192.8 155v16M193.5 155v16M200.1 155v16M204.5 155v16M204.9 155v16M206.4 155v16M206.7 155v16M208.2 155v16M209.7 155v16M210.0 155v16M211.1 155v16M212.6 155v16M212.9 155v16M214.0 155v16M216.6 155v16M218.1 155v16M219.9 155v16M220.3 155v16M222.1 155v16M224.3 155v16M225.0 155v16M226.1 155v16M230.2 155v16M230.5 155v16M232.7 155v16M236.0 155v16M237.1 155v16M237.5 155v16M237.9 155v16M238.6 155v16M239.3 155v16M241.2 155v16M243.0 155v16M245.2 155v16M248.1 155v16M248.8 155v16M253.2 155v16M256.2 155v16M256.9 155v16M259.5 155v16M260.6 155v16M260.9 155v16M263.9 155v16M264.2 155v16M266.4 155v16M267.5 155v16M268.3 155v16M269.7 155v16M272.3 155v16M274.5 155v16M275.6 155v16M277.8 155v16M278.2 155v16M280.0 155v16M280.4 155v16M283.6 155v16M289.1 155v16M289.5 155v16M289.9 155v16M292.8 155v16M295.4 155v16M296.1 155v16M298.3 155v16M300.1 155v16M302.3 155v16M303.1 155v16M303.8 155v16M306.7 155v16M307.8 155v16M308.6 155v16M310.0 155v16M310.4 155v16M310.8 155v16M311.5 155v16M311.9 155v16M314.8 155v16M315.5 155v16M317.7 155v16M322.1 155v16M326.1 155v16M327.2 155v16M328.0 155v16M331.3 155v16M333.5 155v16M334.6 155v16M336.0 155v16M339.0 155v16M340.8 155v16M342.3 155v16M344.5 155v16M348.1 155v16M350.7 155v16M351.8 155v16M353.6 155v16M355.1 155v16M355.4 155v16M356.2 155v16M357.3 155v16M358.7 155v16M365.7 155v16M369.7 155v16M370.8 155v16M374.5 155v16M376.0 155v16M376.7 155v16M377.4 155v16M378.9 155v16M382.9 155v16M383.7 155v16M386.6 155v16M387.3 155v16M387.7 155v16M390.6 155v16M391.7 155v16M392.8 155v16M395.7 155v16M397.2 155v16M400.5 155v16M403.1 155v16M406.0 155v16M407.1 155v16M408.2 155v16M411.1 155v16M413.3 155v16M414.8 155v16M415.5 155v16M417.4 155v16M418.1 155v16M418.5 155v16M418.8 155v16M419.2 155v16M419.6 155v16M424.0 155v16M424.3 155v16M426.9 155v16M430.2 155v16M432.0 155v16M433.8 155v16M440.1 155v16M441.5 155v16M443.0 155v16M444.8 155v16M450.0 155v16M455.1 155v16M455.5 155v16M456.6 155v16M459.5 155v16M461.7 155v16M462.4 155v16M463.1 155v16M463.5 155v16M463.9 155v16M469.7 155v16M471.9 155v16M472.7 155v16M473.0 155v16M473.4 155v16M474.9 155v16M475.6 155v16M476.7 155v16M478.2 155v16M480.7 155v16M481.1 155v16M482.2 155v16M485.9 155v16M487.3 155v16M488.8 155v16M489.5 155v16M489.9 155v16M491.7 155v16M493.6 155v16M497.2 155v16M499.4 155v16M499.8 155v16M500.9 155v16M501.6 155v16M502.7 155v16M503.1 155v16M506.7 155v16M510.8 155v16M515.2 155v16M515.9 155v16M518.5 155v16M518.8 155v16M523.2 155v16M527.3 155v16M530.9 155v16M533.5 155v16M534.2 155v16M538.2 155v16M541.5 155v16M546.7 155v16M548.5 155v16M551.8 155v16M552.9 155v16M554.7 155v16M555.1 155v16M558.0 155v16M561.0 155v16M561.7 155v16M562.1 155v16M569.7 155v16M571.6 155v16M572.3 155v16M573.0 155v16M574.5 155v16M576.3 155v16M577.8 155v16M578.5 155v16M581.1 155v16M582.6 155v16M582.9 155v16M587.0 155v16M590.6 155v16M591.0 155v16M592.8 155v16M593.9 155v16M594.3 155v16M597.2 155v16M598.0 155v16M599.1 155v16M599.8 155v16M600.2 155v16M600.5 155v16M604.6 155v16M604.9 155v16M608.2 155v16M609.3 155v16M609.7 155v16M614.1 155v16M614.8 155v16M617.0 155v16M617.4 155v16M618.8 155v16M622.1 155v16M626.5 155v16M629.5 155v16M630.2 155v16M630.6 155v16M630.9 155v16M632.4 155v16M632.8 155v16M633.1 155v16M633.9 155v16M634.2 155v16M637.9 155v16M639.7 155v16M642.6 155v16M648.5 155v16M654.7 155v16M660.6 155v16M662.8 155v16M666.8 155v16M670.5 155v16M672.7 155v16M675.3 155v16M676.4 155v16M677.8 155v16M678.9 155v16M680.7 155v16M681.1 155v16M681.5 155v16M682.6 155v16M684.8 155v16M685.1 155v16M686.2 155v16M686.6 155v16M689.9 155v16M692.8 155v16M698.3 155v16M707.1 155v16M708.2 155v16M709.0 155v16M710.1 155v16M710.8 155v16M711.2 155v16M711.9 155v16M712.6 155v16M714.8 155v16M715.9 155v16M716.6 155v16M717.4 155v16M720.7 155v16M722.1 155v16M725.4 155v16M726.5 155v16M729.8 155v16M731.3 155v16M734.6 155v16M735.0 155v16M736.8 155v16M743.8 155v16M744.1 155v16M744.9 155v16M745.6 155v16M747.1 155v16M748.9 155v16M750.7 155v16M752.5 155v16M754.7 155v16M755.5 155v16M757.3 155v16M757.7 155v16M762.4 155v16M763.9 155v16M764.6 155v16M768.3 155v16M769.0 155v16M771.2 155v16M772.0 155v16M776.7 155v16M778.9 155v16M782.2 155v16M782.6 155v16M783.0 155v16M785.1 155v16M785.5 155v16M789.2 155v16M792.5 155v16M794.3 155v16M795.0 155v16M795.4 155v16M801.3 155v16M802.0 155v16M803.1 155v16M804.6 155v16M806.4 155v16M807.9 155v16M809.7 155v16M811.5 155v16M811.9 155v16M812.3 155v16M814.8 155v16M816.3 155v16M817.4 155v16M817.8 155v16M821.0 155v16M823.2 155v16M824.7 155v16M825.8 155v16M826.5 155v16M828.7 155v16M829.1 155v16M834.2 155v16M835.7 155v16M836.4 155v16M838.3 155v16M842.3 155v16M845.2 155v16M845.6 155v16M846.3 155v16M850.0 155v16M851.8 155v16M852.2 155v16M852.6 155v16M857.3 155v16M858.4 155v16M859.1 155v16M860.6 155v16M861.3 155v16M861.7 155v16M862.1 155v16M862.8 155v16M866.1 155v16M869.0 155v16M869.4 155v16M871.2 155v16M872.0 155v16M873.8 155v16M876.4 155v16M878.6 155v16M878.9 155v16M880.0 155v16M881.5 155v16M881.9 155v16M883.0 155v16M885.9 155v16M887.7 155v16M888.8 155v16M889.2 155v16M892.1 155v16M892.5 155v16M893.6 155v16M894.3 155v16M895.0 155v16M896.5 155v16M897.6 155v16M898.7 155v16M904.6 155v16M904.9 155v16M905.7 155v16M906.0 155v16M907.5 155v16M908.2 155v16M908.6 155v16M909.3 155v16M910.8 155v16M913.7 155v16M919.2 155v16M919.6 155v16M920.7 155v16M921.1 155v16M922.9 155v16M924.0 155v16M924.4 155v16M925.5 155v16M926.9 155v16M928.0 155v16M930.2 155v16M930.6 155v16M932.4 155v16M933.5 155v16M934.2 155v16M935.0 155v16M937.9 155v16M939.0 155v16M940.5 155v16M940.8 155v16M941.9 155v16M943.4 155v16M943.8 155v16M945.2 155v16M945.6 155v16M946.3 155v16M949.3 155v16M949.6 155v16M951.1 155v16M954.0 155v16M956.6 155v16M957.0 155v16M957.3 155v16M958.4 155v16M961.0 155v16M962.1 155v16M962.5 155v16M972.0 155v16M974.5 155v16M976.0 155v16M976.7 155v16M979.3 155v16M979.7 155v16M980.4 155v16M985.9 155v16M986.3 155v16M989.2 155v16M993.2 155v16M993.6 155v16M994.0 155v16M994.3 155v16M996.5 155v16M997.3 155v16M998.0 155v16" stroke="var(--petrol-mark)" stroke-width="1.1"/>
+<rect x="976.6" y="150" width="23.4" height="26" rx="2" fill="var(--sunk)" stroke="var(--ink-2)" stroke-width="1"/>
+<text x="20" y="211" class="n">第 5 层</text>
+<rect x="84" y="196" width="916" height="22" rx="3" fill="var(--surface)" stroke="var(--line)"/>
+<path d="M84.0 199v16M86.6 199v16M89.9 199v16M94.6 199v16M101.2 199v16M102.0 199v16M105.2 199v16M106.7 199v16M108.9 199v16M111.1 199v16M111.5 199v16M111.8 199v16M112.9 199v16M115.9 199v16M117.7 199v16M118.4 199v16M122.1 199v16M124.3 199v16M124.7 199v16M125.0 199v16M125.4 199v16M125.8 199v16M127.2 199v16M136.8 199v16M139.3 199v16M140.0 199v16M142.6 199v16M143.3 199v16M147.0 199v16M147.4 199v16M148.5 199v16M153.6 199v16M156.2 199v16M158.4 199v16M159.5 199v16M162.8 199v16M163.5 199v16M165.0 199v16M169.0 199v16M170.1 199v16M170.8 199v16M172.3 199v16M172.7 199v16M173.4 199v16M174.8 199v16M175.2 199v16M176.3 199v16M176.7 199v16M177.0 199v16M178.1 199v16M178.9 199v16M180.3 199v16M181.1 199v16M181.4 199v16M183.6 199v16M184.7 199v16M186.9 199v16M188.8 199v16M189.5 199v16M192.4 199v16M192.8 199v16M193.5 199v16M200.1 199v16M204.5 199v16M204.9 199v16M206.4 199v16M206.7 199v16M208.2 199v16M209.7 199v16M210.0 199v16M211.1 199v16M212.6 199v16M212.9 199v16M214.0 199v16M216.6 199v16M218.1 199v16M219.9 199v16M220.3 199v16M222.1 199v16M224.3 199v16M225.0 199v16M226.1 199v16M230.2 199v16M230.5 199v16M232.7 199v16M236.0 199v16M237.1 199v16M237.5 199v16M237.9 199v16M238.6 199v16M239.3 199v16M241.2 199v16M243.0 199v16M245.2 199v16M248.1 199v16M248.8 199v16M253.2 199v16M256.2 199v16M256.9 199v16M259.5 199v16M260.6 199v16M260.9 199v16M263.9 199v16M264.2 199v16M266.4 199v16M267.5 199v16M268.3 199v16M269.7 199v16M272.3 199v16M274.5 199v16M275.6 199v16M277.8 199v16M278.2 199v16M280.0 199v16M280.4 199v16M283.6 199v16M289.1 199v16M289.5 199v16M289.9 199v16M292.8 199v16M295.4 199v16M296.1 199v16M298.3 199v16M300.1 199v16M302.3 199v16M303.1 199v16M303.8 199v16M306.7 199v16M307.8 199v16M308.6 199v16M310.0 199v16M310.4 199v16M310.8 199v16M311.5 199v16M311.9 199v16M314.8 199v16M315.5 199v16M317.7 199v16M322.1 199v16M326.1 199v16M327.2 199v16M328.0 199v16M331.3 199v16M333.5 199v16M334.6 199v16M336.0 199v16M339.0 199v16M340.8 199v16M342.3 199v16M344.5 199v16M348.1 199v16M350.7 199v16M351.8 199v16M353.6 199v16M355.1 199v16M355.4 199v16M356.2 199v16M357.3 199v16M358.7 199v16M365.7 199v16M369.7 199v16M370.8 199v16M374.5 199v16M376.0 199v16M376.7 199v16M377.4 199v16M378.9 199v16M382.9 199v16M383.7 199v16M386.6 199v16M387.3 199v16M387.7 199v16M390.6 199v16M391.7 199v16M392.8 199v16M395.7 199v16M397.2 199v16M400.5 199v16M403.1 199v16M406.0 199v16M407.1 199v16M408.2 199v16M411.1 199v16M413.3 199v16M414.8 199v16M415.5 199v16M417.4 199v16M418.1 199v16M418.5 199v16M418.8 199v16M419.2 199v16M419.6 199v16M424.0 199v16M424.3 199v16M426.9 199v16M430.2 199v16M432.0 199v16M433.8 199v16M440.1 199v16M441.5 199v16M443.0 199v16M444.8 199v16M450.0 199v16M455.1 199v16M455.5 199v16M456.6 199v16M459.5 199v16M461.7 199v16M462.4 199v16M463.1 199v16M463.5 199v16M463.9 199v16M469.7 199v16M471.9 199v16M472.7 199v16M473.0 199v16M473.4 199v16M474.9 199v16M475.6 199v16M476.7 199v16M478.2 199v16M480.7 199v16M481.1 199v16M482.2 199v16M485.9 199v16M487.3 199v16M488.8 199v16M489.5 199v16M489.9 199v16M491.7 199v16M493.6 199v16M497.2 199v16M499.4 199v16M499.8 199v16M500.9 199v16M501.6 199v16M502.7 199v16M503.1 199v16M506.7 199v16M510.8 199v16M515.2 199v16M515.9 199v16M518.5 199v16M518.8 199v16M523.2 199v16M527.3 199v16M530.9 199v16M533.5 199v16M534.2 199v16M538.2 199v16M541.5 199v16M546.7 199v16M548.5 199v16M551.8 199v16M552.9 199v16M554.7 199v16M555.1 199v16M558.0 199v16M561.0 199v16M561.7 199v16M562.1 199v16M569.7 199v16M571.6 199v16M572.3 199v16M573.0 199v16M574.5 199v16M576.3 199v16M577.8 199v16M578.5 199v16M581.1 199v16M582.6 199v16M582.9 199v16M587.0 199v16M590.6 199v16M591.0 199v16M592.8 199v16M593.9 199v16M594.3 199v16M597.2 199v16M598.0 199v16M599.1 199v16M599.8 199v16M600.2 199v16M600.5 199v16M604.6 199v16M604.9 199v16M608.2 199v16M609.3 199v16M609.7 199v16M614.1 199v16M614.8 199v16M617.0 199v16M617.4 199v16M618.8 199v16M622.1 199v16M626.5 199v16M629.5 199v16M630.2 199v16M630.6 199v16M630.9 199v16M632.4 199v16M632.8 199v16M633.1 199v16M633.9 199v16M634.2 199v16M637.9 199v16M639.7 199v16M642.6 199v16M648.5 199v16M654.7 199v16M660.6 199v16M662.8 199v16M666.8 199v16M670.5 199v16M672.7 199v16M675.3 199v16M676.4 199v16M677.8 199v16M678.9 199v16M680.7 199v16M681.1 199v16M681.5 199v16M682.6 199v16M684.8 199v16M685.1 199v16M686.2 199v16M686.6 199v16M689.9 199v16M692.8 199v16M698.3 199v16M707.1 199v16M708.2 199v16M709.0 199v16M710.1 199v16M710.8 199v16M711.2 199v16M711.9 199v16M712.6 199v16M714.8 199v16M715.9 199v16M716.6 199v16M717.4 199v16M720.7 199v16M722.1 199v16M725.4 199v16M726.5 199v16M729.8 199v16M731.3 199v16M734.6 199v16M735.0 199v16M736.8 199v16M743.8 199v16M744.1 199v16M744.9 199v16M745.6 199v16M747.1 199v16M748.9 199v16M750.7 199v16M752.5 199v16M754.7 199v16M755.5 199v16M757.3 199v16M757.7 199v16M762.4 199v16M763.9 199v16M764.6 199v16M768.3 199v16M769.0 199v16M771.2 199v16M772.0 199v16M776.7 199v16M778.9 199v16M782.2 199v16M782.6 199v16M783.0 199v16M785.1 199v16M785.5 199v16M789.2 199v16M792.5 199v16M794.3 199v16M795.0 199v16M795.4 199v16M801.3 199v16M802.0 199v16M803.1 199v16M804.6 199v16M806.4 199v16M807.9 199v16M809.7 199v16M811.5 199v16M811.9 199v16M812.3 199v16M814.8 199v16M816.3 199v16M817.4 199v16M817.8 199v16M821.0 199v16M823.2 199v16M824.7 199v16M825.8 199v16M826.5 199v16M828.7 199v16M829.1 199v16M834.2 199v16M835.7 199v16M836.4 199v16M838.3 199v16M842.3 199v16M845.2 199v16M845.6 199v16M846.3 199v16M850.0 199v16M851.8 199v16M852.2 199v16M852.6 199v16M857.3 199v16M858.4 199v16M859.1 199v16M860.6 199v16M861.3 199v16M861.7 199v16M862.1 199v16M862.8 199v16M866.1 199v16M869.0 199v16M869.4 199v16M871.2 199v16M872.0 199v16M873.8 199v16M876.4 199v16M878.6 199v16M878.9 199v16M880.0 199v16M881.5 199v16M881.9 199v16M883.0 199v16M885.9 199v16M887.7 199v16M888.8 199v16M889.2 199v16M892.1 199v16M892.5 199v16M893.6 199v16M894.3 199v16M895.0 199v16M896.5 199v16M897.6 199v16M898.7 199v16M904.6 199v16M904.9 199v16M905.7 199v16M906.0 199v16M907.5 199v16M908.2 199v16M908.6 199v16M909.3 199v16M910.8 199v16M913.7 199v16M919.2 199v16M919.6 199v16M920.7 199v16M921.1 199v16M922.9 199v16M924.0 199v16M924.4 199v16M925.5 199v16M926.9 199v16M928.0 199v16M930.2 199v16M930.6 199v16M932.4 199v16M933.5 199v16M934.2 199v16M935.0 199v16M937.9 199v16M939.0 199v16M940.5 199v16M940.8 199v16M941.9 199v16M943.4 199v16M943.8 199v16M945.2 199v16M945.6 199v16M946.3 199v16M949.3 199v16M949.6 199v16M951.1 199v16M954.0 199v16M956.6 199v16M957.0 199v16M957.3 199v16M958.4 199v16M961.0 199v16M962.1 199v16M962.5 199v16M972.0 199v16M974.5 199v16M976.0 199v16M976.7 199v16M979.3 199v16M979.7 199v16M980.4 199v16M985.9 199v16M986.3 199v16M989.2 199v16M993.2 199v16M993.6 199v16M994.0 199v16M994.3 199v16M996.5 199v16M997.3 199v16M998.0 199v16" stroke="var(--petrol-mark)" stroke-width="1.1"/>
+<rect x="976.6" y="194" width="23.4" height="26" rx="2" fill="var(--sunk)" stroke="var(--ink-2)" stroke-width="1"/>
+<text x="970.555" y="236" class="xs" text-anchor="end">窗口 4873–5000：各自的 ring</text>
+<path d="M988.8 228 V222" fill="none" stroke="var(--ink-2)" stroke-width="1.2" marker-end="url(#ar)"/>
+<rect x="60" y="256" width="300" height="82" rx="7" fill="url(#gp)" stroke="var(--petrol-mark)"/>
+<text x="76" y="278" class="n">两层相同的部分</text>
+<text x="76" y="298" class="pt">同一批 512 个压缩行（同一 main_2）</text>
+<text x="76" y="316" class="pt">同一张下标表 prefix[0]</text>
+<rect x="380" y="256" width="300" height="82" rx="7" fill="url(#gn)" stroke="var(--line)"/>
+<text x="396" y="278" class="n">两层不同的部分</text>
+<text x="396" y="298" class="pt">query：各自 wq_b(各自的 qr)</text>
+<text x="396" y="316" class="pt">窗口：同样的 128 个位置，内容是各层自己的 KV</text>
+<rect x="700" y="256" width="300" height="82" rx="7" fill="url(#ga)" stroke="var(--amber-mark)"/>
+<text x="716" y="278" class="n">第 5 层的 key 数</text>
+<text x="716" y="300" class="big">512 + 128 = 640 个 key</text>
+<text x="716" y="322" class="pt">+ 1 个 sink，64 个头共用这 640 行</text>
+</svg>
+    <figcaption>
+      竖线的位置是示意（随机抽的 512 个），数量和覆盖范围是真的。两层的窗口是同样 128 个位置，但第 5 层窗口里存的是第 5 层的 <code>kv_normed</code>，不是第 2 层的。
+    </figcaption>
+  </figure>
+</section>
+
+<section id="cost">
+  <hr class="rule">
+  <p class="eyebrow">算力</p>
+  <h2>长上下文下，REUSE 层不到 FULL 层的一半</h2>
+  <p>
+    REUSE 层省掉的是 Compressor 的 GEMM、index query 投影和对全部可见行的打分。前两样是常数，第三样随上下文线性增长，
+    所以上下文越长，REUSE 相对 FULL 越便宜。下图按形状估算了 L = 100,000 时 decode 一个 token 在一层上的乘加量。
+  </p>
+  <figure>
+    <p class="fignum">图 5 · 五类注意力层的估算乘加量</p>
+    <svg viewBox="0 0 1060 330" class="svg-min" role="img" aria-label="五类注意力层在 L=100000 时每 token 的估算乘加量">
+<text x="20" y="30" class="sub">每个 decode token、每层的乘加量（L = 100,000，四卡合计，MFLOP，按形状估算）</text>
+<text x="20" y="72" class="n">WINDOW</text>
+<rect x="150" y="56" width="156.6" height="24" rx="3" fill="var(--petrol-bg)" stroke="var(--petrol-mark)"/>
+<text x="314.6" y="73" class="pt">270 · 窗口 128 个 key</text>
+<text x="20" y="118" class="n">REUSE</text>
+<rect x="150" y="102" width="195.5" height="24" rx="3" fill="var(--petrol-bg)" stroke="var(--petrol-mark)"/>
+<text x="353.518" y="119" class="pt">337 · 512 + 128 个 key</text>
+<text x="20" y="164" class="n">REINDEX</text>
+<rect x="150" y="148" width="195.5" height="24" rx="3" fill="var(--petrol-bg)" stroke="var(--petrol-mark)"/>
+<rect x="345.5" y="148" width="84.1" height="24" rx="3" fill="var(--plum-bg)" stroke="var(--plum-mark)"/>
+<text x="437.618" y="165" class="pt">482 · 多出候选内打分 16,384 行</text>
+<text x="20" y="210" class="n">FULL r2</text>
+<rect x="150" y="194" width="195.5" height="24" rx="3" fill="var(--petrol-bg)" stroke="var(--petrol-mark)"/>
+<rect x="345.5" y="194" width="250.0" height="24" rx="3" fill="var(--plum-bg)" stroke="var(--plum-mark)"/>
+<text x="603.498" y="211" class="pt">768 · 多出压缩与打分 50,000 行</text>
+<text x="20" y="256" class="n">第 20 层</text>
+<rect x="150" y="240" width="195.5" height="24" rx="3" fill="var(--petrol-bg)" stroke="var(--petrol-mark)"/>
+<rect x="345.5" y="240" width="484.5" height="24" rx="3" fill="var(--plum-bg)" stroke="var(--plum-mark)"/>
+<text x="838.05" y="257" class="pt">1,172 · 多出压缩与打分 100,000 行</text>
+<rect x="150" y="290" width="22" height="12" rx="2" fill="var(--petrol-bg)" stroke="var(--petrol-mark)"/>
+<text x="180" y="300" class="s">公共部分：wqkv_a 18.4 + wq_b 83.9 + 注意力 83.9 + wo_a 67.1 + wo_b 83.9</text>
+<rect x="150" y="308" width="22" height="12" rx="2" fill="var(--plum-bg)" stroke="var(--plum-mark)"/>
+<text x="180" y="318" class="s">额外：compressor、indexer.wq_b、weights_proj、32 头 × 128 维打分（不含 top-k、MoE、mHC）</text>
+</svg>
+    <figcaption>
+      <strong>估算口径</strong>：四卡合计；只算 GEMM 与注意力 / 打分的乘加，不含 top-k、softmax、mHC、MoE；ratio 2 的 FULL 层可见 50,000 行，第 20 层可见 100,000 行，REINDEX 固定 16,384 行。
+      打分每行 32 头 × 128 维 × 2 = 8,192 FLOP。数字只用来比相对大小。
+    </figcaption>
+  </figure>
+  <div class="grid3">
+    <div class="card moss"><p class="eyebrow">省下的</p><h3>D、E 两步</h3><p>compressor <code>wkv_gate</code> 5120→1024、<code>wk</code> 512→128、<code>indexer.wq_b</code> 1280→4096、<code>weights_proj</code> 5120→32，以及打分与 top-k。</p></div>
+    <div class="card"><p class="eyebrow">还在的</p><h3>投影与注意力</h3><p>每层都有自己的 Q/KV 下投影、query 上投影、640 个 key 的注意力和输出 LoRA，这部分与 FULL 层完全一样。</p></div>
+    <div class="card key"><p class="eyebrow">代价</p><h3>同组看到同一批历史</h3><p>同组 6 层（或 4 层）的远处信息都是同一组 512 行；区别只来自各层不同的 query 和窗口。decoder 用 REINDEX 每 4 层重选一次来缓和这一点。</p></div>
+  </div>
+</section>
+
+<section id="read">
+  <hr class="rule">
+  <p class="eyebrow">读码路线</p>
+  <h2>从模式判定到「取现成下标」</h2>
+  <ol class="steps">
+    <li class="step"><a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/models/deepseek_v41/config.py#L75"><code>atom/models/deepseek_v41/config.py:75</code></a> <code>build_attention_topology</code>：第 137 行决定 REUSE；<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/models/deepseek_v41/config.py#L155"><code>atom/models/deepseek_v41/config.py:155</code></a> <code>_tag_index_groups</code> 定组。</li>
+    <li class="step"><a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/models/deepseek_v41/attention.py#L290"><code>atom/models/deepseek_v41/attention.py:290</code></a>：REUSE 层的 <code>compressor</code> 与 <code>indexer</code> 都是 <code>None</code>。</li>
+    <li class="step"><a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/models/deepseek_v41/attention.py#L447"><code>atom/models/deepseek_v41/attention.py:447</code></a> <code>_attend</code>：调用 <code>cache.attention_indices(self.spec, step)</code>，decode 时先 <code>write_window</code>。</li>
+    <li class="step"><a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/model_ops/attentions/deepseek_v41/cache.py#L911"><code>atom/model_ops/attentions/deepseek_v41/cache.py:911</code></a> <code>attention_indices</code>：<code>first = spec.index_group_start</code>，查 <code>step.group_indices</code>，没有才建。</li>
+    <li class="step"><a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/model_ops/attentions/deepseek_v41/cache.py#L947"><code>atom/model_ops/attentions/deepseek_v41/cache.py:947</code></a> <code>_index_group</code> → <a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/model_ops/attentions/deepseek_v41/indices.py#L370"><code>atom/model_ops/attentions/deepseek_v41/indices.py:370</code></a> <code>build_indices</code>。</li>
+    <li class="step"><a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/model_ops/attentions/deepseek_v41/metadata.py#L77"><code>atom/model_ops/attentions/deepseek_v41/metadata.py:77</code></a> <code>BatchStep.group_indices</code>：每个 forward 开始时清空（<code>begin_forward</code>）。</li>
+  </ol>
+  <div class="callout">
+    <p class="eyebrow">读码坑</p>
+    <p>
+      「REUSE 层不做 F」并不准确：它<strong>调用</strong>了 <code>attention_indices</code>，只是命中缓存、不启动 kernel。
+      bounded replay 里第 39 层的 query 少于 KV 行，<code>QueryRows.indices</code> 会传一个 <code>group_indices={}</code> 的副本强制重建（第 10 章），那是唯一不复用组下标的地方。
+    </p>
+  </div>
+</section>
+<nav class="pager" aria-label="翻页"><a class="prev" href="layer20.html"><span>← 上一章</span>7 · 第 20 层</a><a class="next" href="reindex.html"><span>下一章 →</span>9 · Reindex 层</a></nav>
+<footer>
+  <p>
+    源码 <a href="https://github.com/ROCm/ATOM/tree/99ebf633ac7a327c54282c3b244ea8519f3eef29">ROCm/ATOM@99ebf633a</a>（2026-11-01）·
+    文中 <code>文件:行号</code> 均指这一提交 ·
+    模型配置取自 <code>tests/models/deepseek_v41/fixtures/config.json</code>（钉在 <code>deepseek-ai/DeepSeek-V4.1-Flash@dba1be0</code>）·
+    mHC 与 CSA 的出处是 DeepSeek-V4 论文 §2.2、§2.3 ·
+    仓库 <a href="https://github.com/PerryZhang01/LLM">PerryZhang01/LLM</a>
+  </p>
+</footer>
+</div>
+</body>
+</html>
