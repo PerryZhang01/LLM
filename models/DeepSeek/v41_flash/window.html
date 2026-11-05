@@ -264,7 +264,7 @@ figure svg text.pl{fill:var(--plum)} figure svg text.mo{fill:var(--moss)} figure
 </defs></svg>
 <div class="wrap">
 <nav class="backnav"><a href="../../../index.html">← LLM 模型与框架结构手册</a> · <a href="../v41_flash_anatomy.html">单页速览版</a></nav>
-<nav class="chapnav" aria-label="章节"><a href="index.html">1 · 总览</a><a href="residual.html">2 · 四路残差 mHC</a><a href="engram.html">3 · Engram</a><a href="csa2.html">4 · CSA2 注意力骨架</a><a href="window.html" class="on">5 · Window 层</a><a href="full.html">6 · Full 层</a><a href="layer20.html">7 · 第 20 层</a><a href="reuse.html">8 · Reuse 层</a><a href="reindex.html">9 · Reindex 层</a><a href="replay.html">10 · 缓存与 Bounded Replay</a></nav>
+<nav class="chapnav" aria-label="章节"><a href="index.html">1 · 总览</a><a href="residual.html">2 · 四路残差 mHC</a><a href="engram.html">3 · Engram</a><a href="csa2.html">4 · CSA2 注意力骨架</a><a href="window.html" class="on">5 · Window 层</a><a href="full.html">6 · Full 层</a><a href="layer20.html">7 · 第 20 层</a><a href="reuse.html">8 · Reuse 层</a><a href="reindex.html">9 · Reindex 层</a><a href="kvcache.html">10 · KV Cache 存储层</a><a href="replay.html">11 · Bounded Replay</a></nav>
 <header class="mast">
   <div class="mast-id">
     <span class="tag">deepseek-ai/DeepSeek-V4.1-Flash</span>
@@ -799,11 +799,11 @@ figure svg text.pl{fill:var(--plum)} figure svg text.mo{fill:var(--moss)} figure
 <text x="983.585" y="291.5" class="pt am" text-anchor="middle">新</text>
 <path d="M952.6 238 V306" stroke="var(--amber-mark)" stroke-width="1.2" stroke-dasharray="4 3"/>
 <text x="210" y="326" class="pt">cached_until = 960：960 以下的窗口行仍从 ring 读，与一次从 960 正常恢复的 forward 一致；</text>
-<text x="210" y="342" class="pt">多算的 768 … 959 只为给 decoder 凑够 128 行 tail（第 10 章）。</text>
+<text x="210" y="342" class="pt">多算的 768 … 959 只为给 decoder 凑够 128 行 tail（第 11 章）。</text>
 </svg>
     <figcaption>
       A 是 encoder replay：命中后在新 slot 里从命中点往前一个 hash 块开始重算，新 slot 里没有更早的 ring 行，所以窗口下界被截在 forward 起点（<code>request_floors</code>），这正是恢复后的 logits 与冷启动 prefill 不完全相同的来源。
-      B 是 decoder replay 的回退：slot 的状态还在，重算的行不改写 ring（<code>write_window</code> 带 <code>cached_until</code>），读法与一次从 960 正常恢复的 forward 相同，所以对窗口来说是精确的。两种机制的全貌见 <a href="replay.html">第 10 章</a>。
+      B 是 decoder replay 的回退：slot 的状态还在，重算的行不改写 ring（<code>write_window</code> 带 <code>cached_until</code>），读法与一次从 960 正常恢复的 forward 相同，所以对窗口来说是精确的。两种机制的全貌见 <a href="replay.html">第 11 章</a>。
     </figcaption>
   </figure>
 </section>

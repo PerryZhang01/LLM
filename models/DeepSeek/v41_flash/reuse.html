@@ -264,7 +264,7 @@ figure svg text.pl{fill:var(--plum)} figure svg text.mo{fill:var(--moss)} figure
 </defs></svg>
 <div class="wrap">
 <nav class="backnav"><a href="../../../index.html">← LLM 模型与框架结构手册</a> · <a href="../v41_flash_anatomy.html">单页速览版</a></nav>
-<nav class="chapnav" aria-label="章节"><a href="index.html">1 · 总览</a><a href="residual.html">2 · 四路残差 mHC</a><a href="engram.html">3 · Engram</a><a href="csa2.html">4 · CSA2 注意力骨架</a><a href="window.html">5 · Window 层</a><a href="full.html">6 · Full 层</a><a href="layer20.html">7 · 第 20 层</a><a href="reuse.html" class="on">8 · Reuse 层</a><a href="reindex.html">9 · Reindex 层</a><a href="replay.html">10 · 缓存与 Bounded Replay</a></nav>
+<nav class="chapnav" aria-label="章节"><a href="index.html">1 · 总览</a><a href="residual.html">2 · 四路残差 mHC</a><a href="engram.html">3 · Engram</a><a href="csa2.html">4 · CSA2 注意力骨架</a><a href="window.html">5 · Window 层</a><a href="full.html">6 · Full 层</a><a href="layer20.html">7 · 第 20 层</a><a href="reuse.html" class="on">8 · Reuse 层</a><a href="reindex.html">9 · Reindex 层</a><a href="kvcache.html">10 · KV Cache 存储层</a><a href="replay.html">11 · Bounded Replay</a></nav>
 <header class="mast">
   <div class="mast-id">
     <span class="tag">deepseek-ai/DeepSeek-V4.1-Flash</span>
@@ -742,7 +742,7 @@ figure svg text.pl{fill:var(--plum)} figure svg text.mo{fill:var(--moss)} figure
     <p class="eyebrow">读码坑</p>
     <p>
       「REUSE 层不做 F」并不准确：它<strong>调用</strong>了 <code>attention_indices</code>，只是命中缓存、不启动 kernel。
-      bounded replay 里第 39 层的 query 少于 KV 行，<code>QueryRows.indices</code> 会传一个 <code>group_indices={}</code> 的副本强制重建（第 10 章），那是唯一不复用组下标的地方。
+      bounded replay 里第 39 层的 query 少于 KV 行，<code>QueryRows.indices</code> 会传一个 <code>group_indices={}</code> 的副本强制重建（第 11 章），那是唯一不复用组下标的地方。
     </p>
   </div>
 </section>

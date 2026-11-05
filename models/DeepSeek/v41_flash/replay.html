@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>DeepSeek-V4.1-Flash 结构解剖 · 缓存与 Bounded Replay</title>
+<title>DeepSeek-V4.1-Flash 结构解剖 · Bounded Replay</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
@@ -264,117 +264,45 @@ figure svg text.pl{fill:var(--plum)} figure svg text.mo{fill:var(--moss)} figure
 </defs></svg>
 <div class="wrap">
 <nav class="backnav"><a href="../../../index.html">← LLM 模型与框架结构手册</a> · <a href="../v41_flash_anatomy.html">单页速览版</a></nav>
-<nav class="chapnav" aria-label="章节"><a href="index.html">1 · 总览</a><a href="residual.html">2 · 四路残差 mHC</a><a href="engram.html">3 · Engram</a><a href="csa2.html">4 · CSA2 注意力骨架</a><a href="window.html">5 · Window 层</a><a href="full.html">6 · Full 层</a><a href="layer20.html">7 · 第 20 层</a><a href="reuse.html">8 · Reuse 层</a><a href="reindex.html">9 · Reindex 层</a><a href="replay.html" class="on">10 · 缓存与 Bounded Replay</a></nav>
+<nav class="chapnav" aria-label="章节"><a href="index.html">1 · 总览</a><a href="residual.html">2 · 四路残差 mHC</a><a href="engram.html">3 · Engram</a><a href="csa2.html">4 · CSA2 注意力骨架</a><a href="window.html">5 · Window 层</a><a href="full.html">6 · Full 层</a><a href="layer20.html">7 · 第 20 层</a><a href="reuse.html">8 · Reuse 层</a><a href="reindex.html">9 · Reindex 层</a><a href="kvcache.html">10 · KV Cache 存储层</a><a href="replay.html" class="on">11 · Bounded Replay</a></nav>
 <header class="mast">
   <div class="mast-id">
     <span class="tag">deepseek-ai/DeepSeek-V4.1-Flash</span>
-    <span class="tag">PAGE · STATE · prefill · 前缀命中</span>
+    <span class="tag">prefill · 前缀命中 · 存储读写</span>
     <span class="tag hot">decoder SWA bounded replay</span>
     <span class="tag hot">encoder SWA bounded replay</span>
   </div>
-  <h1>缓存与 Bounded Replay</h1>
+  <h1>Bounded Replay</h1>
   <p class="lede">
-    V4.1 的缓存分两种货币：随历史增长的 PAGE（4 份全局 KV 与 index key），随并发增长的 STATE（40 层窗口、compressor 半成品、Engram 游标）。
     两种 bounded replay 都建立在同一个观察上——<strong>后续步骤会读到的才去算</strong>：decoder replay 让 prefill 只在每个请求的最后 128 行跑 decoder，
-    encoder replay 让前缀命中时不存状态、退一个 hash 块把它重算出来。这一章把两者的做法、例子和代价算清楚，再看关掉之后的 checkpoint 方案。
+    encoder replay 让前缀命中时不存状态、退一个 hash 块把它重算出来。存储层的形状和地址在第 10 章；这一章讲 replay 时这些存储<strong>哪些只读、哪些在新位置写、哪些在新槽里重建</strong>，
+    并把两种 replay 的做法、例子和代价算清楚，再看关掉之后的 checkpoint 方案。
   </p>
   <div class="stats">
     <div class="stat"><span class="stat-n">128</span><span class="stat-l">PAGE token 数 = 窗口 = 退回行数</span></div>
-    <div class="stat"><span class="stat-n">≈ 206 KiB</span><span class="stat-l">每 PAGE（估算）</span></div>
-    <div class="stat"><span class="stat-n">≈ 2.6 MiB</span><span class="stat-l">每条 STATE（估算）</span></div>
+    <div class="stat"><span class="stat-n">0 B</span><span class="stat-l">重放段写进共享页的字节</span></div>
+    <div class="stat"><span class="stat-n">1</span><span class="stat-l">每次命中新开的 STATE 槽</span></div>
     <div class="stat"><span class="stat-n">≈ ½</span><span class="stat-l">长 prompt prefill 计算（估算）</span></div>
     <div class="stat"><span class="stat-n">8,192</span><span class="stat-l">关掉 replay 后的镜像间隔</span></div>
     <div class="stat"><span class="stat-n">≈ 13</span><span class="stat-l">每个镜像占的 PAGE 单元（估算）</span></div>
   </div>
   <nav class="toc" aria-label="本页目录">
-    <a href="#pool">两种货币</a><a href="#reads">谁还会被读</a><a href="#decoder">decoder replay</a>
-    <a href="#backoff">最后一段太短</a><a href="#encoder">encoder replay</a><a href="#both">叠加</a>
+    <a href="#recap">存储回顾</a><a href="#reads">谁还会被读</a><a href="#decoder">decoder replay</a>
+    <a href="#backoff">最后一段太短</a><a href="#encoder">encoder replay</a><a href="#both">叠加</a><a href="#kvio">replay 时的读写</a>
     <a href="#noreplay">没有 replay 时</a><a href="#plugin">插件路径</a><a href="#read">读码路线</a>
   </nav>
 </header>
 
-<section id="pool">
-  <p class="eyebrow">存储</p>
-  <h2>一块连续的池，前半按页买、后半按请求买</h2>
-  <p>
-    <code>V41PoolGeometry</code> 的模块文档开宗明义：除了 STATE 条目，其余都随缓存的历史增长，所以区域按「主 latent 页 | index 平面 | STATE」排，两种货币之间只有一条分界
-    （<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/model_ops/attentions/pool_layout/v41_pool_geometry.py"><code>atom/model_ops/attentions/pool_layout/v41_pool_geometry.py</code></a>）。PAGE 的字段由 <code>page_fields</code> 列出（<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/model_ops/attentions/pool_layout/v41_pool_geometry.py#L266"><code>atom/model_ops/attentions/pool_layout/v41_pool_geometry.py:266</code></a>），
-    STATE 的字段由 <code>state_fields</code> 列出（<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/model_ops/attentions/pool_layout/v41_pool_geometry.py#L334"><code>atom/model_ops/attentions/pool_layout/v41_pool_geometry.py:334</code></a>）。
-  </p>
-  <figure>
-    <p class="fignum">图 1 · 池的分区，一页与一条 STATE 的展开</p>
-    <svg viewBox="0 0 1060 560" class="svg-min" role="img" aria-label="V4.1 KV 池的分区：PAGE 与 STATE 两种货币，以及一页和一条 STATE 的展开">
-<text x="20" y="30" class="sub">一块连续的池：两种货币，一条分界</text>
-<rect x="20" y="50" width="470" height="40" rx="5" fill="var(--petrol-bg)" stroke="var(--petrol-mark)" stroke-width="1.3"/>
-<text x="255" y="68" class="n" text-anchor="middle">main pages × N</text>
-<text x="255" y="83" class="pt" text-anchor="middle">每页：4 个 owner 的主 latent</text>
-<rect x="494" y="50" width="186" height="40" rx="5" fill="var(--plum-bg)" stroke="var(--plum-mark)" stroke-width="1.3"/>
-<text x="587" y="68" class="n" text-anchor="middle">index planes</text>
-<text x="587" y="83" class="pt" text-anchor="middle">按 owner 分 4 块，同一 block id</text>
-<rect x="684" y="50" width="356" height="40" rx="5" fill="var(--sunk)" stroke="var(--ink-2)" stroke-width="1.3"/>
-<text x="862" y="68" class="n" text-anchor="middle">STATE × slots</text>
-<text x="862" y="83" class="pt" text-anchor="middle">每个在途请求一条</text>
-<path d="M20 102 V110 H680 V102" class="sv-ln"/>
-<text x="350" y="126" class="s pe" text-anchor="middle">PAGE 货币：随缓存的历史增长（paged_bytes / 页）</text>
-<path d="M684 102 V110 H1040 V102" class="sv-ln"/>
-<text x="862" y="126" class="s" text-anchor="middle">STATE 货币：随并发增长（state_bytes / 槽）</text>
-<rect x="20" y="150" width="520" height="380" rx="10" fill="url(#gp)" stroke="var(--petrol-mark)" filter="url(#sh)"/>
-<text x="36" y="174" class="n">一个 PAGE = 128 个 token（FP8 主池 + FP8 index）</text>
-<g class="slab p"><path class="st" d="M36 202 l6 -6 h200 l-6 6 z"/><path class="ss" d="M236 202 l6 -6 v18 l-6 6 z"/><path class="sf" d="M36 202 h200 v18 h-200 z"/></g>
-<text x="136" y="215" class="pt" text-anchor="middle">main_2</text>
-<text x="256" y="215" class="pt">64 行 × 528 B = 33,792 B</text>
-<g class="slab p"><path class="st" d="M36 236 l6 -6 h200 l-6 6 z"/><path class="ss" d="M236 236 l6 -6 v18 l-6 6 z"/><path class="sf" d="M36 236 h200 v18 h-200 z"/></g>
-<text x="136" y="249" class="pt" text-anchor="middle">main_8</text>
-<text x="256" y="249" class="pt">64 行 × 528 B = 33,792 B</text>
-<g class="slab p"><path class="st" d="M36 270 l6 -6 h200 l-6 6 z"/><path class="ss" d="M236 270 l6 -6 v18 l-6 6 z"/><path class="sf" d="M36 270 h200 v18 h-200 z"/></g>
-<text x="136" y="283" class="pt" text-anchor="middle">main_14</text>
-<text x="256" y="283" class="pt">64 行 × 528 B = 33,792 B</text>
-<g class="slab a"><path class="st" d="M36 304 l6 -6 h200 l-6 6 z"/><path class="ss" d="M236 304 l6 -6 v36 l-6 6 z"/><path class="sf" d="M36 304 h200 v36 h-200 z"/></g>
-<text x="136" y="326" class="pt" text-anchor="middle">main_20</text>
-<text x="256" y="326" class="pt">128 行 × 528 B = 67,584 B</text>
-<text x="36" y="358" class="pt pe">主 latent 合计 320 行 × 528 B = 168,960 B</text>
-<g class="slab v"><path class="st" d="M36 386 l6 -6 h200 l-6 6 z"/><path class="ss" d="M236 386 l6 -6 v22 l-6 6 z"/><path class="sf" d="M36 386 h200 v22 h-200 z"/></g>
-<text x="136" y="402" class="pt" text-anchor="middle">index rows</text>
-<text x="256" y="402" class="pt">320 行 × 132 B = 42,240 B</text>
-<text x="256" y="418" class="xs">在 index 区，按 owner 分开</text>
-<text x="36" y="442" class="n pe">≈ 211,200 B ≈ 206 KiB / PAGE（估算，不计对齐）</text>
-<text x="36" y="462" class="xs">ratio 2 owner 每页 64 行，第 20 层每页 128 行：</text>
-<text x="36" y="476" class="xs">第 20 层一家占全局 KV 的 40%。</text>
-<rect x="560" y="150" width="480" height="380" rx="10" fill="url(#gn)" stroke="var(--line)" filter="url(#sh)"/>
-<text x="576" y="174" class="n">一个 STATE 条目（一个在途请求）</text>
-<g class="slab n"><path class="st" d="M576 204 l8 -8 h160 l-8 8 z"/><path class="ss" d="M736 204 l8 -8 v120 l-8 8 z"/><path class="sf" d="M576 204 h160 v120 h-160 z"/></g>
-<path d="M576 224 h160" stroke="var(--line)" stroke-width="1"/>
-<path d="M576 244 h160" stroke="var(--line)" stroke-width="1"/>
-<path d="M576 264 h160" stroke="var(--line)" stroke-width="1"/>
-<path d="M576 284 h160" stroke="var(--line)" stroke-width="1"/>
-<path d="M576 304 h160" stroke="var(--line)" stroke-width="1"/>
-<path d="M576 324 h160" stroke="var(--line)" stroke-width="1"/>
-<text x="656" y="268" class="pt" text-anchor="middle">window × 40 层</text>
-<text x="752" y="226" class="pt">40 × ring_slots × 528 B</text>
-<text x="752" y="244" class="pt">ring_slots = 128 + 投机数</text>
-<text x="752" y="262" class="pt">= 2,703,360 B ≈ 2.58 MiB</text>
-<text x="752" y="280" class="xs">（不开投机）</text>
-<text x="752" y="302" class="pt mo">✓ 进 checkpoint 镜像</text>
-<g class="slab r"><path class="st" d="M576 352 l6 -6 h160 l-6 6 z"/><path class="ss" d="M736 352 l6 -6 v30 l-6 6 z"/><path class="sf" d="M576 352 h160 v30 h-160 z"/></g>
-<text x="656" y="370" class="pt" text-anchor="middle">compress_kv / score</text>
-<text x="752" y="360" class="pt">4 owner × 2 槽 × 512 × FP32 × 2</text>
-<text x="752" y="376" class="pt">= 32 KiB，没凑满的组</text>
-<text x="752" y="394" class="pt br">✕ in_checkpoint=False</text>
-<g class="slab a"><path class="st" d="M576 421 l5 -5 h160 l-5 5 z"/><path class="ss" d="M736 421 l5 -5 v18 l-5 5 z"/><path class="sf" d="M576 421 h160 v18 h-160 z"/></g>
-<text x="656" y="433" class="pt" text-anchor="middle">cursor</text>
-<text x="752" y="428" class="pt">[位置, h₃, h₂, h₁] int64 = 32 B</text>
-<text x="752" y="444" class="pt mo">✓ 进镜像（Engram 历史在这里）</text>
-<text x="576" y="516" class="n">≈ 2.6 MiB / 请求（估算），与上下文长度无关</text>
-</svg>
-    <figcaption>
-      字节数按 FP8 主池（每行 512 + 16 = 528 B）、FP8 index（每行约 132 B）、不开投机（<code>ring_slots = 128</code>）估算，不计对齐。
-      compressor 的两个环带 <code>in_checkpoint=False</code>：checkpoint 只打在 PAGE 边界，128 是 ratio 1 和 2 的公倍数，边界处没有半组可存。
-    </figcaption>
-  </figure>
-  <div class="grid3">
-    <div class="card good"><p class="eyebrow">为什么 PAGE = 128</p><h3>块表要小</h3><p>块表是 <code>[max_num_seqs, max_model_len / block]</code> 的 int32，存两份、每个 forward 拷到显卡：百万上下文下 block 16 是 134 MB，128 是 16.8 MB（几何文件的模块文档）。</p></div>
-    <div class="card key"><p class="eyebrow">也不能更大</p><h3>它同时是复用粒度</h3><p>一个 PAGE 就是前缀缓存的一个 hash 块：命中只能落在 PAGE 边界上，encoder replay 每次也要重算一个 PAGE。128 恰好等于窗口，两者都控制在窗口大小（<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/config.py#L2776"><code>atom/config.py:2776</code></a>）。</p></div>
-    <div class="card warn"><p class="eyebrow">硬约束</p><h3>PAGE ≥ window − 1</h3><p>encoder replay 靠退一个 PAGE 重建窗口，PAGE 短于 127 就盖不住；<code>validate_runtime_config</code> 直接拒绝（<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/models/deepseek_v41/config.py#L414"><code>atom/models/deepseek_v41/config.py:414</code></a>）。插件路径的 PAGE 是 256，见文末。</p></div>
+<section id="recap">
+  <p class="eyebrow">存储回顾</p>
+  <h2>replay 动的是哪几块存储（详见第 10 章）</h2>
+  <div class="grid2">
+    <div class="card good"><p class="eyebrow">PAGE · 随历史增长 · 可以共享</p><h3>4 份全局 KV 与 index</h3>
+      <p><code>main_2/8/14</code> 每页 64 行、<code>main_20</code> 每页 128 行，每行 528 B；index 行按 owner 分区、每行 132 B。前缀命中复用的就是这些页，
+      一个 block id 同时指 4 个 owner（<a href="kvcache.html#page">第 10 章 · PAGE</a>）。</p></div>
+    <div class="card warn"><p class="eyebrow">STATE · 随并发增长 · 从不共享</p><h3>窗口、尾巴、游标</h3>
+      <p>每请求一槽：40 层 ring <code>[40, 128, 528]</code>、compressor 尾巴、cursor <code>[位置, h₃, h₂, h₁]</code>。命中拿不回它们，
+      所以要么重算（本章），要么从镜像拷回（本章末）（<a href="kvcache.html#state">第 10 章 · STATE</a>）。</p></div>
   </div>
 </section>
 
@@ -416,7 +344,7 @@ figure svg text.pl{fill:var(--plum)} figure svg text.mo{fill:var(--moss)} figure
     </tbody>
   </table></div>
   <figure>
-    <p class="fignum">图 2 · 一条 1000 token 的 prompt，各层实际计算的区域</p>
+    <p class="fignum">图 1 · 一条 1000 token 的 prompt，各层实际计算的区域</p>
     <svg viewBox="0 0 1060 560" class="svg-min" role="img" aria-label="一条 1000 token 的 prompt 在各层实际计算的区域：默认与关闭 decoder replay 对比">
 <text x="20" y="36" class="sub">默认：decoder SWA bounded replay（chunk 512，tail = 872–999）</text>
 <path d="M210.0 54 V226" stroke="var(--line-soft)" stroke-width="1"/>
@@ -557,7 +485,7 @@ figure svg text.pl{fill:var(--plum)} figure svg text.mo{fill:var(--moss)} figure
 if short &gt; 0:
     start = (start − short) // hash_block_size × hash_block_size</pre>
   <figure>
-    <p class="fignum">图 3 · 例 2：[0, 960) + [960, 1000) → 最后一次 forward 从 768 开始</p>
+    <p class="fignum">图 2 · 例 2：[0, 960) + [960, 1000) → 最后一次 forward 从 768 开始</p>
     <svg viewBox="0 0 1060 330" class="svg-min" role="img" aria-label="最后一个 chunk 太短时往前挪到 hash 块网格上的例子">
 <text x="20" y="30" class="sub">例 2：chunk 切成 [0, 960) + [960, 1000)，最后一段只有 40 行</text>
 <path d="M60 70 H1020" class="sv-axis"/>
@@ -621,7 +549,7 @@ if short &gt; 0:
     引擎不保存 checkpoint，不为 checkpoint 切 chunk，命中可以落在任意 hash 块边界，<code>replay_start</code> 在命中时先 <code>start −= hash_block_size</code>。
   </p>
   <figure>
-    <p class="fignum">图 4 · 命中到 768：forward 从 640 开始，640–767 只为重建状态</p>
+    <p class="fignum">图 3 · 命中到 768：forward 从 640 开始，640–767 只为重建状态</p>
     <svg viewBox="0 0 1060 420" class="svg-min" role="img" aria-label="encoder SWA bounded replay：前缀命中后往前退一个 hash 块重建状态">
 <text x="20" y="30" class="sub">例：前缀命中到 768（6 个 hash 块），prompt 共 1000 token</text>
 <path d="M120 66 H1020" class="sv-axis"/>
@@ -704,6 +632,152 @@ if short &gt; 0:
   </table></div>
 </section>
 
+<section id="kvio">
+  <hr class="rule">
+  <p class="eyebrow">存储读写</p>
+  <h2>replay 时 KV cache 怎么存、怎么用：共享页只读，新位置才写，状态在新槽里重建</h2>
+  <p>
+    两种 replay 都靠同两个开关保证「重算不改缓存」：<code>make_compress_plans(write_from=…)</code> 丢掉起点之前已经结束的组，全局 KV 一行都不重写
+    （<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/model_ops/v4_kernels/compress_plan.py#L328"><code>atom/model_ops/v4_kernels/compress_plan.py:328</code></a>）；<code>swa_write(cached_until=…)</code> 让 ring 里已有的行保持原样（<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/model_ops/attentions/deepseek_v41/cache.py#L878"><code>atom/model_ops/attentions/deepseek_v41/cache.py:878</code></a>）。
+    下图把每块存储在五种场景下的读写摊开（存储的形状与地址见<a href="kvcache.html">第 10 章</a>）。
+  </p>
+  <figure>
+    <p class="fignum">图 4 · 各场景下每个存储区的读写</p>
+    <svg viewBox="0 0 1060 432" class="svg-min" role="img" aria-label="各种 replay 场景下每个存储区的读写">
+<text x="295" y="36" class="n" text-anchor="middle">冷启动</text>
+<text x="295" y="52" class="xs" text-anchor="middle">非最后 chunk</text>
+<text x="461" y="36" class="n" text-anchor="middle">冷启动</text>
+<text x="461" y="52" class="xs" text-anchor="middle">最后 chunk</text>
+<text x="627" y="36" class="n" text-anchor="middle">回退段</text>
+<text x="627" y="52" class="xs" text-anchor="middle">最后一段 &lt; 128 时</text>
+<text x="793" y="36" class="n" text-anchor="middle">命中后的重放段</text>
+<text x="793" y="52" class="xs" text-anchor="middle">[h − 128, h)，新槽</text>
+<text x="959" y="36" class="n" text-anchor="middle">命中之后</text>
+<text x="959" y="52" class="xs" text-anchor="middle">[h, end)</text>
+<text x="20" y="86" class="sub pe">PAGE</text>
+<text x="20" y="103" class="n">main_2/8/14 + index</text>
+<rect x="216" y="70" width="158" height="44" rx="6" fill="var(--plum-bg)" stroke="var(--plum-mark)" stroke-width="1.1"/>
+<text x="295" y="96" class="pt" text-anchor="middle">读选中行 · 写凑满的组</text>
+<rect x="382" y="70" width="158" height="44" rx="6" fill="var(--plum-bg)" stroke="var(--plum-mark)" stroke-width="1.1"/>
+<text x="461" y="96" class="pt" text-anchor="middle">读选中行 · 写凑满的组</text>
+<rect x="548" y="70" width="158" height="44" rx="6" fill="var(--petrol-bg)" stroke="var(--petrol-mark)" stroke-width="1.1"/>
+<text x="627" y="89" class="pt" text-anchor="middle">只读 · 不重写</text>
+<text x="627" y="103" class="xs" text-anchor="middle">write_from</text>
+<rect x="714" y="70" width="158" height="44" rx="6" fill="var(--petrol-bg)" stroke="var(--petrol-mark)" stroke-width="1.1"/>
+<text x="793" y="89" class="pt" text-anchor="middle">只读共享页</text>
+<text x="793" y="103" class="xs" text-anchor="middle">不写：组在 h 之前结束</text>
+<rect x="880" y="70" width="158" height="44" rx="6" fill="var(--plum-bg)" stroke="var(--plum-mark)" stroke-width="1.1"/>
+<text x="959" y="96" class="pt" text-anchor="middle">写新页 · 读选中行</text>
+<text x="20" y="138" class="sub pe">PAGE</text>
+<text x="20" y="155" class="n">main_20 + index</text>
+<rect x="216" y="122" width="158" height="44" rx="6" fill="var(--amber-bg)" stroke="var(--amber-mark)" stroke-width="1.1"/>
+<text x="295" y="141" class="pt" text-anchor="middle">每行都写</text>
+<text x="295" y="155" class="xs" text-anchor="middle">decoder 不读</text>
+<rect x="382" y="122" width="158" height="44" rx="6" fill="var(--plum-bg)" stroke="var(--plum-mark)" stroke-width="1.1"/>
+<text x="461" y="141" class="pt" text-anchor="middle">每行都写</text>
+<text x="461" y="155" class="xs" text-anchor="middle">tail 读选中行</text>
+<rect x="548" y="122" width="158" height="44" rx="6" fill="var(--petrol-bg)" stroke="var(--petrol-mark)" stroke-width="1.1"/>
+<text x="627" y="141" class="pt" text-anchor="middle">不重写</text>
+<text x="627" y="155" class="xs" text-anchor="middle">tail 内的行才读</text>
+<rect x="714" y="122" width="158" height="44" rx="6" fill="var(--petrol-bg)" stroke="var(--petrol-mark)" stroke-width="1.1"/>
+<text x="793" y="141" class="pt" text-anchor="middle">不写</text>
+<text x="793" y="155" class="xs" text-anchor="middle">tail 内的行才读</text>
+<rect x="880" y="122" width="158" height="44" rx="6" fill="var(--plum-bg)" stroke="var(--plum-mark)" stroke-width="1.1"/>
+<text x="959" y="141" class="pt" text-anchor="middle">写新页</text>
+<text x="959" y="155" class="xs" text-anchor="middle">tail 读选中行</text>
+<text x="20" y="190" class="sub dm">STATE</text>
+<text x="20" y="207" class="n">encoder ring（0–19）</text>
+<rect x="216" y="174" width="158" height="44" rx="6" fill="var(--plum-bg)" stroke="var(--plum-mark)" stroke-width="1.1"/>
+<text x="295" y="200" class="pt" text-anchor="middle">读历史 · 写最后 128 行</text>
+<rect x="382" y="174" width="158" height="44" rx="6" fill="var(--plum-bg)" stroke="var(--plum-mark)" stroke-width="1.1"/>
+<text x="461" y="200" class="pt" text-anchor="middle">读历史 · 写最后 128 行</text>
+<rect x="548" y="174" width="158" height="44" rx="6" fill="var(--petrol-bg)" stroke="var(--petrol-mark)" stroke-width="1.1"/>
+<text x="627" y="193" class="pt" text-anchor="middle">保留已有行</text>
+<text x="627" y="207" class="xs" text-anchor="middle">cached_until</text>
+<rect x="714" y="174" width="158" height="44" rx="6" fill="var(--amber-bg)" stroke="var(--amber-mark)" stroke-width="1.1"/>
+<text x="793" y="193" class="pt" text-anchor="middle">新槽里从 h−128 重建</text>
+<text x="793" y="207" class="xs" text-anchor="middle">窗口从这里起</text>
+<rect x="880" y="174" width="158" height="44" rx="6" fill="var(--plum-bg)" stroke="var(--plum-mark)" stroke-width="1.1"/>
+<text x="959" y="200" class="pt" text-anchor="middle">接着写</text>
+<text x="20" y="242" class="sub dm">STATE</text>
+<text x="20" y="259" class="n">decoder ring（20–39）</text>
+<rect x="216" y="226" width="158" height="44" rx="6" fill="url(#dots)" stroke="var(--line-soft)"/>
+<text x="295" y="252" class="pt" text-anchor="middle">不碰</text>
+<rect x="382" y="226" width="158" height="44" rx="6" fill="var(--amber-bg)" stroke="var(--amber-mark)" stroke-width="1.1"/>
+<text x="461" y="245" class="pt" text-anchor="middle">只写 tail 128 行</text>
+<text x="461" y="259" class="xs" text-anchor="middle">窗口从 tail 起</text>
+<rect x="548" y="226" width="158" height="44" rx="6" fill="var(--amber-bg)" stroke="var(--amber-mark)" stroke-width="1.1"/>
+<text x="627" y="252" class="pt" text-anchor="middle">落在 tail 内的行写</text>
+<rect x="714" y="226" width="158" height="44" rx="6" fill="var(--amber-bg)" stroke="var(--amber-mark)" stroke-width="1.1"/>
+<text x="793" y="252" class="pt" text-anchor="middle">落在 tail 内的行写</text>
+<rect x="880" y="226" width="158" height="44" rx="6" fill="var(--amber-bg)" stroke="var(--amber-mark)" stroke-width="1.1"/>
+<text x="959" y="252" class="pt" text-anchor="middle">只写 tail 128 行</text>
+<text x="20" y="294" class="sub dm">STATE</text>
+<text x="20" y="311" class="n">compressor 尾巴</text>
+<rect x="216" y="278" width="158" height="44" rx="6" fill="var(--plum-bg)" stroke="var(--plum-mark)" stroke-width="1.1"/>
+<text x="295" y="304" class="pt" text-anchor="middle">读 · 写末尾 K_pool 位</text>
+<rect x="382" y="278" width="158" height="44" rx="6" fill="var(--plum-bg)" stroke="var(--plum-mark)" stroke-width="1.1"/>
+<text x="461" y="304" class="pt" text-anchor="middle">读 · 写末尾 K_pool 位</text>
+<rect x="548" y="278" width="158" height="44" rx="6" fill="url(#dots)" stroke="var(--line-soft)"/>
+<text x="627" y="304" class="pt" text-anchor="middle">不动</text>
+<rect x="714" y="278" width="158" height="44" rx="6" fill="url(#dots)" stroke="var(--line-soft)"/>
+<text x="793" y="297" class="pt" text-anchor="middle">不需要</text>
+<text x="793" y="311" class="xs" text-anchor="middle">h 是 128 的倍数</text>
+<rect x="880" y="278" width="158" height="44" rx="6" fill="var(--plum-bg)" stroke="var(--plum-mark)" stroke-width="1.1"/>
+<text x="959" y="304" class="pt" text-anchor="middle">写末尾 K_pool 位</text>
+<text x="20" y="346" class="sub dm">STATE</text>
+<text x="20" y="363" class="n">cursor（位置 + 3 id）</text>
+<rect x="216" y="330" width="158" height="44" rx="6" fill="var(--plum-bg)" stroke="var(--plum-mark)" stroke-width="1.1"/>
+<text x="295" y="356" class="pt" text-anchor="middle">forward 后推进</text>
+<rect x="382" y="330" width="158" height="44" rx="6" fill="var(--plum-bg)" stroke="var(--plum-mark)" stroke-width="1.1"/>
+<text x="461" y="356" class="pt" text-anchor="middle">forward 后推进</text>
+<rect x="548" y="330" width="158" height="44" rx="6" fill="var(--plum-bg)" stroke="var(--plum-mark)" stroke-width="1.1"/>
+<text x="627" y="349" class="pt" text-anchor="middle">退回 forward 起点</text>
+<text x="627" y="363" class="xs" text-anchor="middle">再推进</text>
+<rect x="714" y="330" width="158" height="44" rx="6" fill="var(--amber-bg)" stroke="var(--amber-mark)" stroke-width="1.1"/>
+<text x="793" y="349" class="pt" text-anchor="middle">写入 history_ids</text>
+<text x="793" y="363" class="xs" text-anchor="middle">重放起点前 3 个 id</text>
+<rect x="880" y="330" width="158" height="44" rx="6" fill="var(--plum-bg)" stroke="var(--plum-mark)" stroke-width="1.1"/>
+<text x="959" y="356" class="pt" text-anchor="middle">forward 后推进</text>
+<path d="M20 168 H1038" class="sv-ln-d"/>
+<rect x="20" y="400" width="18" height="14" rx="3" fill="var(--petrol-bg)" stroke="var(--petrol-mark)"/>
+<text x="46" y="411" class="s">只读</text>
+<rect x="140" y="400" width="18" height="14" rx="3" fill="var(--amber-bg)" stroke="var(--amber-mark)"/>
+<text x="166" y="411" class="s">只写</text>
+<rect x="260" y="400" width="18" height="14" rx="3" fill="var(--plum-bg)" stroke="var(--plum-mark)"/>
+<text x="286" y="411" class="s">读 + 写</text>
+<rect x="380" y="400" width="18" height="14" rx="3" fill="url(#dots)" stroke="var(--line-soft)"/>
+<text x="406" y="411" class="s">不碰</text>
+<text x="520" y="411" class="xs">「选中行」= Indexer 选出的 ≤512 个全局行；h = 命中点；tail = 最后 128 行</text>
+</svg>
+    <figcaption>
+      虚线以上是 PAGE，以下是 STATE。<strong>命中后的重放段对 PAGE 只读</strong>，所以命中的页可以同时挂在多个请求的块表里，不会被谁写坏；
+      decoder 的 ring 在非最后 chunk 里一行都不写，因为最后一个 chunk 的 tail 会把它要的 128 行全部写满。
+    </figcaption>
+  </figure>
+  <div class="ex">
+    <p class="eyebrow">例子 · 命中到 768 的那次 forward（prompt 1000），存储逐项怎么动</p>
+    <ol class="steps">
+      <li class="step"><strong>分配</strong>：块表前 6 列挂上命中的页（与第 10 章图 5 同一组页 [41, 7, 93, 12, 58, 3]，引用计数 +1）；块 6、7（768–1023）各取一个新页；
+        取一个新 STATE 槽，cursor 的 3 个历史 id 取 637–639 的压缩 token（<code>Replay.history_ids</code>，<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/model_engine/sequence.py#L138"><code>atom/model_engine/sequence.py:138</code></a>）。</li>
+      <li class="step"><strong>第 640–767 行（重放段）</strong>：encoder 各层读共享页里的选中行和 index 行，算出这 128 行，<strong>只写新槽的 ring</strong>（第 0–19 层，窗口从 640 起）；
+        第 2/8/14 层落在 768 之前结束的组全部被丢掉，第 20 层同理——共享页里没有一个字节被改。</li>
+      <li class="step"><strong>第 768–999 行</strong>：照常把 <code>main_2/8/14/20</code> 和 index 行写进块 6、7 的新页，encoder ring 接着写，compressor 尾巴写末尾 <code>K_pool</code> 个位置。</li>
+      <li class="step"><strong>tail 872–999</strong>：第 20–39 层只在这 128 行上跑，写各自的 ring；第 20 层的 Indexer 对 <code>main_20</code> 的 index 全量打分，
+        0–767 的行在共享页里，768–999 的行在刚写的新页里。</li>
+      <li class="step"><strong>forward 之后</strong>：<code>hash_blocks</code> 只登记块 6（768–895）——块 0–5 本来就登记过，块 7 还没写满；cursor 推进到本次 forward 的末尾。</li>
+    </ol>
+  </div>
+  <div class="grid2">
+    <div class="card"><p class="eyebrow">冷启动 · decoder replay</p><h3>main_20 每行都写，decoder ring 只写 tail</h3>
+      <p>非最后 chunk：encoder 和第 20 层压缩照常写 PAGE 和 encoder ring，decoder 的 ring 不碰。最后一个 chunk：PAGE 照常写，decoder 的 20 层只把 tail 的 128 行写进各自的 ring——
+        decode 时它们正好读这 128 行。</p></div>
+    <div class="card"><p class="eyebrow">回退段 · 同一个请求</p><h3>不换槽，只读不写</h3>
+      <p>最后一段不足 128 行往回挪时（图 2），挪回来的行在本请求自己的页和槽里已经有了：不重写全局 KV，不改 encoder ring，cursor 退回 forward 起点再推进；
+        真正新写的只有落在 tail 内的 decoder ring 行。</p></div>
+  </div>
+</section>
+
 <section id="noreplay">
   <hr class="rule">
   <p class="eyebrow">关掉之后</p>
@@ -711,7 +785,7 @@ if short &gt; 0:
   <div class="grid2">
     <div class="card"><p class="eyebrow">--no-decoder-swa-bounded-replay</p><h3>一张图，每行 40 层</h3>
       <p>runtime 只编译 <code>_Backbone</code>（<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/models/deepseek_v41/runtime.py#L173"><code>atom/models/deepseek_v41/runtime.py:173</code></a>），不再拆成 early / late；<code>min_final_prefill_rows</code> 保持 0，最后一段再短也不往前挪。
-      logits 与完整 prefill 一致；代价是 decoder 20 层也跑全部行，长 prompt 的 prefill 约翻倍（图 2 下半）。</p></div>
+      logits 与完整 prefill 一致；代价是 decoder 20 层也跑全部行，长 prompt 的 prefill 约翻倍（图 1 下半）。</p></div>
     <div class="card"><p class="eyebrow">--no-encoder-swa-bounded-replay</p><h3>StateTransfer.copy：存镜像</h3>
       <p>状态传输换成 <code>copy(layout_id)</code>（<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/model_engine/state_runtime.py#L116"><code>atom/model_engine/state_runtime.py:116</code></a>）。镜像内容是 <code>checkpoint_image_ranges</code>：40 层窗口 + cursor，不含 compressor 半成品
       （<a class="src" href="https://github.com/ROCm/ATOM/blob/99ebf633ac7a327c54282c3b244ea8519f3eef29/atom/model_ops/attentions/pool_layout/v41_pool_geometry.py#L380"><code>atom/model_ops/attentions/pool_layout/v41_pool_geometry.py:380</code></a>）。镜像存在 KV 池自己的 PAGE 单元里、按前缀 hash 建索引，
@@ -834,7 +908,7 @@ if short &gt; 0:
     </p>
   </div>
 </section>
-<nav class="pager" aria-label="翻页"><a class="prev" href="reindex.html"><span>← 上一章</span>9 · Reindex 层</a></nav>
+<nav class="pager" aria-label="翻页"><a class="prev" href="kvcache.html"><span>← 上一章</span>10 · KV Cache 存储层</a></nav>
 <footer>
   <p>
     源码 <a href="https://github.com/ROCm/ATOM/tree/99ebf633ac7a327c54282c3b244ea8519f3eef29">ROCm/ATOM@99ebf633a</a>（2026-11-01）·
