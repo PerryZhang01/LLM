@@ -47,14 +47,14 @@ GitHub 的文件浏览器不渲染 HTML（只显示源码），所以文档通�
 |---|---|---|---|---|
 | **[MiniMax-M3](https://perryzhang01.github.io/LLM/models/MiniMax/m3_anatomy.html)** | `minimax_m3_vl` | 427.0 B / 24.73 B | 60 层里 57 层带 MSA 块级稀疏注意力（GQA 64:4 + 128-token 块 top-16），128 专家 top-4，原生多模态 | `atom/models/minimax_m3.py` |
 | **[DeepSeek-V4-Pro](https://perryzhang01.github.io/LLM/models/DeepSeek/v4_pro_anatomy.html)** | `deepseek_v4` | 1598.8 B / 49.78 B | 61 层 HCA/CSA 交替：31 层 128:1 全看、30 层 4:1 选 top-1024；前 3 层哈希路由，mHC 四路，1 层 MTP | `atom/models/deepseek_v4.py` |
-| **[DeepSeek-V4.1-Flash](https://perryzhang01.github.io/LLM/models/DeepSeek/v41_flash/index.html)** | `deepseek_v41` | 763.2 B / 16.79 B | 40 层 CSA2：WINDOW / FULL / REINDEX / REUSE 四种层，4 个压缩 KV owner，mHC 四路，两层 Engram，3 层 DSpark。**分 10 章**逐模块拆解，另有[单页速览版](https://perryzhang01.github.io/LLM/models/DeepSeek/v41_flash_anatomy.html) | `atom/models/deepseek_v41/` |
+| **[DeepSeek-V4.1-Flash](https://perryzhang01.github.io/LLM/models/DeepSeek/v41_flash/index.html)** | `deepseek_v41` | 763.2 B / 16.79 B | 40 层 CSA2：WINDOW / FULL / REINDEX / REUSE 四种层，4 个压缩 KV owner，mHC 四路，两层 Engram，3 层 DSpark。**分 11 章**逐模块拆解，另有[单页速览版](https://perryzhang01.github.io/LLM/models/DeepSeek/v41_flash_anatomy.html) | `atom/models/deepseek_v41/` |
 | **[GLM-5.3-Flash](https://perryzhang01.github.io/LLM/models/GLM/glm53_flash_anatomy.html)** | `glm5_next` | 320.8 B / 17.38 B | 34 层 KDA + 11 层稀疏 MLA 混合，mHC 四路残差，全模型 NoPE，k-pool 稀疏索引 | `atom/models/glm5_next.py` |
 | **[GLM-5.3](https://perryzhang01.github.io/LLM/models/GLM/glm53_anatomy.html)** | `glm_moe_dsa` | 753.3 B / 41.25 B | 78 层 MLA + DSA，256 专家，IndexShare；结构与 5.2 逐字段相同，只多一个 `moe_router_dtype` | `atom/models/deepseek_v2.py` |
 | **[GLM-5.2](https://perryzhang01.github.io/LLM/models/glm52_anatomy.html)** | `glm_moe_dsa` | 753.3 B / 41.25 B | 引入 IndexShare：78 层里只有 21 层真的算 top-k | `atom/models/deepseek_v2.py` |
 
 GLM-5.2 另有一份 Markdown 版，GitHub 可直接阅读：[`models/GLM/model.md`](models/GLM/model.md)。
 
-### DeepSeek-V4.1-Flash 的十章
+### DeepSeek-V4.1-Flash 的十一章
 
 | 章 | 页面 | 讲什么 |
 |---|---|---|
@@ -67,7 +67,8 @@ GLM-5.2 另有一份 Markdown 版，GitHub 可直接阅读：[`models/GLM/model.
 | 7 | [第 20 层](https://perryzhang01.github.io/LLM/models/DeepSeek/v41_flash/layer20.html) | ratio 1 的逐 token 记忆、一份 logits 两次选择（top-512 与 2048 候选块）、在 bounded replay 里被拆成两半 |
 | 8 | [Reuse 层](https://perryzhang01.github.io/LLM/models/DeepSeek/v41_flash/reuse.html) | 30 层既不压缩也不打分：下标组一次生成、各层只加自己的窗口 |
 | 9 | [Reindex 层](https://perryzhang01.github.io/LLM/models/DeepSeek/v41_flash/reindex.html) | 第 24/28/32/36 层：候选块翻译成紧凑块表、在 16,384 列上重打分、列号换算回 token 位置 |
-| 10 | [缓存与 Bounded Replay](https://perryzhang01.github.io/LLM/models/DeepSeek/v41_flash/replay.html) | PAGE 与 STATE、decoder replay 让 prefill 少算一半、encoder replay 让前缀命中不存状态、关掉之后的 checkpoint |
+| 10 | [KV Cache 存储层](https://perryzhang01.github.io/LLM/models/DeepSeek/v41_flash/kvcache.html) | 一整块 arena 的分区：每页 320 行主 latent + 按 owner 分区的 index 行、每请求一个 STATE 槽；各块形状与物理地址、decode 每步写哪里、前缀缓存怎么共享页 |
+| 11 | [Bounded Replay](https://perryzhang01.github.io/LLM/models/DeepSeek/v41_flash/replay.html) | decoder replay 让 prefill 少算一半、encoder replay 让前缀命中不存状态、replay 时各存储区的读写、关掉之后的 checkpoint |
 
 ### 每份模型文档包含什么
 
@@ -130,7 +131,7 @@ GLM-5.2 另有一份 Markdown 版，GitHub 可直接阅读：[`models/GLM/model.
 │   └── DeepSeek/
 │       ├── v4_pro_anatomy.html         # DeepSeek-V4-Pro
 │       ├── v41_flash_anatomy.html      # DeepSeek-V4.1-Flash（单页速览）
-│       └── v41_flash/                  # DeepSeek-V4.1-Flash，十章
+│       └── v41_flash/                  # DeepSeek-V4.1-Flash，十一章
 │           ├── index.html              # 1 总览
 │           ├── residual.html           # 2 四路残差 mHC
 │           ├── engram.html             # 3 Engram
@@ -140,7 +141,8 @@ GLM-5.2 另有一份 Markdown 版，GitHub 可直接阅读：[`models/GLM/model.
 │           ├── layer20.html            # 7 第 20 层
 │           ├── reuse.html              # 8 Reuse 层
 │           ├── reindex.html            # 9 Reindex 层
-│           └── replay.html             # 10 缓存与 Bounded Replay
+│           ├── kvcache.html            # 10 KV Cache 存储层
+│           └── replay.html             # 11 Bounded Replay
 ├── framework/                          # 框架解剖
 │   └── DeepInfer/                      # DeepInfer，六章
 │       ├── index.html                  # 1 总览

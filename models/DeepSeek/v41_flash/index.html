@@ -264,7 +264,7 @@ figure svg text.pl{fill:var(--plum)} figure svg text.mo{fill:var(--moss)} figure
 </defs></svg>
 <div class="wrap">
 <nav class="backnav"><a href="../../../index.html">← LLM 模型与框架结构手册</a> · <a href="../v41_flash_anatomy.html">单页速览版</a></nav>
-<nav class="chapnav" aria-label="章节"><a href="index.html" class="on">1 · 总览</a><a href="residual.html">2 · 四路残差 mHC</a><a href="engram.html">3 · Engram</a><a href="csa2.html">4 · CSA2 注意力骨架</a><a href="window.html">5 · Window 层</a><a href="full.html">6 · Full 层</a><a href="layer20.html">7 · 第 20 层</a><a href="reuse.html">8 · Reuse 层</a><a href="reindex.html">9 · Reindex 层</a><a href="replay.html">10 · 缓存与 Bounded Replay</a></nav>
+<nav class="chapnav" aria-label="章节"><a href="index.html" class="on">1 · 总览</a><a href="residual.html">2 · 四路残差 mHC</a><a href="engram.html">3 · Engram</a><a href="csa2.html">4 · CSA2 注意力骨架</a><a href="window.html">5 · Window 层</a><a href="full.html">6 · Full 层</a><a href="layer20.html">7 · 第 20 层</a><a href="reuse.html">8 · Reuse 层</a><a href="reindex.html">9 · Reindex 层</a><a href="kvcache.html">10 · KV Cache 存储层</a><a href="replay.html">11 · Bounded Replay</a></nav>
 <header class="mast">
   <div class="mast-id">
     <span class="tag">deepseek-ai/DeepSeek-V4.1-Flash</span>
@@ -299,11 +299,11 @@ figure svg text.pl{fill:var(--plum)} figure svg text.mo{fill:var(--moss)} figure
 </header>
 
 <section id="chapters">
-  <p class="eyebrow">十章</p>
+  <p class="eyebrow">十一章</p>
   <h2>先看整网，再按模块拆，最后看缓存怎么省</h2>
   <p>
     第 2、3 章是挂在残差流上的两个特殊模块；第 4 章讲 40 层共用的注意力骨架，第 5–9 章按层的类型逐个拆开；
-    第 10 章讲 PAGE / STATE 两种缓存，以及 prefill 和前缀命中时怎样少算。每章都能单独读，章末有指向源码的读码路线。
+    第 10 章讲 PAGE / STATE 两种存储的形状、地址，以及前缀缓存怎么复用它们；第 11 章讲 prefill 和前缀命中时怎样少算、少算时存储怎么读写。每章都能单独读，章末有指向源码的读码路线。
   </p>
   <div class="grid3">
     <a class="card key" href="residual.html"><p class="eyebrow">第 2 章</p><h3>四路残差 mHC</h3><p>embedding 怎么复制成 4 路、one-hot 的初始 pre、一个接缝里的四步、Sinkhorn 把 24 个系数拆成 pre / post / comb、延迟 pre 与 V4 的区别。</p><span class="go">residual.html →</span></a>
@@ -314,7 +314,8 @@ figure svg text.pl{fill:var(--plum)} figure svg text.mo{fill:var(--moss)} figure
     <a class="card key" href="layer20.html"><p class="eyebrow">第 7 章</p><h3>第 20 层</h3><p>encoder 与 decoder 的分界：ratio 1 的逐 token 记忆、一份 logits 上做两次选择、最新块强制入选、在 bounded replay 里被拆成两半。</p><span class="go">layer20.html →</span></a>
     <a class="card" href="reuse.html"><p class="eyebrow">第 8 章</p><h3>Reuse 层</h3><p>40 层里有 30 层既不压缩也不打分：下标组一次生成、各层只加自己的窗口，以及它们到底还剩哪些计算。</p><span class="go">reuse.html →</span></a>
     <a class="card" href="reindex.html"><p class="eyebrow">第 9 章</p><h3>Reindex 层</h3><p>第 24/28/32/36 层：候选块翻译成压缩块表、在 16,384 列上重新打分、再把列号换算回 token 位置。</p><span class="go">reindex.html →</span></a>
-    <a class="card warn" href="replay.html"><p class="eyebrow">第 10 章</p><h3>缓存与 Bounded Replay</h3><p>PAGE 与 STATE 两种存储、decoder replay 让 prefill 少算一半、encoder replay 让前缀命中不存状态，以及关掉之后的 checkpoint。</p><span class="go">replay.html →</span></a>
+    <a class="card good" href="kvcache.html"><p class="eyebrow">第 10 章</p><h3>KV Cache 存储层</h3><p>一整块 arena 怎么分：每页 320 行主 latent + 分区的 index 行、每请求一个 STATE 槽；每块的形状与物理地址、decode 每步写哪里、前缀缓存怎么共享页。</p><span class="go">kvcache.html →</span></a>
+    <a class="card warn" href="replay.html"><p class="eyebrow">第 11 章</p><h3>Bounded Replay</h3><p>decoder replay 让 prefill 少算一半、encoder replay 让前缀命中不存状态；replay 时共享页只读、新位置才写、状态在新槽里重建；关掉之后的 checkpoint。</p><span class="go">replay.html →</span></a>
   </div>
 </section>
 
@@ -614,7 +615,7 @@ figure svg text.pl{fill:var(--plum)} figure svg text.mo{fill:var(--moss)} figure
 </svg>
     <figcaption>
       <code>T</code> 是这一步 forward 的 token 行数：decode 时是请求数（开投机时是请求数 × 验证长度），prefill 时是本 chunk 的行数。
-      词表 129,280，LM head 只对要采样的行算——开启 decoder bounded replay 时，prefill 只有每个请求的最后一行有定义（第 10 章）。
+      词表 129,280，LM head 只对要采样的行算——开启 decoder bounded replay 时，prefill 只有每个请求的最后一行有定义（第 11 章）。
     </figcaption>
   </figure>
 </section>
@@ -787,7 +788,7 @@ figure svg text.pl{fill:var(--plum)} figure svg text.mo{fill:var(--moss)} figure
   </table></div>
   <div class="grid2">
     <div class="card good"><p class="eyebrow">带来的好处</p><h3>prefill 少算一半，decode 每 token 常数开销</h3>
-      <p>decoder 只读窗口，所以 prefill 只需在每个请求的最后 128 行上跑 decoder（第 10 章）；随历史增长的只有 4 份全局 KV，decoder 的 20 层只占窗口 ring。</p></div>
+      <p>decoder 只读窗口，所以 prefill 只需在每个请求的最后 128 行上跑 decoder（第 11 章）；随历史增长的只有 4 份全局 KV，decoder 的 20 层只占窗口 ring。</p></div>
     <div class="card warn"><p class="eyebrow">严格说不止 128</p><h3>窗口会逐层接力</h3>
       <p>第 21 层在 t 读到的窗口行，是第 20 层在 t−127…t 的输出，它们又各自读了更早的窗口。沿 decoder 20 层传下去，水平感受野可到约 20 × 127 ≈ 2500。bounded replay 把这条链截断在 tail 起点，模型在后训练时适应了这种截断。</p></div>
   </div>
